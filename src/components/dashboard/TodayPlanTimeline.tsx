@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, GraduationCap, Target, Check, Clock } from "lucide-react";
 import { Mission, Category, ClassScheduleItem, DayOfWeek } from "@/types/database";
 import { formatTime12, formatTimeRange12 } from "@/lib/formatters";
@@ -14,6 +15,7 @@ interface TodayPlanTimelineProps {
   missions: Mission[];
   categories: Category[];
   activeMissionId?: string | null;
+  accomplishingMissionId?: string | null;
   onCompleteMission: (mission: Mission) => void;
 }
 
@@ -36,6 +38,7 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
   missions,
   categories,
   activeMissionId,
+  accomplishingMissionId,
   onCompleteMission,
 }) => {
   const now = new Date();
@@ -130,21 +133,35 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {mergedItems.map((item) => {
-            const catTheme =
-              item.type === "tuition"
-                ? getCategoryTheme("tuition")
-                : item.type === "class"
-                ? getCategoryTheme(item.title)
-                : getCategoryTheme(item.categoryName || item.title);
+          <AnimatePresence initial={false}>
+            {mergedItems.map((item) => {
+              const catTheme =
+                item.type === "tuition"
+                  ? getCategoryTheme("tuition")
+                  : item.type === "class"
+                  ? getCategoryTheme(item.title)
+                  : getCategoryTheme(item.categoryName || item.title);
 
-            return (
-              <div
-                key={`${item.type}-${item.id}`}
-                className={`p-3.5 rounded-[4px] bg-spy-surface2 border border-spy-border transition-colors flex items-center justify-between gap-3 ${getBorderLeftClass(
-                  item
-                )} ${item.isOverdue ? "bg-spy-redMuted" : ""} ${item.isCompleted ? "opacity-60" : ""}`}
-              >
+              const isAccomplishing = item.type === "mission" && item.id === accomplishingMissionId;
+
+              return (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={
+                    isAccomplishing
+                      ? { opacity: 0, scale: 0.95, height: 0, overflow: "hidden", marginBottom: 0 }
+                      : { opacity: 1, y: 0, height: "auto" }
+                  }
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25 }}
+                  key={`${item.type}-${item.id}`}
+                  className={`p-3.5 rounded-[4px] bg-spy-surface2 border border-spy-border transition-colors flex items-center justify-between gap-3 relative ${getBorderLeftClass(
+                    item
+                  )} ${item.isOverdue ? "bg-spy-redMuted" : ""} ${item.isCompleted ? "opacity-60" : ""} ${
+                    isAccomplishing ? "border-spy-green bg-spy-green/10" : ""
+                  }`}
+                >
                 {/* Left Details: Icon + Time + Title + Category Chip */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {/* Type Icon taking Category/Course Color */}
@@ -228,9 +245,10 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
                     </span>
                   )}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
+          </AnimatePresence>
         </div>
       )}
     </div>

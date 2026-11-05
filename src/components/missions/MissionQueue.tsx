@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Search, ChevronDown, ArrowUpDown } from "lucide-react";
 import { Mission, Category, Priority } from "@/types/database";
 import { MissionCard } from "@/components/ui/MissionCard";
@@ -9,6 +10,7 @@ import { getCategoryTheme } from "@/lib/categoryTheme";
 interface MissionQueueProps {
   missions: Mission[];
   categories: Category[];
+  accomplishingMissionId?: string | null;
   onComplete: (mission: Mission) => void;
   onEdit: (mission: Mission) => void;
   onDelete: (mission: Mission) => void;
@@ -42,6 +44,7 @@ const PRIORITY_ORDER: Record<Priority, number> = {
 export const MissionQueue: React.FC<MissionQueueProps> = ({
   missions,
   categories,
+  accomplishingMissionId,
   onComplete,
   onEdit,
   onDelete,
@@ -294,26 +297,35 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
                 />
               </button>
 
-              {/* Mission Items */}
-              {!isCollapsed && (
-                <div className="space-y-2.5">
-                  {group.list.map((mission) => {
-                    const category = categories.find((c) => c.id === mission.category_id);
-                    return (
-                      <MissionCard
-                        key={mission.id}
-                        mission={mission}
-                        category={category}
-                        onComplete={onComplete}
-                        onEdit={onEdit}
-                        onDelete={onDelete}
-                        onSetActive={onSetActive}
-                        onEditNote={onEditNote}
-                      />
-                    );
-                  })}
-                </div>
-              )}
+              {/* Mission Items with smooth collapsible height animation */}
+              <AnimatePresence initial={false}>
+                {!isCollapsed && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="space-y-2.5 overflow-hidden"
+                  >
+                    {group.list.map((mission) => {
+                      const category = categories.find((c) => c.id === mission.category_id);
+                      return (
+                        <MissionCard
+                          key={mission.id}
+                          mission={mission}
+                          category={category}
+                          isAccomplishing={mission.id === accomplishingMissionId}
+                          onComplete={onComplete}
+                          onEdit={onEdit}
+                          onDelete={onDelete}
+                          onSetActive={onSetActive}
+                          onEditNote={onEditNote}
+                        />
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           );
         })}

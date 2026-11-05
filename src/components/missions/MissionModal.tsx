@@ -112,9 +112,10 @@ export const MissionModal: React.FC<MissionModalProps> = ({
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
+          exit={{ opacity: 0, scale: 0.96 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
           className="relative w-full max-w-lg bg-spy-surface border border-spy-border rounded-[6px] p-6 text-spy-text max-h-[90vh] overflow-y-auto shadow-2xl"
         >
           {/* Header */}

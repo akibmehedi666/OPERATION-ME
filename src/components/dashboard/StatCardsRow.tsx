@@ -2,7 +2,9 @@
 
 import React from "react";
 import { CheckCircle2, Flame, AlertCircle } from "lucide-react";
+import { motion } from "framer-motion";
 import { Mission } from "@/types/database";
+import { AnimatedCounter } from "@/components/ui/AnimatedCounter";
 
 interface StatCardsRowProps {
   missions: Mission[];
@@ -53,7 +55,11 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
             Today
           </div>
           <div className="text-base sm:text-lg font-mono font-bold text-[#1f2421] dark:text-spy-text mt-0.5">
-            {completedTodayCount}/{totalTodayCount || missions.filter((m) => m.status === "active").length || 1} done
+            <AnimatedCounter value={completedTodayCount} />/
+            <AnimatedCounter
+              value={totalTodayCount || missions.filter((m) => m.status === "active").length || 1}
+            />{" "}
+            done
           </div>
         </div>
         <div className="p-2 bg-[#dcf3e4] border border-[#b9e7c8] text-[#14663a] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-green rounded-[4px]">
@@ -61,33 +67,46 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
         </div>
       </div>
 
-      {/* 2. Streak stat (Amber) */}
+      {/* 2. Streak stat (Amber, pulses on milestone 3, 7, 14, 30 days) */}
       <div className="clean-card p-3.5 sm:p-4 flex items-center justify-between bg-[#fdf6ea] border-[#f6e2be] dark:bg-spy-surface dark:border-spy-border">
         <div>
-          <div className="text-xs font-mono uppercase tracking-wider text-[#9a5b00] dark:text-spy-muted">
-            Streak
+          <div className="text-xs font-mono uppercase tracking-wider text-[#9a5b00] dark:text-spy-muted flex items-center gap-1.5">
+            <span>Streak</span>
+            {[3, 7, 14, 30].includes(streak) && (
+              <span className="text-[10px] font-mono font-bold bg-[#fdeadb] text-[#a8500f] border border-[#facfb7] dark:bg-spy-amber/20 dark:text-spy-amber dark:border-spy-amber/30 px-1 py-0.2 rounded-[2px]">
+                Milestone!
+              </span>
+            )}
           </div>
           <div className="text-base sm:text-lg font-mono font-bold text-[#9a5b00] dark:text-spy-amber mt-0.5">
-            {streak} {streak === 1 ? "day" : "days"}
+            <AnimatedCounter value={streak} /> {streak === 1 ? "day" : "days"}
           </div>
         </div>
-        <div className="p-2 bg-[#fbefd5] border border-[#f4dcaa] text-[#9a5b00] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-amber rounded-[4px]">
+        <motion.div
+          animate={
+            [3, 7, 14, 30].includes(streak)
+              ? { scale: [1, 1.15, 1], rotate: [0, -5, 5, 0] }
+              : {}
+          }
+          transition={{ duration: 0.45, repeat: [3, 7, 14, 30].includes(streak) ? 2 : 0 }}
+          className="p-2 bg-[#fbefd5] border border-[#f4dcaa] text-[#9a5b00] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-amber rounded-[4px]"
+        >
           <Flame className="w-4 h-4" />
-        </div>
+        </motion.div>
       </div>
 
-      {/* 3. Overdue stat (Red: tint only when > 0) */}
+      {/* 3. Overdue stat (Red: tint only when > 0, gentle pulse every 4s) */}
       <div
         className={`clean-card p-3.5 sm:p-4 flex items-center justify-between transition-colors ${
           overdueCount > 0
-            ? "border-l-[3px] border-l-[#b42318] bg-[#fbeae8] border-[#f5c6c2] dark:border-l-spy-red dark:bg-spy-danger-surface dark:border-spy-border"
+            ? "border-l-[3px] border-l-[#b42318] bg-[#fbeae8] border-[#f5c6c2] dark:border-l-spy-red dark:bg-spy-danger-surface dark:border-spy-border overdue-pulse"
             : "bg-[#fffdf8] border-spy-border dark:bg-spy-surface dark:border-spy-border"
         }`}
       >
         <div>
           <div
             className={`text-xs font-mono uppercase tracking-wider ${
-              overdueCount > 0 ? "text-[#b42318] dark:text-spy-muted" : "text-spy-muted"
+              overdueCount > 0 ? "text-[#b42318] dark:text-spy-muted font-bold" : "text-spy-muted"
             }`}
           >
             Overdue
@@ -97,7 +116,7 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
               overdueCount > 0 ? "text-[#b42318] dark:text-spy-red" : "text-spy-text"
             }`}
           >
-            {overdueCount} {overdueCount === 1 ? "mission" : "missions"}
+            <AnimatedCounter value={overdueCount} /> {overdueCount === 1 ? "mission" : "missions"}
           </div>
         </div>
         <div

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { 
   Plus, 
   LogOut, 
@@ -18,6 +19,8 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Button } from "@/components/ui/Button";
 import { soundFX } from "@/lib/sound";
 import { ThemePreference, ActiveTheme } from "@/lib/theme";
+import { useAnimations } from "@/lib/animationContext";
+import { AnimatedCounter } from "@/components/ui/AnimatedCounter";
 
 interface AgentHeaderProps {
   agentName?: string;
@@ -44,7 +47,38 @@ export function AgentHeader({
 }: AgentHeaderProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(soundFX.isEnabled());
+  const { animationsEnabled, setAnimationsEnabled, systemReducedMotion } = useAnimations();
   const rankInfo = getRankFromXp(totalXp);
+
+  // Subtle typewriter effect on Agent greeting on first login of the day (dark theme)
+  const [greetingText, setGreetingText] = useState("");
+  const [showGreeting, setShowGreeting] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (currentTheme !== "dark") {
+      setShowGreeting(false);
+      return;
+    }
+
+    const todayStr = new Date().toDateString();
+    const lastGreeting = localStorage.getItem("op_me_greeting_date");
+
+    if (lastGreeting !== todayStr) {
+      localStorage.setItem("op_me_greeting_date", todayStr);
+      setShowGreeting(true);
+      const full = "Welcome back, Agent Akib.";
+      let idx = 0;
+      const interval = setInterval(() => {
+        idx++;
+        setGreetingText(full.slice(0, idx));
+        if (idx >= full.length) {
+          clearInterval(interval);
+        }
+      }, 40);
+      return () => clearInterval(interval);
+    }
+  }, [currentTheme]);
 
   const toggleSound = () => {
     const newState = soundFX.toggleSound();
@@ -74,6 +108,14 @@ export function AgentHeader({
             AK
           </div>
           <div>
+            {showGreeting && (
+              <div className="text-[11px] font-mono text-spy-green flex items-center gap-1 mb-0.5 tracking-wide">
+                <span>{greetingText}</span>
+                {greetingText.length < 25 && (
+                  <span className="inline-block w-1.5 h-3 bg-spy-green animate-pulse" />
+                )}
+              </div>
+            )}
             <h1 className="text-base sm:text-lg font-mono font-bold text-spy-text tracking-wide">
               {agentName}
             </h1>
@@ -96,7 +138,11 @@ export function AgentHeader({
           <div className="w-36 sm:w-44">
             <ProgressBar
               value={rankInfo.progress}
-              label={`${totalXp} XP`}
+              label={
+                <span>
+                  <AnimatedCounter value={totalXp} /> XP
+                </span>
+              }
               sublabel={rankInfo.xpToNext > 0 ? `${rankInfo.xpToNext} to next` : "MAX"}
               size="sm"
             />
@@ -105,7 +151,9 @@ export function AgentHeader({
           {/* Daily Streak */}
           <div className="flex items-center gap-1.5 text-xs font-mono text-spy-amber bg-spy-amberMuted border border-spy-border px-2.5 py-1 rounded-[3px]">
             <Flame className="w-3.5 h-3.5 text-spy-amber" />
-            <span>{streak} {streak === 1 ? "day" : "days"}</span>
+            <span>
+              <AnimatedCounter value={streak} /> {streak === 1 ? "day" : "days"}
+            </span>
           </div>
 
           {/* Action buttons */}
@@ -120,17 +168,24 @@ export function AgentHeader({
               <span className="hidden xs:inline">New Mission</span>
             </Button>
 
-            {/* Sun/Moon quick toggle button */}
+            {/* Sun/Moon quick toggle button with rotate/morph animation */}
             <button
               onClick={onToggleTheme}
-              className="p-2 text-spy-muted hover:text-spy-text border border-spy-border hover:border-spy-borderLight rounded-[3px] transition-colors bg-spy-surface2"
+              className="p-2 text-spy-muted hover:text-spy-text border border-spy-border hover:border-spy-borderLight rounded-[3px] transition-colors bg-spy-surface2 overflow-hidden"
               title={currentTheme === "dark" ? "Switch to Light Theme (Declassified Dossier)" : "Switch to Dark Theme (Tactical Stealth)"}
             >
-              {currentTheme === "dark" ? (
-                <Sun className="w-4 h-4 text-spy-amber" />
-              ) : (
-                <Moon className="w-4 h-4 text-spy-green" />
-              )}
+              <motion.div
+                key={currentTheme}
+                initial={{ rotate: -90, scale: 0.7 }}
+                animate={{ rotate: 0, scale: 1 }}
+                transition={{ duration: 0.25 }}
+              >
+                {currentTheme === "dark" ? (
+                  <Sun className="w-4 h-4 text-spy-amber" />
+                ) : (
+                  <Moon className="w-4 h-4 text-spy-green" />
+                )}
+              </motion.div>
             </button>
 
             {/* Settings button */}
@@ -198,6 +253,32 @@ export function AgentHeader({
               <p className="text-[10px] text-spy-dim mt-2 font-sans">
                 Controls what theme loads by default on startup and across sessions.
               </p>
+            </div>
+
+            {/* Animations Toggle */}
+            <div className="flex items-center justify-between py-3 border-b border-spy-border">
+              <div>
+                <div className="text-spy-text font-semibold flex items-center gap-1.5">
+                  <span>UI Animations</span>
+                  {systemReducedMotion && (
+                    <span className="text-[10px] text-spy-amber font-normal font-sans">(Reduced motion OS)</span>
+                  )}
+                </div>
+                <div className="text-[10px] text-spy-dim font-sans mt-0.5">
+                  Transitions, counters, layout & effects
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnimationsEnabled(!animationsEnabled)}
+                className={`px-3 py-1 border rounded-[3px] font-mono font-bold text-xs transition-colors ${
+                  animationsEnabled && !systemReducedMotion
+                    ? "bg-spy-greenMuted text-spy-green border-spy-green"
+                    : "bg-spy-surface2 text-spy-dim border-spy-border"
+                }`}
+              >
+                {animationsEnabled && !systemReducedMotion ? "ON" : "OFF"}
+              </button>
             </div>
 
             {/* Tactical Sound FX */}

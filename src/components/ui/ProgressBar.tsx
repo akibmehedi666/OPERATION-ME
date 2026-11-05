@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -10,8 +11,8 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 
 export interface ProgressBarProps {
   value: number; // 0 to 100
-  label?: string;
-  sublabel?: string;
+  label?: React.ReactNode;
+  sublabel?: React.ReactNode;
   variant?: "green" | "amber" | "red";
   size?: "sm" | "md";
   className?: string;
@@ -55,9 +56,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           className
         )}
       >
-        <div
-          className={cn("h-full transition-all duration-300 ease-out", colorStyles[variant])}
-          style={{ width: `${clampedValue}%` }}
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${clampedValue}%` }}
+          transition={{ duration: 0.45, ease: "easeOut" }}
+          className={cn("h-full", colorStyles[variant])}
         />
       </div>
     </div>

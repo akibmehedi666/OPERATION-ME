@@ -21,6 +21,7 @@ import {
   resolveTheme, 
   applyThemeClass 
 } from "@/lib/theme";
+import { getRankFromXp } from "@/lib/rank";
 
 const PRIORITY_WEIGHTS: Record<Priority, number> = {
   urgent: 4,
@@ -413,6 +414,17 @@ export function useAgencyState() {
 
     // 2. Award XP
     const newTotalXp = totalXp + xpAwarded;
+    const oldRank = getRankFromXp(totalXp).rank;
+    const newRank = getRankFromXp(newTotalXp).rank;
+    const isRankUp = oldRank !== newRank;
+
+    // Check if first mission completed today
+    const todayDateStr = new Date().toDateString();
+    const hasCompletedEarlierToday = missions.some(
+      (m) => m.completed_at && new Date(m.completed_at).toDateString() === todayDateStr
+    );
+    const isFirstToday = !hasCompletedEarlierToday;
+
     persistXp(newTotalXp);
 
     // 3. Update Streak
@@ -502,6 +514,12 @@ export function useAgencyState() {
     return {
       completedMission: { ...mission, status: "completed" as const, completed_at: nowIso, completion_note: completionNote || null, time_spent_minutes: timeSpentMinutes || null },
       nextMission: nextTarget,
+      xpAwarded,
+      isFirstToday,
+      isRankUp,
+      oldRank,
+      newRank,
+      newStreak,
     };
   };
 

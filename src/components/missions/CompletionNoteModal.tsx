@@ -76,10 +76,10 @@ export const CompletionNoteModal: React.FC<CompletionNoteModalProps> = ({
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 8 }}
+          initial={{ opacity: 0, scale: 0.96, y: 6 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 8 }}
-          transition={{ duration: 0.15 }}
+          exit={{ opacity: 0, scale: 0.96, y: 6 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
           className="relative w-full max-w-md clean-card p-5 shadow-2xl font-sans"
         >
           {/* Header */}

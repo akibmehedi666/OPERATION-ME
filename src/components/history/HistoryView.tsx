@@ -22,6 +22,7 @@ import {
   formatDateWithDay 
 } from "@/lib/formatters";
 import { getCategoryTheme } from "@/lib/categoryTheme";
+import { AnimatedCounter } from "@/components/ui/AnimatedCounter";
 
 interface HistoryViewProps {
   missions: Mission[];
@@ -309,7 +310,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               This Week
             </div>
             <div className="text-lg font-mono font-bold text-[#1d4f9f] dark:text-spy-text mt-0.5">
-              {summaryStats.thisWeek} done
+              <AnimatedCounter value={summaryStats.thisWeek} /> done
             </div>
           </div>
           <div className="p-2 bg-[#e4eefc] border border-[#c6ddf9] rounded-[4px] text-[#1d4f9f] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-green">
@@ -324,7 +325,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               This Month
             </div>
             <div className="text-lg font-mono font-bold text-[#6b2fa0] dark:text-spy-text mt-0.5">
-              {summaryStats.thisMonth} done
+              <AnimatedCounter value={summaryStats.thisMonth} /> done
             </div>
           </div>
           <div className="p-2 bg-[#f0e6fa] border border-[#dfcbf5] rounded-[4px] text-[#6b2fa0] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-text">
@@ -339,7 +340,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               Best Streak
             </div>
             <div className="text-lg font-mono font-bold text-[#a8500f] dark:text-spy-amber mt-0.5">
-              {summaryStats.bestStreak} days
+              <AnimatedCounter value={summaryStats.bestStreak} /> days
             </div>
           </div>
           <div className="p-2 bg-[#fdeadb] border border-[#facfb7] rounded-[4px] text-[#a8500f] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-amber">

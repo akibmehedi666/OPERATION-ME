@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Check, 
@@ -15,6 +15,7 @@ import {
 import { Mission, Category } from "@/types/database";
 import { formatDueText } from "@/lib/formatters";
 import { getCategoryTheme } from "@/lib/categoryTheme";
+import { useAnimations } from "@/lib/animationContext";
 import { Button } from "./Button";
 
 interface MissionCardProps {
@@ -26,6 +27,7 @@ interface MissionCardProps {
   onDelete?: (mission: Mission) => void;
   onSetActive?: (mission: Mission) => void;
   onEditNote?: (mission: Mission) => void;
+  isAccomplishing?: boolean;
 }
 
 export const MissionCard: React.FC<MissionCardProps> = ({
@@ -37,10 +39,54 @@ export const MissionCard: React.FC<MissionCardProps> = ({
   onDelete,
   onSetActive,
   onEditNote,
+  isAccomplishing = false,
 }) => {
+  const { isMotionActive } = useAnimations();
   const [isExpanded, setIsExpanded] = useState(false);
   const isCompleted = mission.status === "completed";
   const catTheme = getCategoryTheme(category?.name || category?.codename);
+
+  // Typewriter and scan-line sweep for new mission assigned
+  const [displayedTitle, setDisplayedTitle] = useState(mission.title);
+  const [showSweep, setShowSweep] = useState(false);
+  const prevIdRef = useRef(mission.id);
+
+  useEffect(() => {
+    if (!isHero) {
+      setDisplayedTitle(mission.title);
+      return;
+    }
+
+    if (prevIdRef.current !== mission.id) {
+      prevIdRef.current = mission.id;
+      if (isMotionActive) {
+        setShowSweep(true);
+        const sweepTimer = setTimeout(() => setShowSweep(false), 750);
+
+        const targetText = mission.title;
+        let charIdx = 0;
+        const stepTime = Math.max(12, Math.floor(600 / Math.max(targetText.length, 1)));
+        setDisplayedTitle("");
+
+        const interval = setInterval(() => {
+          charIdx++;
+          setDisplayedTitle(targetText.slice(0, charIdx));
+          if (charIdx >= targetText.length) {
+            clearInterval(interval);
+          }
+        }, stepTime);
+
+        return () => {
+          clearTimeout(sweepTimer);
+          clearInterval(interval);
+        };
+      } else {
+        setDisplayedTitle(mission.title);
+      }
+    } else {
+      setDisplayedTitle(mission.title);
+    }
+  }, [mission.id, mission.title, isHero, isMotionActive]);
 
   // Use 12-hour unified due text
   const dueInfo = formatDueText(mission.deadline);
@@ -64,12 +110,61 @@ export const MissionCard: React.FC<MissionCardProps> = ({
   // If this is the Hero Active Mission card
   if (isHero) {
     return (
-      <div className="active-mission-card p-5 sm:p-6 transition-all duration-200">
+      <div className={`active-mission-card p-5 sm:p-6 transition-all duration-200 relative ${isAccomplishing ? "border-spy-green" : ""}`}>
+        {/* Brief green scan-line sweep across the card on assignment */}
+        {showSweep && <div className="scanline-sweep" />}
+
+        {/* Floating +XP text during accomplishment */}
+        {isAccomplishing && (
+          <motion.div
+            initial={{ opacity: 0, y: 0 }}
+            animate={{ opacity: [0, 1, 1, 0], y: -32 }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+            className="absolute top-3 right-6 font-mono font-bold text-xs text-spy-amber bg-spy-amberMuted border border-spy-amber/40 px-2.5 py-0.5 rounded-[3px] pointer-events-none z-40 shadow-sm"
+          >
+            +{mission.xp || 50} XP
+          </motion.div>
+        )}
+
+        {/* Accomplished thump overlay */}
+        {isAccomplishing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/30 backdrop-blur-[1px] rounded-[6px]"
+          >
+            <motion.div
+              initial={{ scale: 1.6, rotate: -12, opacity: 0 }}
+              animate={{ scale: 1, rotate: -2, opacity: 1, x: [0, -3, 3, -1, 0] }}
+              transition={{ duration: 0.35, type: "spring", stiffness: 450, damping: 20 }}
+              className="flex flex-col items-center gap-2"
+            >
+              <div className="w-10 h-10 rounded-full bg-spy-surface border-2 border-spy-green flex items-center justify-center text-spy-green shadow-lg">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-5 h-5">
+                  <motion.path
+                    d="M5 13l4 4L19 7"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                </svg>
+              </div>
+              <span className="rubber-stamp rubber-stamp-green text-xs sm:text-sm tracking-widest font-black shadow-xl">
+                ★ MISSION ACCOMPLISHED ★
+              </span>
+            </motion.div>
+          </motion.div>
+        )}
+
         {/* Header line: Rubber Stamp + Category + Due Time */}
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2.5">
-            <span className="rubber-stamp rubber-stamp-green text-[10px]">
-              ACTIVE MISSION
+            <span className="rubber-stamp rubber-stamp-green text-[10px] inline-flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-spy-green animate-pulse dark:inline-block hidden" />
+              <span>ACTIVE MISSION</span>
             </span>
             {category && (
               <span className={`text-xs px-2.5 py-0.5 rounded-[3px] border font-medium ${catTheme.chipClass}`}>
@@ -91,9 +186,9 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           )}
         </div>
 
-        {/* Title */}
-        <h2 className="text-lg sm:text-xl font-medium text-spy-text mb-3 leading-snug">
-          {mission.title}
+        {/* Title (with typewriter effect on new assignment) */}
+        <h2 className="text-lg sm:text-xl font-medium text-spy-text mb-3 leading-snug min-h-[1.75rem]">
+          {displayedTitle}
         </h2>
 
         {/* Notes (visible on hero) */}
@@ -137,13 +232,66 @@ export const MissionCard: React.FC<MissionCardProps> = ({
     );
   }
 
-  // Standard Mission Card (aligned grid)
+  // Standard Mission Card (aligned grid with layout animations)
   return (
-    <div
-      className={`group clean-card transition-all duration-150 ${getBorderLeftClass()} ${
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={
+        isAccomplishing
+          ? { opacity: 0, scale: 0.95, height: 0, overflow: "hidden", marginBottom: 0 }
+          : { opacity: 1, y: 0, height: "auto" }
+      }
+      transition={{ duration: isAccomplishing ? 0.35 : 0.25 }}
+      className={`group clean-card relative transition-all duration-150 ${getBorderLeftClass()} ${
         dueInfo.isOverdue && !isCompleted ? "bg-spy-redMuted" : ""
-      } ${isCompleted ? "opacity-60" : ""}`}
+      } ${isCompleted ? "opacity-60" : ""} ${isAccomplishing ? "border-spy-green bg-spy-green/10" : ""}`}
     >
+      {/* Floating +XP on accomplish */}
+      {isAccomplishing && (
+        <motion.div
+          initial={{ opacity: 0, y: 0 }}
+          animate={{ opacity: [0, 1, 1, 0], y: -26 }}
+          transition={{ duration: 0.45, ease: "easeOut" }}
+          className="absolute -top-3 right-4 font-mono font-bold text-xs text-spy-amber bg-spy-amberMuted border border-spy-amber/40 px-2 py-0.5 rounded-[3px] pointer-events-none z-40 shadow-sm"
+        >
+          +{mission.xp || 50} XP
+        </motion.div>
+      )}
+
+      {/* Thumping Accomplished Stamp Overlay */}
+      {isAccomplishing && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 z-30 flex items-center justify-center bg-black/20 backdrop-blur-[1px] rounded-[6px]"
+        >
+          <motion.div
+            initial={{ scale: 1.6, rotate: -10, opacity: 0 }}
+            animate={{ scale: 1, rotate: -2, opacity: 1, x: [0, -3, 3, -1, 0] }}
+            transition={{ duration: 0.35, type: "spring", stiffness: 450, damping: 20 }}
+            className="flex items-center gap-2"
+          >
+            <div className="w-7 h-7 rounded-full bg-spy-surface border border-spy-green flex items-center justify-center text-spy-green shadow">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4">
+                <motion.path
+                  d="M5 13l4 4L19 7"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                />
+              </svg>
+            </div>
+            <span className="rubber-stamp rubber-stamp-green text-[10px] tracking-widest font-black shadow-md">
+              ★ MISSION ACCOMPLISHED ★
+            </span>
+          </motion.div>
+        </motion.div>
+      )}
+
       <div className="p-3.5 sm:p-4">
         <div className="flex items-center justify-between gap-3">
           {/* Category Icon Tile */}
@@ -167,7 +315,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
 
               {/* Rubber Stamp for Overdue or regular Due time in 12-hour format */}
               {dueInfo.isOverdue && !isCompleted ? (
-                <span className="rubber-stamp rubber-stamp-red text-[10px]">
+                <span className="rubber-stamp rubber-stamp-red text-[10px] overdue-pulse">
                   OVERDUE {dueInfo.text.replace("Overdue ", "")}
                 </span>
               ) : dueInfo.text ? (
@@ -223,6 +371,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
               className="pt-3 mt-3 border-t border-spy-border text-xs text-spy-muted space-y-2 overflow-hidden"
             >
               <div className="flex items-center justify-between text-xs font-mono">
@@ -231,14 +380,14 @@ export const MissionCard: React.FC<MissionCardProps> = ({
               </div>
 
               {mission.notes && (
-                <div className="bg-spy-surface2 p-3 rounded-[3px] text-spy-text leading-relaxed font-sans text-xs border border-spy-border">
+                <div className="p-2.5 bg-spy-surface2 border border-spy-border rounded-[3px] text-spy-text font-sans">
                   {mission.notes}
                 </div>
               )}
 
-              {/* Completion Note & Time Spent in Expanded View (for completed missions) */}
+              {/* Debrief Record for completed missions */}
               {isCompleted && (
-                <div className="bg-spy-surface2 p-2.5 rounded-[3px] border border-spy-border text-spy-text font-sans flex items-start justify-between gap-2">
+                <div className="p-2.5 bg-spy-surface2 border border-spy-border rounded-[3px] flex items-start justify-between gap-2">
                   <div className="flex items-start gap-1.5">
                     <FileText className="w-3.5 h-3.5 text-spy-green shrink-0 mt-0.5" />
                     <div>
@@ -260,7 +409,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
                     <button
                       onClick={() => onEditNote(mission)}
                       className="p-1 text-spy-muted hover:text-spy-green shrink-0"
-                      title="Edit Debrief Note"
+                      title="Edit Debrief Record"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -303,6 +452,6 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           )}
         </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 };

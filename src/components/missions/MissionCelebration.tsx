@@ -13,6 +13,8 @@ interface MissionCelebrationProps {
   nextMission: Mission | null;
   isOpen: boolean;
   onClose: () => void;
+  isFirstToday?: boolean;
+  isRankUp?: boolean;
 }
 
 export const MissionCelebration: React.FC<MissionCelebrationProps> = ({
@@ -20,21 +22,26 @@ export const MissionCelebration: React.FC<MissionCelebrationProps> = ({
   nextMission,
   isOpen,
   onClose,
+  isFirstToday = false,
+  isRankUp = false,
 }) => {
   useEffect(() => {
     if (isOpen && completedMission) {
       soundFX.playMissionAccomplished();
 
-      // Gentle celebratory confetti
-      try {
-        confetti({
-          particleCount: 40,
-          spread: 60,
-          origin: { y: 0.65 },
-          colors: ["#1f7a4d", "#b7791f", "#ffffff"],
-        });
-      } catch {
-        // Safe catch
+      // Light confetti burst (small, 1s) ONLY for first mission completed each day and on rank-up
+      if (isFirstToday || isRankUp) {
+        try {
+          confetti({
+            particleCount: 35,
+            spread: 55,
+            origin: { y: 0.65 },
+            colors: ["#1f7a4d", "#b7791f", "#14b8a6", "#ffffff"],
+            ticks: 120, // ~1s
+          });
+        } catch {
+          // Safe catch
+        }
       }
 
       if (nextMission) {
@@ -44,7 +51,7 @@ export const MissionCelebration: React.FC<MissionCelebrationProps> = ({
         return () => clearTimeout(timer);
       }
     }
-  }, [isOpen, completedMission, nextMission]);
+  }, [isOpen, completedMission, nextMission, isFirstToday, isRankUp]);
 
   if (!isOpen || !completedMission) return null;
 
