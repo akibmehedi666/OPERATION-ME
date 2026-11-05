@@ -102,29 +102,29 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
       if (item.priority === "urgent") return "border-l-[3px] border-l-spy-red";
       if (item.priority === "high") return "border-l-[3px] border-l-spy-amber";
       if (item.priority === "medium") return "border-l-[3px] border-l-spy-green";
-      return "border-l-[3px] border-l-slate-700";
+      return "border-l-[3px] border-l-spy-borderLight";
     }
     if (item.type === "tuition") {
-      return "border-l-[3px] border-l-amber-500/80";
+      return "border-l-[3px] border-l-spy-amber";
     }
     // Academic Class
-    return "border-l-[3px] border-l-slate-600";
+    return "border-l-[3px] border-l-spy-borderLight";
   };
 
   return (
     <div className="clean-card p-5">
       {/* Section Header: small uppercase label + count, with divider */}
       <div className="flex items-center justify-between pb-3 border-b border-spy-border mb-4">
-        <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-slate-300">
+        <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-spy-text">
           TODAY&apos;S PLAN ({mergedItems.length})
         </h3>
-        <span className="text-[11px] font-mono text-slate-500">
+        <span className="text-[11px] font-mono text-spy-muted">
           Chronological Timeline
         </span>
       </div>
 
       {mergedItems.length === 0 ? (
-        <div className="text-center py-8 text-xs text-slate-500 font-sans">
+        <div className="text-center py-8 text-xs text-spy-dim font-sans">
           No scheduled classes, tuition, or missions due for the rest of today.
         </div>
       ) : (
@@ -132,9 +132,9 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
           {mergedItems.map((item) => (
             <div
               key={`${item.type}-${item.id}`}
-              className={`p-3.5 rounded-[4px] bg-[#141d18] border border-spy-border transition-colors flex items-center justify-between gap-3 ${getBorderLeftClass(
+              className={`p-3.5 rounded-[4px] bg-spy-surface2 border border-spy-border transition-colors flex items-center justify-between gap-3 ${getBorderLeftClass(
                 item
-              )} ${item.isCompleted ? "opacity-50" : ""}`}
+              )} ${item.isOverdue ? "bg-spy-redMuted" : ""} ${item.isCompleted ? "opacity-60" : ""}`}
             >
               {/* Left Details: Icon + Time + Title + Category Chip */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -142,10 +142,10 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
                 <div
                   className={`p-2 rounded-[4px] shrink-0 border ${
                     item.type === "mission"
-                      ? "bg-[#0e1411] border-spy-border text-spy-green"
+                      ? "bg-spy-surface border-spy-border text-spy-green"
                       : item.type === "tuition"
-                      ? "bg-[#0e1411] border-amber-900/30 text-amber-400"
-                      : "bg-[#0e1411] border-spy-border text-slate-300"
+                      ? "bg-spy-surface border-spy-border text-spy-amber"
+                      : "bg-spy-surface border-spy-border text-spy-muted"
                   }`}
                   title={item.type.toUpperCase()}
                 >
@@ -162,27 +162,27 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
                     {/* Time in 12h format */}
-                    <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-slate-500" />
+                    <span className="text-xs font-mono text-spy-muted flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-spy-dim" />
                       {item.timeDisplay}
                     </span>
 
                     {/* Category Chip */}
                     {item.categoryName && (
-                      <span className="text-[11px] bg-[#16201b] border border-[#23332a] px-1.5 py-0.5 rounded-[2px] text-slate-300">
+                      <span className="text-[11px] bg-spy-chipBg border border-spy-chipBorder px-1.5 py-0.5 rounded-[2px] text-spy-chipText font-medium">
                         {item.categoryName}
                       </span>
                     )}
 
                     {/* Overdue alert */}
                     {item.isOverdue && (
-                      <span className="text-[11px] font-mono text-spy-red font-semibold">
+                      <span className="rubber-stamp rubber-stamp-red text-[10px]">
                         Overdue
                       </span>
                     )}
 
                     {item.room && (
-                      <span className="text-[11px] font-mono text-slate-500">
+                      <span className="text-[11px] font-mono text-spy-dim">
                         Room {item.room}
                       </span>
                     )}
@@ -190,8 +190,8 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
 
                   {/* Title */}
                   <div
-                    className={`text-sm font-medium text-slate-100 truncate ${
-                      item.isCompleted ? "line-through text-slate-500" : ""
+                    className={`text-sm font-medium text-spy-text truncate ${
+                      item.isCompleted ? "line-through text-spy-dim" : ""
                     }`}
                   >
                     {item.title}
@@ -213,11 +213,11 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
                 )}
 
                 {item.type === "mission" && item.isCompleted && (
-                  <span className="text-xs font-mono text-slate-500">Done</span>
+                  <span className="text-xs font-mono text-spy-dim">Done</span>
                 )}
 
                 {item.type !== "mission" && (
-                  <span className="text-xs font-mono text-slate-500 uppercase">
+                  <span className="text-xs font-mono text-spy-dim uppercase">
                     {item.type}
                   </span>
                 )}

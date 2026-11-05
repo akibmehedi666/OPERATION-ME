@@ -14,6 +14,13 @@ import {
 } from "@/lib/seeds";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { 
+  ThemePreference, 
+  getStoredThemePreference, 
+  saveThemePreference, 
+  resolveTheme, 
+  applyThemeClass 
+} from "@/lib/theme";
 
 const PRIORITY_WEIGHTS: Record<Priority, number> = {
   urgent: 4,
@@ -31,6 +38,7 @@ export function useAgencyState() {
   const [totalXp, setTotalXp] = useState<number>(350); // Initial baseline for Agent Akib
   const [streak, setStreak] = useState<number>(4);
   const [loading, setLoading] = useState<boolean>(true);
+  const [defaultTheme, setDefaultThemeState] = useState<ThemePreference>("dark");
 
   const supabase = createClient();
   const hasSupabase = isSupabaseConfigured() && supabase !== null;
@@ -39,6 +47,10 @@ export function useAgencyState() {
   useEffect(() => {
     async function init() {
       setLoading(true);
+
+      const storedPref = getStoredThemePreference();
+      setDefaultThemeState(storedPref);
+      applyThemeClass(resolveTheme(storedPref));
 
       // Check if user authenticated in Supabase
       if (hasSupabase && supabase) {
@@ -377,13 +389,25 @@ export function useAgencyState() {
   };
 
   // Complete Mission + Auto-Assign Next Target
-  const completeMission = async (mission: Mission) => {
+  const completeMission = async (
+    mission: Mission,
+    completionNote?: string,
+    timeSpentMinutes?: number
+  ) => {
     const nowIso = new Date().toISOString();
     const xpAwarded = mission.xp || 50;
 
     // 1. Mark completed
     const markCompleted = (m: Mission) =>
-      m.id === mission.id ? { ...m, status: "completed" as const, completed_at: nowIso } : m;
+      m.id === mission.id
+        ? {
+            ...m,
+            status: "completed" as const,
+            completed_at: nowIso,
+            completion_note: completionNote || null,
+            time_spent_minutes: timeSpentMinutes || null,
+          }
+        : m;
 
     let updatedList = missions.map(markCompleted);
 
@@ -401,6 +425,8 @@ export function useAgencyState() {
         await supabase.from("missions").update({
           status: "completed",
           completed_at: nowIso,
+          completion_note: completionNote || null,
+          time_spent_minutes: timeSpentMinutes || null,
         }).eq("id", mission.id);
 
         await supabase.from("xp_events").insert({
@@ -474,9 +500,47 @@ export function useAgencyState() {
     persistMissions(updatedList);
 
     return {
-      completedMission: { ...mission, status: "completed" as const, completed_at: nowIso },
+      completedMission: { ...mission, status: "completed" as const, completed_at: nowIso, completion_note: completionNote || null, time_spent_minutes: timeSpentMinutes || null },
       nextMission: nextTarget,
     };
+  };
+
+  // Update debrief note or time spent on an already completed mission
+  const updateMissionNote = async (
+    missionId: string,
+    completionNote?: string,
+    timeSpentMinutes?: number
+  ) => {
+    const updated = missions.map((m) =>
+      m.id === missionId
+        ? {
+            ...m,
+            completion_note: completionNote !== undefined ? completionNote : m.completion_note,
+            time_spent_minutes: timeSpentMinutes !== undefined ? timeSpentMinutes : m.time_spent_minutes,
+          }
+        : m
+    );
+
+    persistMissions(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        await supabase
+          .from("missions")
+          .update({
+            completion_note: completionNote || null,
+            time_spent_minutes: timeSpentMinutes || null,
+          })
+          .eq("id", missionId);
+      } catch (e) {
+        console.error("Supabase note update error:", e);
+      }
+    }
+  };
+
+  const updateDefaultTheme = (pref: ThemePreference) => {
+    setDefaultThemeState(pref);
+    saveThemePreference(pref);
   };
 
   return {
@@ -488,6 +552,8 @@ export function useAgencyState() {
     totalXp,
     streak,
     loading,
+    defaultTheme,
+    updateDefaultTheme,
     isSupabaseConnected: hasSupabase,
     login,
     guestBypass,
@@ -497,6 +563,7 @@ export function useAgencyState() {
     deleteMission,
     setActiveMission,
     completeMission,
+    updateMissionNote,
   };
 }
 

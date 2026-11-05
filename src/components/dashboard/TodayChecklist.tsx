@@ -41,7 +41,7 @@ export const TodayChecklist: React.FC<TodayChecklistProps> = ({
       <div className="flex items-center justify-between pb-3 border-b border-spy-border mb-3">
         <div className="flex items-center gap-2">
           <CheckSquare className="w-4 h-4 text-spy-green" />
-          <h3 className="text-sm font-bold tracking-wider uppercase text-white">
+          <h3 className="text-sm font-bold tracking-wider uppercase text-spy-text">
             TODAY&apos;S MISSION CHECKLIST
           </h3>
         </div>
@@ -52,7 +52,7 @@ export const TodayChecklist: React.FC<TodayChecklistProps> = ({
 
       {/* Checklist items */}
       {todayMissions.length === 0 ? (
-        <div className="py-6 text-center text-xs text-slate-500 border border-dashed border-slate-800">
+        <div className="py-6 text-center text-xs text-spy-muted border border-dashed border-spy-border">
           ALL ACTIVE OBJECTIVES EXECUTED. NO IMMEDIATE THREATS PENDING.
         </div>
       ) : (
@@ -69,16 +69,16 @@ export const TodayChecklist: React.FC<TodayChecklistProps> = ({
                 onClick={() => onToggleComplete(mission)}
                 className={`p-2.5 border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
                   isCompleted
-                    ? "bg-black/40 border-slate-800 opacity-60"
+                    ? "bg-spy-surface2 border-spy-border opacity-60"
                     : isOverdue
-                    ? "bg-red-950/20 border-spy-red/50 hover:border-spy-red"
-                    : "bg-spy-card border-spy-border hover:border-spy-green/60"
+                    ? "bg-spy-danger-surface border-spy-red/50 hover:border-spy-red"
+                    : "bg-spy-surface border-spy-border hover:border-spy-green/60"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <button
                     type="button"
-                    className="text-slate-400 group-hover:text-spy-green transition-colors shrink-0"
+                    className="text-spy-muted group-hover:text-spy-green transition-colors shrink-0"
                   >
                     {isCompleted ? (
                       <CheckCircle className="w-4 h-4 text-spy-green" />
@@ -90,7 +90,7 @@ export const TodayChecklist: React.FC<TodayChecklistProps> = ({
                   <div className="min-w-0 truncate">
                     <div
                       className={`text-xs font-bold truncate ${
-                        isCompleted ? "line-through text-slate-500" : "text-spy-text"
+                        isCompleted ? "line-through text-spy-muted" : "text-spy-text"
                       }`}
                     >
                       {mission.title}

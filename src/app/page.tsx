@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ArrowRight, Plus } from "lucide-react";
 import { useAgencyState } from "@/lib/useAgencyState";
 import { LoginPage } from "@/components/auth/LoginPage";
@@ -13,9 +13,11 @@ import { MissionQueue } from "@/components/missions/MissionQueue";
 import { HistoryView } from "@/components/history/HistoryView";
 import { MissionModal } from "@/components/missions/MissionModal";
 import { MissionCelebration } from "@/components/missions/MissionCelebration";
+import { CompletionNoteModal } from "@/components/missions/CompletionNoteModal";
 import { Button } from "@/components/ui/Button";
 import { Mission } from "@/types/database";
 import { soundFX } from "@/lib/sound";
+import { ThemePreference, ActiveTheme, resolveTheme, applyThemeClass } from "@/lib/theme";
 
 export default function Home() {
   const {
@@ -27,6 +29,8 @@ export default function Home() {
     totalXp,
     streak,
     isSupabaseConnected,
+    defaultTheme,
+    updateDefaultTheme,
     login,
     guestBypass,
     logout,
@@ -35,11 +39,57 @@ export default function Home() {
     deleteMission,
     setActiveMission,
     completeMission,
+    updateMissionNote,
   } = useAgencyState();
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "missions" | "history">("dashboard");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
+
+  // Active theme state ("dark" | "light")
+  const [currentTheme, setCurrentTheme] = useState<ActiveTheme>("dark");
+
+  useEffect(() => {
+    const resolved = resolveTheme(defaultTheme);
+    setCurrentTheme(resolved);
+    applyThemeClass(resolved);
+  }, [defaultTheme]);
+
+  useEffect(() => {
+    if (defaultTheme !== "system") return;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => {
+      const next: ActiveTheme = e.matches ? "dark" : "light";
+      setCurrentTheme(next);
+      applyThemeClass(next);
+    };
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
+  }, [defaultTheme]);
+
+  const handleToggleTheme = () => {
+    const next: ActiveTheme = currentTheme === "dark" ? "light" : "dark";
+    setCurrentTheme(next);
+    applyThemeClass(next);
+  };
+
+  const handleUpdateDefaultTheme = (pref: ThemePreference) => {
+    updateDefaultTheme(pref);
+    const resolved = resolveTheme(pref);
+    setCurrentTheme(resolved);
+    applyThemeClass(resolved);
+  };
+
+  // Completion note & debrief modal state
+  const [completionModal, setCompletionModal] = useState<{
+    isOpen: boolean;
+    mission: Mission | null;
+    isEditingOnly: boolean;
+  }>({
+    isOpen: false,
+    mission: null,
+    isEditingOnly: false,
+  });
 
   const [celebrationData, setCelebrationData] = useState<{
     completed: Mission | null;
@@ -51,14 +101,46 @@ export default function Home() {
     isOpen: false,
   });
 
-  const handleComplete = async (mission: Mission) => {
+  // When user clicks Accomplish anywhere, open fast completion modal
+  const handleInitiateAccomplish = (mission: Mission) => {
     soundFX.playBlip();
-    const result = await completeMission(mission);
+    setCompletionModal({
+      isOpen: true,
+      mission,
+      isEditingOnly: false,
+    });
+  };
+
+  // When user saves or skips in the completion modal
+  const handleExecuteAccomplish = async (
+    mission: Mission,
+    note?: string,
+    timeSpent?: number
+  ) => {
+    const result = await completeMission(mission, note, timeSpent);
     setCelebrationData({
       completed: result.completedMission,
       next: result.nextMission,
       isOpen: true,
     });
+  };
+
+  // Edit debrief note on an already completed mission
+  const handleOpenEditNote = (mission: Mission) => {
+    soundFX.playBlip();
+    setCompletionModal({
+      isOpen: true,
+      mission,
+      isEditingOnly: true,
+    });
+  };
+
+  const handleSaveEditNote = async (
+    missionId: string,
+    note?: string,
+    timeSpent?: number
+  ) => {
+    await updateMissionNote(missionId, note, timeSpent);
   };
 
   const handleOpenAdd = () => {
@@ -91,7 +173,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0b0f0d] font-mono text-slate-400 text-xs">
+      <div className="min-h-screen flex items-center justify-center bg-spy-bg font-mono text-spy-muted text-xs">
         INITIALIZING SECURE SESSION...
       </div>
     );
@@ -141,13 +223,17 @@ export default function Home() {
     .slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-[#0b0f0d] text-slate-200 pb-20">
+    <div className="min-h-screen bg-spy-bg text-spy-text pb-20">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-7">
         {/* A. Header (Agent name, rank + XP bar, streak, New Mission button, logout) */}
         <AgentHeader
           agentName="Agent Akib"
           totalXp={totalXp}
           streak={streak}
+          currentTheme={currentTheme}
+          defaultTheme={defaultTheme}
+          onToggleTheme={handleToggleTheme}
+          onUpdateDefaultTheme={handleUpdateDefaultTheme}
           onQuickAdd={handleOpenAdd}
           onLogout={logout}
         />
@@ -159,7 +245,7 @@ export default function Home() {
             className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] ${
               activeTab === "dashboard"
                 ? "text-spy-green border-spy-green font-bold"
-                : "text-slate-400 border-transparent hover:text-slate-200"
+                : "text-spy-muted border-transparent hover:text-spy-text"
             }`}
           >
             Dashboard
@@ -170,11 +256,11 @@ export default function Home() {
             className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] flex items-center gap-1.5 ${
               activeTab === "missions"
                 ? "text-spy-green border-spy-green font-bold"
-                : "text-slate-400 border-transparent hover:text-slate-200"
+                : "text-spy-muted border-transparent hover:text-spy-text"
             }`}
           >
             <span>Missions</span>
-            <span className="text-[11px] bg-[#141d18] border border-spy-border px-1.5 py-0.2 rounded-[2px] text-slate-400">
+            <span className="text-[11px] bg-spy-surface2 border border-spy-border px-1.5 py-0.5 rounded-[2px] text-spy-muted">
               {missions.length}
             </span>
           </button>
@@ -184,11 +270,11 @@ export default function Home() {
             className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] flex items-center gap-1.5 ${
               activeTab === "history"
                 ? "text-spy-green border-spy-green font-bold"
-                : "text-slate-400 border-transparent hover:text-slate-200"
+                : "text-spy-muted border-transparent hover:text-spy-text"
             }`}
           >
             <span>History</span>
-            <span className="text-[11px] bg-[#141d18] border border-spy-border px-1.5 py-0.2 rounded-[2px] text-slate-400">
+            <span className="text-[11px] bg-spy-surface2 border border-spy-border px-1.5 py-0.5 rounded-[2px] text-spy-muted">
               {missions.filter((m) => m.status === "completed").length}
             </span>
           </button>
@@ -211,17 +297,18 @@ export default function Home() {
                       mission={heroMission}
                       category={heroCategory}
                       isHero={true}
-                      onComplete={handleComplete}
+                      onComplete={handleInitiateAccomplish}
                       onEdit={handleOpenEdit}
                       onDelete={handleDelete}
                       onSetActive={setActiveMission}
+                      onEditNote={handleOpenEditNote}
                     />
                   ) : (
                     <div className="clean-card p-8 text-center">
-                      <h3 className="text-sm font-medium text-slate-200 mb-1">
+                      <h3 className="text-sm font-medium text-spy-text mb-1">
                         No active mission
                       </h3>
-                      <p className="text-xs text-slate-400 mb-4 font-sans">
+                      <p className="text-xs text-spy-muted mb-4 font-sans">
                         All primary directives accomplished. Assign a queued target or create a new mission.
                       </p>
                       <Button variant="primary" size="sm" onClick={handleOpenAdd}>
@@ -238,7 +325,7 @@ export default function Home() {
                   missions={missions}
                   categories={categories}
                   activeMissionId={heroMission?.id}
-                  onCompleteMission={handleComplete}
+                  onCompleteMission={handleInitiateAccomplish}
                 />
               </div>
 
@@ -252,7 +339,7 @@ export default function Home() {
             <div className="pt-2">
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-spy-border">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-slate-300">
+                  <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-spy-text">
                     UP NEXT ({upNextMissions.length})
                   </h3>
                 </div>
@@ -266,7 +353,7 @@ export default function Home() {
               </div>
 
               {upNextMissions.length === 0 ? (
-                <div className="clean-card p-6 text-center text-xs text-slate-500 font-sans">
+                <div className="clean-card p-6 text-center text-xs text-spy-muted font-sans">
                   No other upcoming missions queued.
                 </div>
               ) : (
@@ -278,10 +365,11 @@ export default function Home() {
                         key={mission.id}
                         mission={mission}
                         category={category}
-                        onComplete={handleComplete}
+                        onComplete={handleInitiateAccomplish}
                         onEdit={handleOpenEdit}
                         onDelete={handleDelete}
                         onSetActive={setActiveMission}
+                        onEditNote={handleOpenEditNote}
                       />
                     );
                   })}
@@ -297,10 +385,11 @@ export default function Home() {
             <MissionQueue
               missions={missions}
               categories={categories}
-              onComplete={handleComplete}
+              onComplete={handleInitiateAccomplish}
               onEdit={handleOpenEdit}
               onDelete={handleDelete}
               onSetActive={setActiveMission}
+              onEditNote={handleOpenEditNote}
             />
           </div>
         )}
@@ -312,6 +401,7 @@ export default function Home() {
               missions={missions}
               categories={categories}
               streak={streak}
+              onEditNote={handleOpenEditNote}
             />
           </div>
         )}
@@ -324,6 +414,17 @@ export default function Home() {
         onSave={handleSaveMission}
         categories={categories}
         editingMission={editingMission}
+      />
+
+      <CompletionNoteModal
+        isOpen={completionModal.isOpen}
+        mission={completionModal.mission}
+        isEditingOnly={completionModal.isEditingOnly}
+        onComplete={handleExecuteAccomplish}
+        onSaveEdit={handleSaveEditNote}
+        onClose={() =>
+          setCompletionModal({ isOpen: false, mission: null, isEditingOnly: false })
+        }
       />
 
       <MissionCelebration

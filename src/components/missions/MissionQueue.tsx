@@ -12,6 +12,7 @@ interface MissionQueueProps {
   onEdit: (mission: Mission) => void;
   onDelete: (mission: Mission) => void;
   onSetActive: (mission: Mission) => void;
+  onEditNote?: (mission: Mission) => void;
 }
 
 // Category filter chips requested by user:
@@ -44,6 +45,7 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
   onEdit,
   onDelete,
   onSetActive,
+  onEditNote,
 }) => {
   const [selectedChip, setSelectedChip] = useState("all");
   const [sortBy, setSortBy] = useState<"deadline" | "priority">("deadline");
@@ -210,27 +212,27 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Search input */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-spy-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search missions by title, codename, notes..."
-              className="w-full bg-[#141d18] border border-spy-border pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+              className="w-full bg-spy-surface2 border border-spy-border pl-9 pr-3 py-1.5 text-xs text-spy-text placeholder:text-spy-muted focus:outline-none focus:border-spy-borderLight rounded-[3px]"
             />
           </div>
 
           {/* Sort Dropdown */}
           <div className="flex items-center gap-2 shrink-0 text-xs font-mono">
-            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-400">Sort:</span>
+            <ArrowUpDown className="w-3.5 h-3.5 text-spy-muted" />
+            <span className="text-spy-muted">Sort:</span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as "deadline" | "priority")}
-              className="bg-[#141d18] border border-spy-border px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none rounded-[3px] cursor-pointer"
+              className="bg-spy-surface2 border border-spy-border px-2.5 py-1.5 text-xs text-spy-text focus:outline-none rounded-[3px] cursor-pointer"
             >
-              <option value="deadline" className="bg-[#111714]">Deadline (Earliest)</option>
-              <option value="priority" className="bg-[#111714]">Priority (Highest)</option>
+              <option value="deadline" className="bg-spy-surface text-spy-text">Deadline (Earliest)</option>
+              <option value="priority" className="bg-spy-surface text-spy-text">Priority (Highest)</option>
             </select>
           </div>
         </div>
@@ -246,7 +248,7 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
                 className={`px-2.5 py-1 text-xs font-mono rounded-[3px] transition-colors border shrink-0 ${
                   isSelected
                     ? "bg-spy-green/10 text-spy-green border-spy-green/40 font-semibold"
-                    : "bg-[#141d18] text-slate-400 border-spy-border hover:text-slate-200"
+                    : "bg-spy-surface2 text-spy-muted border-spy-border hover:text-spy-text"
                 }`}
               >
                 {chip.label}
@@ -274,7 +276,7 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
               >
                 <span
                   className={`text-xs font-mono font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
-                    group.isRed ? "text-spy-red" : "text-slate-300"
+                    group.isRed ? "text-spy-red" : "text-spy-text"
                   }`}
                 >
                   <span>{group.label}</span>
@@ -284,7 +286,7 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
                 <div className="flex-1 h-[1px] bg-spy-border group-hover/btn:bg-spy-borderLight transition-colors" />
 
                 <ChevronDown
-                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                  className={`w-4 h-4 text-spy-muted transition-transform duration-200 ${
                     isCollapsed ? "-rotate-90" : ""
                   }`}
                 />
@@ -304,6 +306,7 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
                         onEdit={onEdit}
                         onDelete={onDelete}
                         onSetActive={onSetActive}
+                        onEditNote={onEditNote}
                       />
                     );
                   })}
@@ -314,7 +317,7 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
         })}
 
         {filteredMissions.length === 0 && (
-          <div className="clean-card p-12 text-center text-xs text-slate-500 font-sans">
+          <div className="clean-card p-12 text-center text-xs text-spy-muted font-sans">
             No missions found matching the selected filter parameters.
           </div>
         )}

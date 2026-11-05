@@ -43,7 +43,9 @@ CREATE TABLE IF NOT EXISTS public.missions (
     xp INTEGER NOT NULL DEFAULT 50,
     recurring_rule_id UUID REFERENCES public.recurring_rules(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT now(),
-    completed_at TIMESTAMPTZ
+    completed_at TIMESTAMPTZ,
+    completion_note TEXT,
+    time_spent_minutes INTEGER
 );
 
 -- 4. CLASS SCHEDULE TABLE

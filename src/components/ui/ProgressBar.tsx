@@ -42,14 +42,14 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     <div className="w-full select-none">
       {(label || sublabel) && (
         <div className="flex justify-between items-center text-xs font-mono tracking-wider uppercase mb-1 text-spy-dim">
-          <span className="font-medium text-slate-300">{label}</span>
-          {sublabel && <span className="text-spy-green">{sublabel}</span>}
+          <span className="font-medium text-spy-text">{label}</span>
+          {sublabel && <span className="text-spy-green font-semibold">{sublabel}</span>}
         </div>
       )}
 
       <div
         className={cn(
-          "relative w-full bg-[#141d18] border border-spy-border overflow-hidden rounded-[2px]",
+          "relative w-full bg-spy-surface2 border border-spy-border overflow-hidden rounded-[2px]",
           heightStyles[size],
           className
         )}

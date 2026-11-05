@@ -27,7 +27,7 @@ export const StampLabel: React.FC<StampLabelProps> = ({
     danger: "text-spy-red border-spy-red bg-spy-red/5 text-glow-red shadow-[0_0_12px_rgba(255,42,68,0.25)]",
     amber: "text-spy-amber border-spy-amber bg-spy-amber/5 text-glow-amber shadow-[0_0_12px_rgba(255,183,0,0.2)]",
     green: "text-spy-green border-spy-green bg-spy-green/5 text-glow-green shadow-[0_0_12px_rgba(0,255,102,0.2)]",
-    dim: "text-slate-500 border-slate-600 bg-slate-900/40",
+    dim: "text-spy-muted border-spy-border bg-spy-surface2",
   };
 
   const sizeStyles = {

@@ -36,6 +36,8 @@ export interface Mission {
   recurring_rule_id?: string | null;
   created_at: string;
   completed_at?: string | null;
+  completion_note?: string | null;
+  time_spent_minutes?: number | null;
   category?: Category;
 }
 

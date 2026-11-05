@@ -120,14 +120,14 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
         {/* Header line: Title + Date + Day tabs */}
         <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-spy-border">
           <div>
-            <div className="text-xs font-mono font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <div className="text-xs font-mono font-medium text-spy-muted uppercase tracking-wider flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-spy-green" />
               <span>Today&apos;s Briefing</span>
             </div>
-            <h2 className="text-base font-semibold text-white mt-0.5">
+            <h2 className="text-base font-semibold text-spy-text mt-0.5">
               {DAY_NAMES[selectedDay]} Schedule
             </h2>
-            <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+            <div className="text-[11px] font-mono text-spy-dim mt-0.5">
               {formatDate(currentTime)}
             </div>
           </div>
@@ -143,10 +143,10 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
                   onClick={() => setSelectedDay(day)}
                   className={`px-2 py-1 text-xs font-mono rounded-[3px] transition-colors border ${
                     isSelected
-                      ? "bg-spy-green/10 text-spy-green border-spy-green/40 font-semibold"
+                      ? "bg-spy-greenMuted text-spy-green border-spy-green font-semibold"
                       : isToday
-                      ? "bg-[#16201b] text-slate-200 border-[#23332a]"
-                      : "bg-transparent text-slate-500 border-transparent hover:text-slate-300"
+                      ? "bg-spy-surface2 text-spy-text border-spy-border font-medium"
+                      : "bg-transparent text-spy-dim border-transparent hover:text-spy-text"
                   }`}
                 >
                   {day}
@@ -158,12 +158,12 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
 
         {/* Live Countdown status if applicable */}
         {countdownText && (
-          <div className="mb-4 bg-[#141d18] border border-spy-border p-2.5 rounded-[4px] flex items-center justify-between text-xs font-mono">
-            <span className="text-slate-400 flex items-center gap-1.5 truncate">
+          <div className="mb-4 bg-spy-surface2 border border-spy-border p-2.5 rounded-[4px] flex items-center justify-between text-xs font-mono">
+            <span className="text-spy-muted flex items-center gap-1.5 truncate">
               <Clock className="w-3.5 h-3.5 text-spy-green shrink-0" />
               <span className="truncate">{nextEvent ? nextEvent.course_name : "Timetable"}</span>
             </span>
-            <span className="text-spy-green font-medium shrink-0 ml-2">
+            <span className="text-spy-green font-semibold shrink-0 ml-2">
               {countdownText}
             </span>
           </div>
@@ -171,7 +171,7 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
 
         {/* Schedule List */}
         {daySchedule.length === 0 ? (
-          <div className="text-center py-8 text-xs text-slate-500 font-sans">
+          <div className="text-center py-8 text-xs text-spy-dim font-sans">
             No academic sessions or tuition scheduled today.
           </div>
         ) : (
@@ -183,30 +183,30 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
                   key={item.id}
                   className={`p-3 rounded-[4px] border transition-colors flex items-center justify-between gap-3 ${
                     status === "in-progress"
-                      ? "bg-spy-green/10 border-spy-green/40"
+                      ? "bg-spy-greenMuted border-spy-green"
                       : status === "concluded"
-                      ? "bg-[#0e1411]/60 border-slate-900 opacity-50"
-                      : "bg-[#141d18] border-spy-border"
+                      ? "bg-spy-surface border-spy-border opacity-50"
+                      : "bg-spy-surface2 border-spy-border"
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-1.5 bg-[#0e1411] border border-spy-border rounded-[3px] text-slate-400 shrink-0">
+                    <div className="p-1.5 bg-spy-surface border border-spy-border rounded-[3px] text-spy-muted shrink-0">
                       {item.type === "tuition" ? (
-                        <GraduationCap className="w-4 h-4 text-amber-400" />
+                        <GraduationCap className="w-4 h-4 text-spy-amber" />
                       ) : (
-                        <BookOpen className="w-4 h-4 text-slate-300" />
+                        <BookOpen className="w-4 h-4 text-spy-text" />
                       )}
                     </div>
 
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-slate-100 truncate">
+                      <div className="text-sm font-medium text-spy-text truncate">
                         {item.course_name}
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
+                      <div className="flex items-center gap-2 text-xs text-spy-muted font-mono mt-0.5">
                         {/* 12-hour format range */}
                         <span>{formatTimeRange12(item.start_time, item.end_time)}</span>
                         {item.room && (
-                          <span className="flex items-center gap-1 text-slate-500">
+                          <span className="flex items-center gap-1 text-spy-dim">
                             <MapPin className="w-3 h-3" />
                             {item.room}
                           </span>
@@ -219,9 +219,9 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
                     {status === "in-progress" ? (
                       <span className="text-spy-green font-semibold">Active now</span>
                     ) : status === "concluded" ? (
-                      <span className="text-slate-500">Done</span>
+                      <span className="text-spy-dim">Done</span>
                     ) : (
-                      <span className="text-slate-400">
+                      <span className="text-spy-muted">
                         {item.type === "tuition" ? "Tuition" : "Class"}
                       </span>
                     )}

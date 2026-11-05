@@ -48,28 +48,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#0b0f0d] text-slate-200">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-spy-bg text-spy-text">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="w-full max-w-md bg-[#111714] border border-spy-border rounded-[6px] p-6 sm:p-8"
+        className="w-full max-w-md bg-spy-surface border border-spy-border rounded-[6px] p-6 sm:p-8"
       >
         {/* Title */}
         <div className="mb-6 pb-4 border-b border-spy-border">
           <div className="text-xs font-mono font-medium text-spy-green uppercase tracking-wider mb-1">
             OPERATION: ME
           </div>
-          <h1 className="text-xl font-medium text-white tracking-tight">
+          <h1 className="text-xl font-medium text-spy-text tracking-tight">
             Agent Authorization
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-spy-muted mt-1">
             Access portal for Agent Akib
           </p>
         </div>
 
         {errorMsg && (
-          <div className="mb-4 bg-red-950/30 border border-red-800/40 p-3 rounded-[4px] text-xs text-red-300 flex items-start gap-2">
+          <div className="mb-4 bg-spy-danger-surface border border-spy-red/30 p-3 rounded-[4px] text-xs text-spy-red flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-spy-red shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
@@ -78,7 +78,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
           {/* Agent Identifier */}
           <div>
-            <label className="block text-slate-400 mb-1 font-medium">
+            <label className="block text-spy-muted mb-1 font-medium">
               Email / Agent ID
             </label>
             <div className="relative">
@@ -88,14 +88,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="agent.akib@agency.internal"
-                className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-sm text-spy-text focus:outline-none focus:border-spy-borderLight rounded-[3px]"
               />
             </div>
           </div>
 
           {/* Clearance Passcode */}
           <div>
-            <label className="block text-slate-400 mb-1 font-medium">
+            <label className="block text-spy-muted mb-1 font-medium">
               Passcode
             </label>
             <div className="relative">
@@ -105,12 +105,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-spy-borderLight rounded-[3px] pr-10"
+                className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-sm text-spy-text focus:outline-none focus:border-spy-borderLight rounded-[3px] pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-spy-muted hover:text-spy-text"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -134,7 +134,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <button
               type="button"
               onClick={() => setIsSignUp(!isSignUp)}
-              className="text-xs text-slate-400 hover:text-slate-200 transition-colors underline"
+              className="text-xs text-spy-muted hover:text-spy-text transition-colors underline"
             >
               {isSignUp
                 ? "Existing agent? Sign in"
@@ -148,14 +148,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <button
             type="button"
             onClick={onGuestBypass}
-            className="w-full py-2 bg-[#141d18] hover:bg-[#18231d] border border-spy-border text-xs text-slate-300 hover:text-white transition-colors rounded-[3px] flex items-center justify-center gap-2"
+            className="w-full py-2 bg-spy-surface2 hover:bg-spy-surface border border-spy-border text-xs text-spy-text hover:text-spy-green transition-colors rounded-[3px] flex items-center justify-center gap-2"
           >
             <UserCheck className="w-4 h-4 text-spy-green" />
             <span>Direct Access as Agent Akib</span>
           </button>
 
           {isSupabaseConnected && (
-            <div className="mt-3 text-center text-[11px] font-mono text-slate-500">
+            <div className="mt-3 text-center text-[11px] font-mono text-spy-muted">
               Supabase Connection Active
             </div>
           )}

@@ -39,17 +39,16 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const variantStyles = {
-      // ONLY primary button gets a glow
       primary:
-        "bg-spy-green text-black border border-spy-green hover:bg-[#00e65c] shadow-button-glow font-bold",
+        "bg-spy-green text-spy-contrast border border-spy-green hover:bg-spy-greenHover shadow-button-glow font-bold",
       danger:
-        "bg-transparent text-spy-red border border-spy-red/60 hover:bg-spy-red/10",
+        "bg-transparent text-spy-red border border-spy-red hover:bg-spy-redMuted",
       amber:
-        "bg-transparent text-spy-amber border border-spy-amber/60 hover:bg-spy-amber/10",
+        "bg-transparent text-spy-amber border border-spy-amber hover:bg-spy-amberMuted",
       stealth:
-        "bg-[#111714] text-spy-dim border border-spy-border hover:border-spy-borderLight hover:text-white",
+        "bg-spy-surface2 text-spy-muted border border-spy-border hover:border-spy-borderLight hover:text-spy-text",
       outline:
-        "bg-transparent text-spy-green border border-spy-green/60 hover:bg-spy-green/10",
+        "bg-transparent text-spy-green border border-spy-green hover:bg-spy-greenMuted",
     };
 
     return (

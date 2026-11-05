@@ -115,16 +115,16 @@ export const MissionModal: React.FC<MissionModalProps> = ({
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-lg bg-[#111714] border border-spy-border rounded-[6px] p-6 text-slate-200 max-h-[90vh] overflow-y-auto"
+          className="relative w-full max-w-lg bg-spy-surface border border-spy-border rounded-[6px] p-6 text-spy-text max-h-[90vh] overflow-y-auto shadow-2xl"
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-spy-border mb-4">
-            <span className="font-mono text-sm font-semibold text-slate-100">
+            <span className="font-mono text-sm font-semibold text-spy-text">
               {editingMission ? "EDIT MISSION" : "NEW MISSION"}
             </span>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white"
+              className="text-spy-muted hover:text-spy-text"
             >
               <X className="w-5 h-5" />
             </button>
@@ -133,7 +133,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
           <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
             {/* Title */}
             <div>
-              <label className="block text-slate-400 mb-1 font-medium">
+              <label className="block text-spy-muted mb-1 font-medium">
                 Title <span className="text-spy-green">*</span>
               </label>
               <input
@@ -142,14 +142,14 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Implement OS Page Replacement"
-                className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-sm text-spy-text placeholder:text-spy-dim focus:outline-none focus:border-spy-green rounded-[3px]"
               />
             </div>
 
             {/* Codename Generator */}
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="block text-slate-400 font-medium">
+                <label className="block text-spy-muted font-medium">
                   Codename
                 </label>
                 <button
@@ -166,23 +166,23 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                 value={codename}
                 onChange={(e) => setCodename(e.target.value.toUpperCase())}
                 placeholder="OP-SHADOW-01"
-                className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs font-mono font-medium text-slate-200 focus:outline-none focus:border-spy-borderLight uppercase rounded-[3px]"
+                className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs font-mono font-medium text-spy-text focus:outline-none focus:border-spy-green uppercase rounded-[3px]"
               />
             </div>
 
             {/* Category & Priority Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-400 mb-1 font-medium">
+                <label className="block text-spy-muted mb-1 font-medium">
                   Category
                 </label>
                 <select
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
-                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                  className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green rounded-[3px] cursor-pointer"
                 >
                   {categories.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-[#111714]">
+                    <option key={c.id} value={c.id} className="bg-spy-surface text-spy-text">
                       {c.name}
                     </option>
                   ))}
@@ -190,24 +190,24 @@ export const MissionModal: React.FC<MissionModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-medium">
+                <label className="block text-spy-muted mb-1 font-medium">
                   Priority
                 </label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as Priority)}
-                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                  className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green rounded-[3px] cursor-pointer"
                 >
-                  <option value="urgent" className="bg-[#111714]">
+                  <option value="urgent" className="bg-spy-surface text-spy-red font-semibold">
                     Urgent (Red)
                   </option>
-                  <option value="high" className="bg-[#111714]">
+                  <option value="high" className="bg-spy-surface text-spy-amber font-semibold">
                     High (Amber)
                   </option>
-                  <option value="medium" className="bg-[#111714]">
+                  <option value="medium" className="bg-spy-surface text-spy-green font-semibold">
                     Medium (Green)
                   </option>
-                  <option value="low" className="bg-[#111714]">
+                  <option value="low" className="bg-spy-surface text-spy-muted">
                     Low (Normal)
                   </option>
                 </select>
@@ -216,7 +216,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
 
             {/* Deadline Date & Time */}
             <div>
-              <label className="block text-slate-400 mb-1 font-medium">
+              <label className="block text-spy-muted mb-1 font-medium">
                 Deadline
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -224,13 +224,13 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                   type="date"
                   value={deadlineDate}
                   onChange={(e) => setDeadlineDate(e.target.value)}
-                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                  className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green rounded-[3px]"
                 />
                 <input
                   type="time"
                   value={deadlineTime}
                   onChange={(e) => setDeadlineTime(e.target.value)}
-                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                  className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green rounded-[3px]"
                 />
               </div>
             </div>
@@ -238,7 +238,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
             {/* XP and Initial Status */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-400 mb-1 font-medium">
+                <label className="block text-spy-muted mb-1 font-medium">
                   XP Bounty
                 </label>
                 <input
@@ -248,23 +248,23 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                   step="5"
                   value={xp}
                   onChange={(e) => setXp(Number(e.target.value))}
-                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                  className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs font-mono text-spy-amber font-bold focus:outline-none focus:border-spy-green rounded-[3px]"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-medium">
+                <label className="block text-spy-muted mb-1 font-medium">
                   Initial Status
                 </label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as "active" | "locked")}
-                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                  className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green rounded-[3px] cursor-pointer"
                 >
-                  <option value="active" className="bg-[#111714]">
+                  <option value="active" className="bg-spy-surface text-spy-green font-semibold">
                     Active
                   </option>
-                  <option value="locked" className="bg-[#111714]">
+                  <option value="locked" className="bg-spy-surface text-spy-muted">
                     Queued
                   </option>
                 </select>
@@ -273,7 +273,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
 
             {/* Notes */}
             <div>
-              <label className="block text-slate-400 mb-1 font-medium">
+              <label className="block text-spy-muted mb-1 font-medium">
                 Notes
               </label>
               <textarea
@@ -281,7 +281,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Brief instructions, references, or links..."
-                className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text placeholder:text-spy-dim focus:outline-none focus:border-spy-green rounded-[3px]"
               />
             </div>
 

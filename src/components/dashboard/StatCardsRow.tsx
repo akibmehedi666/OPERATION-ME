@@ -49,14 +49,14 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
       {/* 1. Today completion stat */}
       <div className="clean-card p-3.5 sm:p-4 flex items-center justify-between">
         <div>
-          <div className="text-xs font-mono uppercase tracking-wider text-slate-400">
+          <div className="text-xs font-mono uppercase tracking-wider text-spy-muted">
             Today
           </div>
-          <div className="text-base sm:text-lg font-mono font-bold text-white mt-0.5">
+          <div className="text-base sm:text-lg font-mono font-bold text-spy-text mt-0.5">
             {completedTodayCount}/{totalTodayCount || missions.filter((m) => m.status === "active").length || 1} done
           </div>
         </div>
-        <div className="p-2 bg-[#141d18] border border-spy-border rounded-[4px] text-spy-green">
+        <div className="p-2 bg-spy-surface2 border border-spy-border rounded-[4px] text-spy-green">
           <CheckCircle2 className="w-4 h-4 stroke-[2.2]" />
         </div>
       </div>
@@ -64,14 +64,14 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
       {/* 2. Streak stat */}
       <div className="clean-card p-3.5 sm:p-4 flex items-center justify-between">
         <div>
-          <div className="text-xs font-mono uppercase tracking-wider text-slate-400">
+          <div className="text-xs font-mono uppercase tracking-wider text-spy-muted">
             Streak
           </div>
-          <div className="text-base sm:text-lg font-mono font-bold text-amber-400 mt-0.5">
+          <div className="text-base sm:text-lg font-mono font-bold text-spy-amber mt-0.5">
             {streak} {streak === 1 ? "day" : "days"}
           </div>
         </div>
-        <div className="p-2 bg-[#141d18] border border-spy-border rounded-[4px] text-amber-400">
+        <div className="p-2 bg-spy-surface2 border border-spy-border rounded-[4px] text-spy-amber">
           <Flame className="w-4 h-4" />
         </div>
       </div>
@@ -79,16 +79,16 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
       {/* 3. Overdue stat (red if > 0) */}
       <div
         className={`clean-card p-3.5 sm:p-4 flex items-center justify-between transition-colors ${
-          overdueCount > 0 ? "border-l-[3px] border-l-spy-red bg-red-950/10" : ""
+          overdueCount > 0 ? "border-l-[3px] border-l-spy-red bg-spy-danger-surface" : ""
         }`}
       >
         <div>
-          <div className="text-xs font-mono uppercase tracking-wider text-slate-400">
+          <div className="text-xs font-mono uppercase tracking-wider text-spy-muted">
             Overdue
           </div>
           <div
             className={`text-base sm:text-lg font-mono font-bold mt-0.5 ${
-              overdueCount > 0 ? "text-spy-red" : "text-slate-300"
+              overdueCount > 0 ? "text-spy-red" : "text-spy-text"
             }`}
           >
             {overdueCount} {overdueCount === 1 ? "mission" : "missions"}
@@ -97,8 +97,8 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
         <div
           className={`p-2 rounded-[4px] border ${
             overdueCount > 0
-              ? "bg-red-950/30 border-red-800/40 text-spy-red"
-              : "bg-[#141d18] border-spy-border text-slate-500"
+              ? "bg-spy-danger-surface border-spy-red/30 text-spy-red"
+              : "bg-spy-surface2 border-spy-border text-spy-muted"
           }`}
         >
           <AlertCircle className="w-4 h-4" />

@@ -33,16 +33,16 @@ export const Badge: React.FC<BadgeProps> = ({
   ...props
 }) => {
   const variantStyles: Record<BadgeVariant, string> = {
-    active: "bg-spy-green/10 text-spy-green border-spy-green/30",
-    locked: "bg-slate-900/60 text-slate-400 border-slate-800",
-    completed: "bg-slate-900/40 text-slate-500 border-slate-800 line-through",
-    failing: "bg-red-950/20 text-spy-red border-spy-red/40",
-    urgent: "bg-red-950/20 text-red-400 border-red-800/40",
-    high: "bg-amber-950/20 text-amber-400 border-amber-800/40",
-    medium: "bg-slate-900/60 text-slate-300 border-slate-800",
-    low: "bg-slate-900/40 text-slate-400 border-slate-800",
-    category: "bg-[#141d18] text-slate-300 border-[#23332a]",
-    neutral: "bg-[#141d18] text-slate-300 border-[#23332a]",
+    active: "bg-spy-greenMuted text-spy-green border-spy-green/30",
+    locked: "bg-spy-surface2 text-spy-muted border-spy-border",
+    completed: "bg-spy-surface2 text-spy-dim border-spy-border line-through",
+    failing: "bg-spy-redMuted text-spy-red border-spy-red/40",
+    urgent: "bg-spy-redMuted text-spy-red border-spy-red/40",
+    high: "bg-spy-amberMuted text-spy-amber border-spy-amber/40",
+    medium: "bg-spy-surface2 text-spy-text border-spy-border",
+    low: "bg-spy-surface2 text-spy-muted border-spy-border",
+    category: "bg-spy-chipBg text-spy-chipText border-spy-chipBorder",
+    neutral: "bg-spy-chipBg text-spy-chipText border-spy-chipBorder",
   };
 
   return (
@@ -56,7 +56,7 @@ export const Badge: React.FC<BadgeProps> = ({
     >
       {dotColor && (
         <span
-          className="w-1.5 h-1.5 rounded-full inline-block"
+          className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
           style={{ backgroundColor: dotColor }}
         />
       )}
