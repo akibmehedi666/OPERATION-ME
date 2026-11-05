@@ -78,11 +78,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
           {/* Agent Identifier */}
           <div>
-            <label className="block text-spy-muted mb-1 font-medium">
+            <label htmlFor="agent-email" className="block text-spy-muted mb-1 font-medium">
               Email / Agent ID
             </label>
             <div className="relative">
               <input
+                id="agent-email"
                 type="email"
                 required
                 value={email}
@@ -95,11 +96,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
           {/* Clearance Passcode */}
           <div>
-            <label className="block text-spy-muted mb-1 font-medium">
+            <label htmlFor="agent-password" className="block text-spy-muted mb-1 font-medium">
               Passcode
             </label>
             <div className="relative">
               <input
+                id="agent-password"
                 type={showPassword ? "text" : "password"}
                 required
                 value={password}
@@ -110,6 +112,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-spy-muted hover:text-spy-text"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

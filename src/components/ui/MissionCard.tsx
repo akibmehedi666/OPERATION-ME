@@ -119,7 +119,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           <motion.div
             initial={{ opacity: 0, y: 0 }}
             animate={{ opacity: [0, 1, 1, 0], y: -32 }}
-            transition={{ duration: 0.45, ease: "easeOut" }}
+            transition={{ type: "tween", duration: 0.45, ease: "easeOut" }}
             className="absolute top-3 right-6 font-mono font-bold text-xs text-spy-amber bg-spy-amberMuted border border-spy-amber/40 px-2.5 py-0.5 rounded-[3px] pointer-events-none z-40 shadow-sm"
           >
             +{mission.xp || 50} XP
@@ -136,7 +136,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
             <motion.div
               initial={{ x: 0 }}
               animate={{ x: [0, -3, 3, -1, 0] }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
+              transition={{ type: "tween", duration: 0.3, ease: "easeInOut" }}
             >
               <motion.div
                 initial={{ scale: 1.6, rotate: -12, opacity: 0 }}
@@ -258,7 +258,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 0 }}
           animate={{ opacity: [0, 1, 1, 0], y: -26 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
+          transition={{ type: "tween", duration: 0.45, ease: "easeOut" }}
           className="absolute -top-3 right-4 font-mono font-bold text-xs text-spy-amber bg-spy-amberMuted border border-spy-amber/40 px-2 py-0.5 rounded-[3px] pointer-events-none z-40 shadow-sm"
         >
           +{mission.xp || 50} XP
@@ -275,7 +275,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           <motion.div
             initial={{ x: 0 }}
             animate={{ x: [0, -3, 3, -1, 0] }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
+            transition={{ type: "tween", duration: 0.3, ease: "easeInOut" }}
           >
             <motion.div
               initial={{ scale: 1.6, rotate: -10, opacity: 0 }}

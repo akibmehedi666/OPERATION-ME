@@ -88,7 +88,7 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
               ? { scale: [1, 1.15, 1], rotate: [0, -5, 5, 0] }
               : {}
           }
-          transition={{ duration: 0.45, repeat: [3, 7, 14, 30].includes(streak) ? 2 : 0 }}
+          transition={{ type: "tween", duration: 0.45, repeat: [3, 7, 14, 30].includes(streak) ? 2 : 0 }}
           className="p-2 bg-[#fbefd5] border border-[#f4dcaa] text-[#9a5b00] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-amber rounded-[4px]"
         >
           <Flame className="w-4 h-4" />

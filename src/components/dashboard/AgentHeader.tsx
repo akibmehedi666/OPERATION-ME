@@ -100,7 +100,9 @@ export function AgentHeader({
   };
 
   return (
-    <div className="clean-card bg-gradient-to-r from-[#eef7f1] via-[#f7f5ed] to-[#faf8f2] border border-[#d8e8dc] shadow-[0_1px_3px_rgba(31,122,77,0.06)] dark:from-transparent dark:via-transparent dark:to-transparent dark:bg-spy-surface dark:border-spy-border dark:shadow-none p-4 sm:p-5 mb-6 relative">
+    <div className={`clean-card bg-gradient-to-r from-[#eef7f1] via-[#f7f5ed] to-[#faf8f2] border border-[#d8e8dc] shadow-[0_1px_3px_rgba(31,122,77,0.06)] dark:from-transparent dark:via-transparent dark:to-transparent dark:bg-spy-surface dark:border-spy-border dark:shadow-none p-4 sm:p-5 mb-6 relative ${
+      isSettingsOpen ? "z-50" : ""
+    }`}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Left: Agent name & Rank */}
         <div className="flex items-center gap-3">
@@ -163,9 +165,11 @@ export function AgentHeader({
               variant="primary"
               size="sm"
               onClick={onQuickAdd}
+              aria-label="New Mission"
+              title="New Mission"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span className="hidden xs:inline">New Mission</span>
+              <span className="hidden sm:inline">New Mission</span>
             </Button>
 
             {/* Sun/Moon quick toggle button with rotate/morph animation */}
@@ -218,6 +222,8 @@ export function AgentHeader({
               <button
                 onClick={() => setIsSettingsOpen(false)}
                 className="text-spy-muted hover:text-spy-text"
+                aria-label="Close settings"
+                title="Close settings"
               >
                 <X className="w-4 h-4" />
               </button>

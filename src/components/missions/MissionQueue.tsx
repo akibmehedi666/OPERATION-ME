@@ -233,6 +233,8 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as "deadline" | "priority")}
+              aria-label="Sort missions by"
+              title="Sort missions by"
               className="bg-spy-surface2 border border-spy-border px-2.5 py-1.5 text-xs text-spy-text focus:outline-none rounded-[3px] cursor-pointer"
             >
               <option value="deadline" className="bg-spy-surface text-spy-text">Deadline (Earliest)</option>
