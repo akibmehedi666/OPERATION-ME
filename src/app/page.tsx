@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/Button";
 import { Mission } from "@/types/database";
 import { soundFX } from "@/lib/sound";
 import { ThemePreference, ActiveTheme, resolveTheme, applyThemeClass } from "@/lib/theme";
-import { AnimationProvider } from "@/lib/animationContext";
 
 // Dashboard stagger variants: cards fade + slide up 12px with 60ms stagger on load
 const dashboardContainerVariants: Variants = {
@@ -74,6 +73,12 @@ export default function Home() {
 
   // Active theme state ("dark" | "light")
   const [currentTheme, setCurrentTheme] = useState<ActiveTheme>("dark");
+
+  // Track initial mount so that page-load stagger does not replay on subsequent re-renders
+  const isFirstMount = React.useRef(true);
+  useEffect(() => {
+    isFirstMount.current = false;
+  }, []);
 
   // Mission accomplishment animation state
   const [accomplishingMissionId, setAccomplishingMissionId] = useState<string | null>(null);
@@ -288,8 +293,7 @@ export default function Home() {
     .slice(0, 3);
 
   return (
-    <AnimationProvider>
-      <div className="min-h-screen bg-spy-bg text-spy-text pb-20">
+    <div className="min-h-screen bg-spy-bg text-spy-text pb-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-7">
           {/* A. Header (Agent name, rank + XP bar, streak, New Mission button, logout) */}
           <AgentHeader
@@ -369,7 +373,7 @@ export default function Home() {
                 {/* ================= DASHBOARD TAB WITH STAGGER ================= */}
                 <motion.div
                   variants={dashboardContainerVariants}
-                  initial="hidden"
+                  initial={isFirstMount.current ? "hidden" : false}
                   animate="visible"
                   className="space-y-6"
                 >
@@ -561,6 +565,5 @@ export default function Home() {
           onClose={() => setPromotionData({ isOpen: false, newRank: "" })}
         />
       </div>
-    </AnimationProvider>
   );
 }

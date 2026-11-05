@@ -57,3 +57,4 @@ test.describe('Auth E2E Flow', () => {
     await expect(page.getByText('Agent Authorization')).toBeVisible();
   });
 });
+

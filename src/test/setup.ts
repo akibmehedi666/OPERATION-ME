@@ -63,3 +63,4 @@ vi.mock('@/lib/sound', () => ({
     isEnabled: vi.fn(() => false),
   },
 }));
+

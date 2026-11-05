@@ -205,6 +205,18 @@ body {
   z-index: 20;
 }
 
+/* Accomplished thump shake animation */
+@keyframes stampThumpShake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+  75% { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
+}
+.stamp-thump-shake {
+  animation: stampThumpShake 300ms ease-in-out;
+}
+
 /* Accessible Reduced Motion Rules */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -224,6 +236,9 @@ body {
   }
   .scanline-sweep {
     display: none !important;
+  }
+  .stamp-thump-shake {
+    animation: none !important;
   }
 }
 

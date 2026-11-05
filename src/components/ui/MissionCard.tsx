@@ -133,11 +133,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
             animate={{ opacity: 1 }}
             className="absolute inset-0 z-30 flex items-center justify-center bg-black/30 backdrop-blur-[1px] rounded-[6px]"
           >
-            <motion.div
-              initial={{ x: 0 }}
-              animate={{ x: [0, -3, 3, -1, 0] }}
-              transition={{ type: "tween", duration: 0.3, ease: "easeInOut" }}
-            >
+            <div className="stamp-thump-shake">
               <motion.div
                 initial={{ scale: 1.6, rotate: -12, opacity: 0 }}
                 animate={{ scale: 1, rotate: -2, opacity: 1 }}
@@ -161,7 +157,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
                   ★ MISSION ACCOMPLISHED ★
                 </span>
               </motion.div>
-            </motion.div>
+            </div>
           </motion.div>
         )}
 
@@ -272,11 +268,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           animate={{ opacity: 1 }}
           className="absolute inset-0 z-30 flex items-center justify-center bg-black/20 backdrop-blur-[1px] rounded-[6px]"
         >
-          <motion.div
-            initial={{ x: 0 }}
-            animate={{ x: [0, -3, 3, -1, 0] }}
-            transition={{ type: "tween", duration: 0.3, ease: "easeInOut" }}
-          >
+          <div className="stamp-thump-shake">
             <motion.div
               initial={{ scale: 1.6, rotate: -10, opacity: 0 }}
               animate={{ scale: 1, rotate: -2, opacity: 1 }}
@@ -300,7 +292,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
                 ★ MISSION ACCOMPLISHED ★
               </span>
             </motion.div>
-          </motion.div>
+          </div>
         </motion.div>
       )}
 

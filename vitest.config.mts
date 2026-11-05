@@ -19,6 +19,7 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/test/**',
         'src/types/**',
+        'src/app/**',
       ],
     },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],

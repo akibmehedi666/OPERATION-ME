@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   Calendar, 
   Clock, 
@@ -46,9 +46,11 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
     return () => clearInterval(timer);
   }, []);
 
-  const daySchedule = schedule
-    .filter((item) => item.day_of_week === selectedDay)
-    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  const daySchedule = useMemo(() => {
+    return schedule
+      .filter((item) => item.day_of_week === selectedDay)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  }, [schedule, selectedDay]);
 
   useEffect(() => {
     const now = currentTime;

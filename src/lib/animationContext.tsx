@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { MotionConfig } from "framer-motion";
 
 interface AnimationContextType {
@@ -39,24 +39,27 @@ export const AnimationProvider: React.FC<{
     }
   }, []);
 
-  const setAnimationsEnabled = (enabled: boolean) => {
+  const setAnimationsEnabled = useCallback((enabled: boolean) => {
     setAnimationsEnabledState(enabled);
     if (typeof window !== "undefined") {
       localStorage.setItem("op_me_animations_enabled", String(enabled));
     }
-  };
+  }, []);
 
   const isMotionActive = animationsEnabled && !systemReducedMotion;
 
+  const contextValue = useMemo(
+    () => ({
+      animationsEnabled,
+      setAnimationsEnabled,
+      systemReducedMotion,
+      isMotionActive,
+    }),
+    [animationsEnabled, setAnimationsEnabled, systemReducedMotion, isMotionActive]
+  );
+
   return (
-    <AnimationContext.Provider
-      value={{
-        animationsEnabled,
-        setAnimationsEnabled,
-        systemReducedMotion,
-        isMotionActive,
-      }}
-    >
+    <AnimationContext.Provider value={contextValue}>
       <MotionConfig reducedMotion={isMotionActive ? "never" : "always"}>
         {children}
       </MotionConfig>

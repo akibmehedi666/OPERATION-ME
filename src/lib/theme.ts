@@ -28,12 +28,10 @@ export function resolveTheme(pref: ThemePreference): ActiveTheme {
 export function applyThemeClass(theme: ActiveTheme) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  if (theme === "dark") {
-    root.classList.add("dark");
-    root.classList.remove("light");
-  } else {
-    root.classList.remove("dark");
-    root.classList.add("light");
+  const opposite = theme === "dark" ? "light" : "dark";
+  if (!root.classList.contains(theme) || root.classList.contains(opposite)) {
+    root.classList.remove(opposite);
+    root.classList.add(theme);
   }
 }
 
