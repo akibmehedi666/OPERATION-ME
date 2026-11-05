@@ -63,3 +63,4 @@ export const AnimationProvider: React.FC<{
     </AnimationContext.Provider>
   );
 };
+

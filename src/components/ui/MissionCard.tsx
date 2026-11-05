@@ -134,27 +134,33 @@ export const MissionCard: React.FC<MissionCardProps> = ({
             className="absolute inset-0 z-30 flex items-center justify-center bg-black/30 backdrop-blur-[1px] rounded-[6px]"
           >
             <motion.div
-              initial={{ scale: 1.6, rotate: -12, opacity: 0 }}
-              animate={{ scale: 1, rotate: -2, opacity: 1, x: [0, -3, 3, -1, 0] }}
-              transition={{ duration: 0.35, type: "spring", stiffness: 450, damping: 20 }}
-              className="flex flex-col items-center gap-2"
+              initial={{ x: 0 }}
+              animate={{ x: [0, -3, 3, -1, 0] }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
             >
-              <div className="w-10 h-10 rounded-full bg-spy-surface border-2 border-spy-green flex items-center justify-center text-spy-green shadow-lg">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-5 h-5">
-                  <motion.path
-                    d="M5 13l4 4L19 7"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    initial={{ pathLength: 0 }}
-                    animate={{ pathLength: 1 }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
-                  />
-                </svg>
-              </div>
-              <span className="rubber-stamp rubber-stamp-green text-xs sm:text-sm tracking-widest font-black shadow-xl">
-                ★ MISSION ACCOMPLISHED ★
-              </span>
+              <motion.div
+                initial={{ scale: 1.6, rotate: -12, opacity: 0 }}
+                animate={{ scale: 1, rotate: -2, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 450, damping: 20 }}
+                className="flex flex-col items-center gap-2"
+              >
+                <div className="w-10 h-10 rounded-full bg-spy-surface border-2 border-spy-green flex items-center justify-center text-spy-green shadow-lg">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-5 h-5">
+                    <motion.path
+                      d="M5 13l4 4L19 7"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: 1 }}
+                      transition={{ duration: 0.3, ease: "easeOut" }}
+                    />
+                  </svg>
+                </div>
+                <span className="rubber-stamp rubber-stamp-green text-xs sm:text-sm tracking-widest font-black shadow-xl">
+                  ★ MISSION ACCOMPLISHED ★
+                </span>
+              </motion.div>
             </motion.div>
           </motion.div>
         )}
@@ -267,27 +273,33 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           className="absolute inset-0 z-30 flex items-center justify-center bg-black/20 backdrop-blur-[1px] rounded-[6px]"
         >
           <motion.div
-            initial={{ scale: 1.6, rotate: -10, opacity: 0 }}
-            animate={{ scale: 1, rotate: -2, opacity: 1, x: [0, -3, 3, -1, 0] }}
-            transition={{ duration: 0.35, type: "spring", stiffness: 450, damping: 20 }}
-            className="flex items-center gap-2"
+            initial={{ x: 0 }}
+            animate={{ x: [0, -3, 3, -1, 0] }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
           >
-            <div className="w-7 h-7 rounded-full bg-spy-surface border border-spy-green flex items-center justify-center text-spy-green shadow">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4">
-                <motion.path
-                  d="M5 13l4 4L19 7"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                />
-              </svg>
-            </div>
-            <span className="rubber-stamp rubber-stamp-green text-[10px] tracking-widest font-black shadow-md">
-              ★ MISSION ACCOMPLISHED ★
-            </span>
+            <motion.div
+              initial={{ scale: 1.6, rotate: -10, opacity: 0 }}
+              animate={{ scale: 1, rotate: -2, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 450, damping: 20 }}
+              className="flex items-center gap-2"
+            >
+              <div className="w-7 h-7 rounded-full bg-spy-surface border border-spy-green flex items-center justify-center text-spy-green shadow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4">
+                  <motion.path
+                    d="M5 13l4 4L19 7"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                </svg>
+              </div>
+              <span className="rubber-stamp rubber-stamp-green text-[10px] tracking-widest font-black shadow-md">
+                ★ MISSION ACCOMPLISHED ★
+              </span>
+            </motion.div>
           </motion.div>
         </motion.div>
       )}

@@ -113,3 +113,4 @@ export const PromotionOverlay: React.FC<PromotionOverlayProps> = ({
     </AnimatePresence>
   );
 };
+
