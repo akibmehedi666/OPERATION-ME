@@ -89,6 +89,7 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
               : {}
           }
           transition={{
+            type: "tween",
             scale: { type: "tween", duration: 0.45 },
             rotate: { type: "tween", duration: 0.45 },
             repeat: [3, 7, 14, 30].includes(streak) ? 2 : 0,

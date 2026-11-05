@@ -3,15 +3,18 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, GraduationCap, Target, Check, Clock } from "lucide-react";
-import { Mission, Category, ClassScheduleItem, DayOfWeek } from "@/types/database";
+import { Mission, Category, ClassScheduleItem, DayOfWeek, TimeBlock, AcademicEvent } from "@/types/database";
 import { formatTime12, formatTimeRange12 } from "@/lib/formatters";
 import { getCategoryTheme } from "@/lib/categoryTheme";
 import { Button } from "@/components/ui/Button";
+import { resolveDaySchedule } from "@/lib/scheduleResolver";
 
 const DAY_KEYS: DayOfWeek[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
 interface TodayPlanTimelineProps {
   schedule: ClassScheduleItem[];
+  timeBlocks?: TimeBlock[];
+  academicEvents?: AcademicEvent[];
   missions: Mission[];
   categories: Category[];
   activeMissionId?: string | null;
@@ -35,6 +38,8 @@ interface TimelineItem {
 
 export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
   schedule,
+  timeBlocks,
+  academicEvents,
   missions,
   categories,
   activeMissionId,
@@ -45,17 +50,36 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
   const currentDayKey = DAY_KEYS[now.getDay()];
 
   // 1. Gather today's schedule (classes & tuition)
-  const todayScheduleItems: TimelineItem[] = schedule
-    .filter((s) => s.day_of_week === currentDayKey)
-    .map((s) => ({
-      id: s.id,
-      type: s.type,
-      sortTime: s.start_time,
-      timeDisplay: formatTimeRange12(s.start_time, s.end_time),
-      title: s.course_name,
-      room: s.room,
-      categoryName: s.type === "tuition" ? "Tuition" : "Class",
-    }));
+  // If timeBlocks provided, resolve today's schedule honoring academic overrides & holidays
+  let todayScheduleItems: TimelineItem[] = [];
+  let dayBadge: string | undefined = undefined;
+
+  if (timeBlocks && timeBlocks.length > 0) {
+    const resolved = resolveDaySchedule(now, timeBlocks, academicEvents || [], missions);
+    dayBadge = resolved.badge;
+    todayScheduleItems = resolved.blocks
+      .filter((b) => b.type === "class" || b.type === "tuition")
+      .map((b) => ({
+        id: b.id,
+        type: b.type === "tuition" ? "tuition" : "class",
+        sortTime: b.start_time,
+        timeDisplay: formatTimeRange12(b.start_time, b.end_time),
+        title: b.label,
+        categoryName: b.type === "tuition" ? "Tuition" : "Class",
+      }));
+  } else {
+    todayScheduleItems = schedule
+      .filter((s) => s.day_of_week === currentDayKey)
+      .map((s) => ({
+        id: s.id,
+        type: s.type,
+        sortTime: s.start_time,
+        timeDisplay: formatTimeRange12(s.start_time, s.end_time),
+        title: s.course_name,
+        room: s.room,
+        categoryName: s.type === "tuition" ? "Tuition" : "Class",
+      }));
+  }
 
   // 2. Gather today's missions (excluding active mission to adhere to single appearance rule)
   const todayMissions: TimelineItem[] = missions
@@ -119,9 +143,16 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
     <div className="clean-card p-5">
       {/* Section Header: small uppercase label + count, with divider */}
       <div className="flex items-center justify-between pb-3 border-b border-spy-border mb-4">
-        <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-spy-text">
-          TODAY&apos;S PLAN ({mergedItems.length})
-        </h3>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-spy-text">
+            TODAY&apos;S PLAN ({mergedItems.length})
+          </h3>
+          {dayBadge && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-[2px] bg-spy-green/10 text-[#14663a] dark:text-spy-green border border-spy-green/30 font-bold">
+              ★ {dayBadge}
+            </span>
+          )}
+        </div>
         <span className="text-[11px] font-mono text-spy-muted">
           Chronological Timeline
         </span>

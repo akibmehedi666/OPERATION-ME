@@ -55,3 +55,72 @@ INSERT INTO public.missions (title, codename, priority, deadline, notes, status,
 ('Draft FYDP Literature Review Section 2', 'OP-BLACKBIRD-04', 'high', now() - interval '2 hours', 'Overdue reconnaissance on existing defense architectures.', 'active', 75)
 ON CONFLICT DO NOTHING;
 
+-- 4. SEED WEEKLY TIME BLOCKS (Weekly Planner Template)
+INSERT INTO public.time_blocks (id, weekday, start_time, end_time, type, label, default_category, is_fixed, is_active) VALUES
+-- SAT
+('tb-sat-1', 'SAT', '09:50', '11:10', 'class', 'DIP (425)', 'cat-4', true, true),
+('tb-sat-2', 'SAT', '11:10', '13:50', 'class', 'FYDP-I (626)', 'cat-6', true, true),
+('tb-sat-3', 'SAT', '14:00', '15:30', 'break', 'Lunch+rest', NULL, false, true),
+('tb-sat-4', 'SAT', '16:00', '18:30', 'project', 'Project (backend)', 'cat-8', false, true),
+('tb-sat-5', 'SAT', '20:00', '21:00', 'study', 'Revise DIP/FYDP', 'cat-4', false, true),
+-- SUN
+('tb-sun-1', 'SUN', '09:50', '11:10', 'class', 'Economics (406)', 'cat-3', true, true),
+('tb-sun-2', 'SUN', '11:10', '12:30', 'class', 'Op. Systems (406)', 'cat-1', true, true),
+('tb-sun-3', 'SUN', '12:30', '13:50', 'class', 'Prob & Stat (630)', 'cat-5', true, true),
+('tb-sun-4', 'SUN', '14:00', '15:30', 'break', 'Lunch+rest', NULL, false, true),
+('tb-sun-5', 'SUN', '16:00', '17:30', 'study', 'Study OS/Eco', 'cat-1', false, true),
+('tb-sun-6', 'SUN', '20:00', '21:00', 'cp', 'CP 1-2 problems', 'cat-10', false, true),
+-- MON
+('tb-mon-1', 'MON', '10:00', '13:00', 'project', 'Project deep work', 'cat-8', false, true),
+('tb-mon-2', 'MON', '13:00', '14:30', 'break', 'Lunch+rest', NULL, false, true),
+('tb-mon-3', 'MON', '14:30', '16:30', 'study', 'Study Math/OS', 'cat-5', false, true),
+('tb-mon-4', 'MON', '17:00', '18:00', 'break', 'Prep+travel', NULL, false, true),
+('tb-mon-5', 'MON', '18:00', '19:30', 'tuition', 'TUITION', 'cat-11', true, true),
+-- TUE
+('tb-tue-1', 'TUE', '09:50', '11:10', 'class', 'DIP (425)', 'cat-4', true, true),
+('tb-tue-2', 'TUE', '11:10', '13:50', 'class', 'OS Lab (827)', 'cat-2', true, true),
+('tb-tue-3', 'TUE', '14:00', '15:30', 'break', 'Lunch+rest', NULL, false, true),
+('tb-tue-4', 'TUE', '16:00', '17:30', 'study', 'Study DIP/OS Lab', 'cat-4', false, true),
+('tb-tue-5', 'TUE', '20:00', '21:00', 'cp', 'SQL/backend learn', 'cat-8', false, true),
+-- WED
+('tb-wed-1', 'WED', '09:50', '11:10', 'class', 'Economics', 'cat-3', true, true),
+('tb-wed-2', 'WED', '11:10', '12:30', 'class', 'Op. Systems', 'cat-1', true, true),
+('tb-wed-3', 'WED', '12:30', '13:50', 'class', 'Prob & Stat', 'cat-5', true, true),
+('tb-wed-4', 'WED', '14:00', '15:30', 'break', 'Lunch+rest', NULL, false, true),
+('tb-wed-5', 'WED', '16:00', '17:30', 'study', 'Study Math practice', 'cat-5', false, true),
+('tb-wed-6', 'WED', '20:00', '21:00', 'cp', 'CP 1-2 problems', 'cat-10', false, true),
+-- THU
+('tb-thu-1', 'THU', '10:00', '13:00', 'project', 'Project deep work', 'cat-8', false, true),
+('tb-thu-2', 'THU', '13:00', '14:30', 'break', 'Lunch+rest', NULL, false, true),
+('tb-thu-3', 'THU', '14:30', '16:30', 'study', 'Study weakest course', 'cat-1', false, true),
+('tb-thu-4', 'THU', '17:00', '18:00', 'break', 'Prep+travel', NULL, false, true),
+('tb-thu-5', 'THU', '18:00', '19:30', 'tuition', 'TUITION', 'cat-11', true, true),
+-- FRI
+('tb-fri-1', 'FRI', '10:00', '12:30', 'project', 'Project/ML/security', 'cat-7', false, true),
+('tb-fri-2', 'FRI', '12:30', '15:00', 'break', 'Jumu''ah+lunch', NULL, false, true),
+('tb-fri-3', 'FRI', '15:00', '16:30', 'study', 'Weekly review+CP', 'cat-10', false, true),
+('tb-fri-4', 'FRI', '17:00', '18:00', 'break', 'Prep+travel', NULL, false, true),
+('tb-fri-5', 'FRI', '18:00', '19:30', 'tuition', 'TUITION', 'cat-11', true, true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 5. SEED ACADEMIC EVENTS (Academic Key Dates & Overrides)
+INSERT INTO public.academic_events (id, date, end_date, title, type, details) VALUES
+('ae-01', '2026-10-27', NULL, 'Classes begin', 'deadline', 'Fall semester classes commence'),
+('ae-02', '2026-10-31', NULL, 'Last day to drop, 100% refund', 'deadline', 'Full refund cutoff'),
+('ae-03', '2026-11-05', NULL, 'Online Saturday class', 'class_override', '{"overrideWeekday":"SAT","isOnline":true}'),
+('ae-04', '2026-11-07', NULL, 'Holiday (No class)', 'holiday', 'Holiday - classes suspended'),
+('ae-05', '2026-11-12', NULL, 'Online Saturday class', 'class_override', '{"overrideWeekday":"SAT","isOnline":true}'),
+('ae-06', '2026-11-22', NULL, '1st installment due', 'payment', 'Tuition installment 1 due'),
+('ae-07', '2026-11-26', NULL, 'Online Sunday class', 'class_override', '{"overrideWeekday":"SUN","isOnline":true}'),
+('ae-08', '2026-12-05', '2026-12-12', 'MID-TERM EXAM', 'exam', 'Mid-term examinations period'),
+('ae-09', '2026-12-15', NULL, '2nd installment due', 'payment', 'Tuition installment 2 due'),
+('ae-10', '2026-12-16', NULL, 'Holiday (Victory Day)', 'holiday', 'Victory Day - university closed'),
+('ae-11', '2026-12-17', NULL, 'Online Wednesday class', 'class_override', '{"overrideWeekday":"WED","isOnline":true}'),
+('ae-12', '2026-12-23', NULL, 'Last day of course withdrawal', 'deadline', 'Course withdrawal deadline'),
+('ae-13', '2026-12-31', NULL, 'Online Saturday class', 'class_override', '{"overrideWeekday":"SAT","isOnline":true}'),
+('ae-14', '2027-01-13', NULL, '3rd installment due', 'payment', 'Tuition installment 3 due'),
+('ae-15', '2027-01-21', '2027-01-24', 'Classes suspended', 'holiday', 'Pre-finals study recess'),
+('ae-16', '2027-01-25', '2027-02-01', 'FINAL EXAM', 'exam', 'Final examinations period'),
+('ae-17', '2027-02-04', NULL, 'Last day of grade submission', 'deadline', 'Grade submission deadline')
+ON CONFLICT (id) DO NOTHING;
+

@@ -18,7 +18,8 @@ export function getStoredThemePreference(): ThemePreference {
 export function resolveTheme(pref: ThemePreference): ActiveTheme {
   if (pref === "system") {
     if (typeof window !== "undefined" && window.matchMedia) {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      return isDark ? "dark" : "light";
     }
     return "dark";
   }
@@ -30,8 +31,12 @@ export function applyThemeClass(theme: ActiveTheme) {
   const root = document.documentElement;
   const opposite = theme === "dark" ? "light" : "dark";
   if (!root.classList.contains(theme) || root.classList.contains(opposite)) {
-    root.classList.remove(opposite);
-    root.classList.add(theme);
+    // Atomically set class without an intermediate empty state
+    const cleanClasses = root.className
+      .split(/\s+/)
+      .filter((c) => c && c !== opposite && c !== theme);
+    cleanClasses.push(theme);
+    root.className = cleanClasses.join(" ");
   }
 }
 

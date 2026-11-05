@@ -116,7 +116,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.96 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="relative w-full max-w-lg bg-spy-surface border border-spy-border rounded-[6px] p-6 text-spy-text max-h-[90vh] overflow-y-auto shadow-2xl"
+          className="relative w-full max-w-lg bg-spy-surface border border-spy-border rounded-[6px] p-4 sm:p-6 text-spy-text max-h-[90vh] overflow-y-auto shadow-2xl"
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-spy-border mb-4">
@@ -287,7 +287,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
             </div>
 
             {/* Submit / Cancel Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-spy-border">
+            <div className="sticky -bottom-4 sm:-bottom-6 bg-spy-surface pt-3 pb-1 border-t border-spy-border flex items-center justify-end gap-3 z-10">
               <Button type="button" variant="stealth" size="sm" onClick={onClose}>
                 Cancel
               </Button>

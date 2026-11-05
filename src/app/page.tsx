@@ -19,7 +19,10 @@ import { CompletionNoteModal } from "@/components/missions/CompletionNoteModal";
 import { Button } from "@/components/ui/Button";
 import { Mission } from "@/types/database";
 import { soundFX } from "@/lib/sound";
-import { ThemePreference, ActiveTheme, resolveTheme, applyThemeClass } from "@/lib/theme";
+import { useTheme } from "@/lib/themeContext";
+import { PlannerView } from "@/components/planner/PlannerView";
+import { UpcomingDatesCard } from "@/components/dashboard/UpcomingDatesCard";
+import { DashboardBanner } from "@/components/dashboard/DashboardBanner";
 
 // Dashboard stagger variants: cards fade + slide up 12px with 60ms stagger on load
 const dashboardContainerVariants: Variants = {
@@ -51,11 +54,11 @@ export default function Home() {
     missions,
     categories,
     schedule,
+    timeBlocks,
+    academicEvents,
     totalXp,
     streak,
     isSupabaseConnected,
-    defaultTheme,
-    updateDefaultTheme,
     login,
     guestBypass,
     logout,
@@ -65,14 +68,27 @@ export default function Home() {
     setActiveMission,
     completeMission,
     updateMissionNote,
+    addTimeBlock,
+    updateTimeBlock,
+    deleteTimeBlock,
+    addAcademicEvent,
+    updateAcademicEvent,
+    deleteAcademicEvent,
+    scheduleMissionToBlock,
+    confirmAutoScheduledMission,
+    runAutoScheduler,
   } = useAgencyState();
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "missions" | "history">("dashboard");
+  const {
+    defaultTheme,
+    activeTheme,
+    setDefaultTheme,
+    toggleActiveTheme,
+  } = useTheme();
+
+  const [activeTab, setActiveTab] = useState<"dashboard" | "missions" | "planner" | "history">("dashboard");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
-
-  // Active theme state ("dark" | "light")
-  const [currentTheme, setCurrentTheme] = useState<ActiveTheme>("dark");
 
   // Track initial mount so that page-load stagger does not replay on subsequent re-renders
   const isFirstMount = React.useRef(true);
@@ -91,37 +107,6 @@ export default function Home() {
     isOpen: false,
     newRank: "",
   });
-
-  useEffect(() => {
-    const resolved = resolveTheme(defaultTheme);
-    setCurrentTheme(resolved);
-    applyThemeClass(resolved);
-  }, [defaultTheme]);
-
-  useEffect(() => {
-    if (defaultTheme !== "system") return;
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => {
-      const next: ActiveTheme = e.matches ? "dark" : "light";
-      setCurrentTheme(next);
-      applyThemeClass(next);
-    };
-    mediaQuery.addEventListener("change", handler);
-    return () => mediaQuery.removeEventListener("change", handler);
-  }, [defaultTheme]);
-
-  const handleToggleTheme = () => {
-    const next: ActiveTheme = currentTheme === "dark" ? "light" : "dark";
-    setCurrentTheme(next);
-    applyThemeClass(next);
-  };
-
-  const handleUpdateDefaultTheme = (pref: ThemePreference) => {
-    updateDefaultTheme(pref);
-    const resolved = resolveTheme(pref);
-    setCurrentTheme(resolved);
-    applyThemeClass(resolved);
-  };
 
   // Completion note & debrief modal state
   const [completionModal, setCompletionModal] = useState<{
@@ -300,23 +285,25 @@ export default function Home() {
             agentName="Agent Akib"
             totalXp={totalXp}
             streak={streak}
-            currentTheme={currentTheme}
+            currentTheme={activeTheme}
             defaultTheme={defaultTheme}
-            onToggleTheme={handleToggleTheme}
-            onUpdateDefaultTheme={handleUpdateDefaultTheme}
+            onToggleTheme={toggleActiveTheme}
+            onUpdateDefaultTheme={setDefaultTheme}
             onQuickAdd={handleOpenAdd}
             onLogout={logout}
           />
 
           {/* Navigation Tabs (Smooth layoutId sliding indicator) */}
-          <div className="flex items-center gap-2 mb-6 border-b border-spy-border pb-1 relative">
-            {(["dashboard", "missions", "history"] as const).map((tab) => {
+          <div className="flex items-center gap-1 sm:gap-2 mb-6 border-b border-spy-border pb-1 relative overflow-x-auto no-scrollbar">
+            {(["dashboard", "missions", "planner", "history"] as const).map((tab) => {
               const isActive = activeTab === tab;
               const label =
                 tab === "dashboard"
                   ? "Dashboard"
                   : tab === "missions"
                   ? "Missions"
+                  : tab === "planner"
+                  ? "Planner"
                   : "History";
               const count =
                 tab === "missions"
@@ -329,7 +316,7 @@ export default function Home() {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`relative px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors rounded-t-[4px] flex items-center gap-1.5 ${
+                  className={`relative px-3 sm:px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors rounded-t-[4px] flex items-center gap-1.5 shrink-0 ${
                     isActive
                       ? "text-[#14663a] dark:text-spy-green font-bold"
                       : "text-spy-muted hover:text-spy-text hover:bg-spy-surface2"
@@ -377,12 +364,15 @@ export default function Home() {
                   animate="visible"
                   className="space-y-6"
                 >
+                  {/* Strategic Directive Alert Banner (7-day alert before exams/payments) */}
+                  <DashboardBanner events={academicEvents} onOpenPlanner={() => setActiveTab("planner")} />
+
                   {/* B. Row of 3 small stat cards */}
                   <motion.div variants={dashboardCardVariants}>
                     <StatCardsRow missions={missions} streak={streak} />
                   </motion.div>
 
-                  {/* C. Two Columns: Left (Hero + Today's Plan) & Right (Today's Briefing) */}
+                  {/* C. Two Columns: Left (Hero + Today's Plan) & Right (Today's Briefing + Upcoming Dates) */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                     {/* Left Column: Active Mission (hero), then Today's Plan */}
                     <motion.div variants={dashboardCardVariants} className="space-y-6">
@@ -419,6 +409,8 @@ export default function Home() {
                       {/* D. Today's Plan (ONE merged chronological timeline of classes, tuition & missions) */}
                       <TodayPlanTimeline
                         schedule={schedule}
+                        timeBlocks={timeBlocks}
+                        academicEvents={academicEvents}
                         missions={missions}
                         categories={categories}
                         activeMissionId={heroMission?.id}
@@ -427,9 +419,10 @@ export default function Home() {
                       />
                     </motion.div>
 
-                    {/* Right Column: Today's Briefing (classes + tuition timetable) */}
-                    <motion.div variants={dashboardCardVariants}>
+                    {/* Right Column: Today's Briefing & Upcoming Key Dates */}
+                    <motion.div variants={dashboardCardVariants} className="space-y-6">
                       <TodayBriefing schedule={schedule} />
+                      <UpcomingDatesCard events={academicEvents} onOpenCalendar={() => setActiveTab("planner")} />
                     </motion.div>
                   </div>
 
@@ -501,6 +494,34 @@ export default function Home() {
               </motion.div>
             )}
 
+            {activeTab === "planner" && (
+              <motion.div
+                key="planner"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                {/* ================= PLANNER TAB ================= */}
+                <PlannerView
+                  timeBlocks={timeBlocks}
+                  academicEvents={academicEvents}
+                  missions={missions}
+                  categories={categories}
+                  onAddTimeBlock={addTimeBlock}
+                  onUpdateTimeBlock={updateTimeBlock}
+                  onDeleteTimeBlock={deleteTimeBlock}
+                  onAddAcademicEvent={addAcademicEvent}
+                  onUpdateAcademicEvent={updateAcademicEvent}
+                  onDeleteAcademicEvent={deleteAcademicEvent}
+                  onScheduleMission={scheduleMissionToBlock}
+                  onConfirmAutoSchedule={confirmAutoScheduledMission}
+                  onRunAutoSchedule={runAutoScheduler}
+                  onCompleteMission={handleInitiateAccomplish}
+                />
+              </motion.div>
+            )}
+
             {activeTab === "history" && (
               <motion.div
                 key="history"
@@ -514,6 +535,7 @@ export default function Home() {
                   missions={missions}
                   categories={categories}
                   streak={streak}
+                  academicEvents={academicEvents}
                   onEditNote={handleOpenEditNote}
                 />
               </motion.div>

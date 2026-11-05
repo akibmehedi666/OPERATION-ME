@@ -190,9 +190,55 @@ TO authenticated
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
+-- 10. TIME BLOCKS TABLE (Weekly Planner)
+CREATE TABLE IF NOT EXISTS public.time_blocks (
+    id TEXT PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    weekday TEXT NOT NULL CHECK (weekday IN ('SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT')),
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('class', 'tuition', 'project', 'study', 'cp', 'break')),
+    label TEXT NOT NULL,
+    default_category TEXT,
+    is_fixed BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    override_date DATE,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 11. ACADEMIC EVENTS TABLE (Key Dates & Overrides)
+CREATE TABLE IF NOT EXISTS public.academic_events (
+    id TEXT PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    end_date DATE,
+    title TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('class_override', 'holiday', 'exam', 'deadline', 'payment')),
+    details TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable RLS on new tables
+ALTER TABLE public.time_blocks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.academic_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage time blocks" 
+ON public.time_blocks FOR ALL 
+TO authenticated 
+USING (auth.uid() = user_id OR user_id IS NULL)
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can manage academic events" 
+ON public.academic_events FOR ALL 
+TO authenticated 
+USING (auth.uid() = user_id OR user_id IS NULL)
+WITH CHECK (auth.uid() = user_id);
+
 -- INDEXES FOR PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_missions_user_status ON public.missions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_missions_priority_deadline ON public.missions(priority, deadline);
 CREATE INDEX IF NOT EXISTS idx_class_schedule_day ON public.class_schedule(day_of_week);
 CREATE INDEX IF NOT EXISTS idx_xp_events_user ON public.xp_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_time_blocks_weekday ON public.time_blocks(weekday);
+CREATE INDEX IF NOT EXISTS idx_academic_events_date ON public.academic_events(date);
 

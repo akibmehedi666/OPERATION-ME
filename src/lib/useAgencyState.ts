@@ -5,21 +5,24 @@ import {
   Mission, 
   Category, 
   ClassScheduleItem, 
-  Priority 
+  Priority,
+  TimeBlock,
+  AcademicEvent
 } from "@/types/database";
 import { 
   DEFAULT_CATEGORIES, 
   DEFAULT_SCHEDULE, 
-  INITIAL_STARTER_MISSIONS 
+  INITIAL_STARTER_MISSIONS,
+  DEFAULT_TIME_BLOCKS,
+  DEFAULT_ACADEMIC_EVENTS
 } from "@/lib/seeds";
+import { autoScheduleMissions } from "@/lib/plannerScheduler";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { 
   ThemePreference, 
   getStoredThemePreference, 
-  saveThemePreference, 
-  resolveTheme, 
-  applyThemeClass 
+  saveThemePreference 
 } from "@/lib/theme";
 import { getRankFromXp } from "@/lib/rank";
 
@@ -36,10 +39,11 @@ export function useAgencyState() {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [schedule, setSchedule] = useState<ClassScheduleItem[]>(DEFAULT_SCHEDULE);
+  const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>(DEFAULT_TIME_BLOCKS);
+  const [academicEvents, setAcademicEvents] = useState<AcademicEvent[]>(DEFAULT_ACADEMIC_EVENTS);
   const [totalXp, setTotalXp] = useState<number>(350); // Initial baseline for Agent Akib
   const [streak, setStreak] = useState<number>(4);
   const [loading, setLoading] = useState<boolean>(true);
-  const [defaultTheme, setDefaultThemeState] = useState<ThemePreference>("dark");
 
   const supabase = createClient();
   const hasSupabase = isSupabaseConfigured() && supabase !== null;
@@ -48,10 +52,6 @@ export function useAgencyState() {
   useEffect(() => {
     async function init() {
       setLoading(true);
-
-      const storedPref = getStoredThemePreference();
-      setDefaultThemeState(storedPref);
-      applyThemeClass(resolveTheme(storedPref));
 
       // Check if user authenticated in Supabase
       if (hasSupabase && supabase) {
@@ -112,6 +112,22 @@ export function useAgencyState() {
 
       const storedSched = localStorage.getItem("op_me_schedule");
       if (storedSched) setSchedule(JSON.parse(storedSched));
+
+      const storedTimeBlocks = localStorage.getItem("op_me_time_blocks");
+      if (storedTimeBlocks) {
+        setTimeBlocks(JSON.parse(storedTimeBlocks));
+      } else {
+        setTimeBlocks(DEFAULT_TIME_BLOCKS);
+        localStorage.setItem("op_me_time_blocks", JSON.stringify(DEFAULT_TIME_BLOCKS));
+      }
+
+      const storedEvents = localStorage.getItem("op_me_academic_events");
+      if (storedEvents) {
+        setAcademicEvents(JSON.parse(storedEvents));
+      } else {
+        setAcademicEvents(DEFAULT_ACADEMIC_EVENTS);
+        localStorage.setItem("op_me_academic_events", JSON.stringify(DEFAULT_ACADEMIC_EVENTS));
+      }
     } catch (e) {
       console.error("LocalStorage load error:", e);
       setMissions(INITIAL_STARTER_MISSIONS);
@@ -182,6 +198,30 @@ export function useAgencyState() {
 
       if (streakData) {
         setStreak(streakData.current_streak || 1);
+      }
+
+      // 6. Fetch time_blocks
+      const { data: tbData } = await supabase
+        .from("time_blocks")
+        .select("*")
+        .or(`user_id.eq.${userId},user_id.is.null`);
+
+      if (tbData && tbData.length > 0) {
+        setTimeBlocks(tbData);
+      } else {
+        setTimeBlocks(DEFAULT_TIME_BLOCKS);
+      }
+
+      // 7. Fetch academic_events
+      const { data: aeData } = await supabase
+        .from("academic_events")
+        .select("*")
+        .or(`user_id.eq.${userId},user_id.is.null`);
+
+      if (aeData && aeData.length > 0) {
+        setAcademicEvents(aeData);
+      } else {
+        setAcademicEvents(DEFAULT_ACADEMIC_EVENTS);
       }
     } catch (err) {
       console.error("Error fetching Supabase data:", err);
@@ -556,8 +596,202 @@ export function useAgencyState() {
     }
   };
 
+  const persistTimeBlocks = (newBlocks: TimeBlock[]) => {
+    setTimeBlocks(newBlocks);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_time_blocks", JSON.stringify(newBlocks));
+    }
+  };
+
+  const persistAcademicEvents = (newEvents: AcademicEvent[]) => {
+    setAcademicEvents(newEvents);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_academic_events", JSON.stringify(newEvents));
+    }
+  };
+
+  const addTimeBlock = async (block: Omit<TimeBlock, "id" | "created_at">) => {
+    const newBlock: TimeBlock = {
+      ...block,
+      id: `tb-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    const updated = [...timeBlocks, newBlock];
+    persistTimeBlocks(updated);
+
+    if (hasSupabase && supabase && currentUser) {
+      try {
+        await supabase.from("time_blocks").insert({ ...newBlock, user_id: currentUser.id });
+      } catch (e) {
+        console.error("Supabase add time_block error:", e);
+      }
+    }
+    return newBlock;
+  };
+
+  const updateTimeBlock = async (id: string, updates: Partial<TimeBlock>) => {
+    const updated = timeBlocks.map((b) => (b.id === id ? { ...b, ...updates } : b));
+    persistTimeBlocks(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        await supabase.from("time_blocks").update(updates).eq("id", id);
+      } catch (e) {
+        console.error("Supabase update time_block error:", e);
+      }
+    }
+  };
+
+  const deleteTimeBlock = async (id: string) => {
+    const updated = timeBlocks.filter((b) => b.id !== id);
+    persistTimeBlocks(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        await supabase.from("time_blocks").delete().eq("id", id);
+      } catch (e) {
+        console.error("Supabase delete time_block error:", e);
+      }
+    }
+  };
+
+  const addAcademicEvent = async (event: Omit<AcademicEvent, "id" | "created_at">) => {
+    const newEvent: AcademicEvent = {
+      ...event,
+      id: `ae-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    const updated = [...academicEvents, newEvent];
+    persistAcademicEvents(updated);
+
+    if (hasSupabase && supabase && currentUser) {
+      try {
+        await supabase.from("academic_events").insert({ ...newEvent, user_id: currentUser.id });
+      } catch (e) {
+        console.error("Supabase add academic_event error:", e);
+      }
+    }
+    return newEvent;
+  };
+
+  const updateAcademicEvent = async (id: string, updates: Partial<AcademicEvent>) => {
+    const updated = academicEvents.map((e) => (e.id === id ? { ...e, ...updates } : e));
+    persistAcademicEvents(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        await supabase.from("academic_events").update(updates).eq("id", id);
+      } catch (e) {
+        console.error("Supabase update academic_event error:", e);
+      }
+    }
+  };
+
+  const deleteAcademicEvent = async (id: string) => {
+    const updated = academicEvents.filter((e) => e.id !== id);
+    persistAcademicEvents(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        await supabase.from("academic_events").delete().eq("id", id);
+      } catch (e) {
+        console.error("Supabase delete academic_event error:", e);
+      }
+    }
+  };
+
+  const scheduleMissionToBlock = async (
+    missionId: string,
+    blockId: string,
+    startTime?: string,
+    endTime?: string,
+    isAuto: boolean = false
+  ) => {
+    const updated = missions.map((m) =>
+      m.id === missionId
+        ? {
+            ...m,
+            scheduled_block_id: blockId,
+            scheduled_start: startTime || m.scheduled_start,
+            scheduled_end: endTime || m.scheduled_end,
+            is_auto_scheduled: isAuto,
+          }
+        : m
+    );
+    persistMissions(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        await supabase
+          .from("missions")
+          .update({
+            scheduled_block_id: blockId,
+            scheduled_start: startTime || null,
+            scheduled_end: endTime || null,
+            is_auto_scheduled: isAuto,
+          })
+          .eq("id", missionId);
+      } catch (e) {
+        console.error("Supabase schedule mission error:", e);
+      }
+    }
+  };
+
+  const confirmAutoScheduledMission = async (missionId: string) => {
+    const updated = missions.map((m) =>
+      m.id === missionId ? { ...m, is_auto_scheduled: false } : m
+    );
+    persistMissions(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        await supabase.from("missions").update({ is_auto_scheduled: false }).eq("id", missionId);
+      } catch (e) {
+        console.error("Supabase confirm auto schedule error:", e);
+      }
+    }
+  };
+
+  const unscheduleMission = async (missionId: string) => {
+    const updated = missions.map((m) =>
+      m.id === missionId
+        ? {
+            ...m,
+            scheduled_block_id: null,
+            scheduled_start: null,
+            scheduled_end: null,
+            is_auto_scheduled: false,
+          }
+        : m
+    );
+    persistMissions(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        await supabase
+          .from("missions")
+          .update({
+            scheduled_block_id: null,
+            scheduled_start: null,
+            scheduled_end: null,
+            is_auto_scheduled: false,
+          })
+          .eq("id", missionId);
+      } catch (e) {
+        console.error("Supabase unschedule mission error:", e);
+      }
+    }
+  };
+
+  const runAutoScheduler = (weekStartDate: Date) => {
+    const result = autoScheduleMissions(missions, timeBlocks, academicEvents, weekStartDate, categories);
+    if (result.scheduledCount > 0) {
+      persistMissions(result.updatedMissions);
+    }
+    return result.scheduledCount;
+  };
+
   const updateDefaultTheme = (pref: ThemePreference) => {
-    setDefaultThemeState(pref);
     saveThemePreference(pref);
   };
 
@@ -567,10 +801,12 @@ export function useAgencyState() {
     missions,
     categories,
     schedule,
+    timeBlocks,
+    academicEvents,
     totalXp,
     streak,
     loading,
-    defaultTheme,
+    defaultTheme: getStoredThemePreference(),
     updateDefaultTheme,
     isSupabaseConnected: hasSupabase,
     login,
@@ -582,6 +818,16 @@ export function useAgencyState() {
     setActiveMission,
     completeMission,
     updateMissionNote,
+    addTimeBlock,
+    updateTimeBlock,
+    deleteTimeBlock,
+    addAcademicEvent,
+    updateAcademicEvent,
+    deleteAcademicEvent,
+    scheduleMissionToBlock,
+    confirmAutoScheduledMission,
+    unscheduleMission,
+    runAutoScheduler,
   };
 }
 

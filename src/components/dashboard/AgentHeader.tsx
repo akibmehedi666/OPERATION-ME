@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { 
   Plus, 
@@ -49,6 +50,22 @@ export function AgentHeader({
   const [soundEnabled, setSoundEnabled] = useState(soundFX.isEnabled());
   const { animationsEnabled, setAnimationsEnabled, systemReducedMotion } = useAnimations();
   const rankInfo = getRankFromXp(totalXp);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsSettingsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isSettingsOpen]);
 
   // Subtle typewriter effect on Agent greeting on first login of the day (dark theme)
   const [greetingText, setGreetingText] = useState("");
@@ -213,10 +230,23 @@ export function AgentHeader({
         </div>
       </div>
 
-      {/* Settings Modal */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-spy-surface border border-spy-border p-5 rounded-[6px] max-w-sm w-full font-mono text-xs shadow-2xl">
+      {/* Settings Modal (Rendered in Portal to avoid ancestor transform clipping) */}
+      {isSettingsOpen && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsSettingsOpen(false);
+            }
+          }}
+        >
+          <div
+            className="bg-spy-surface border border-spy-border p-5 rounded-[6px] max-w-sm w-full font-mono text-xs shadow-2xl max-h-[90vh] overflow-y-auto relative"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Settings"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-spy-border">
               <span className="font-bold text-spy-text">SETTINGS</span>
               <button
@@ -319,7 +349,8 @@ export function AgentHeader({
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

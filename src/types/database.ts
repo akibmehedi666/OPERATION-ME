@@ -39,6 +39,48 @@ export interface Mission {
   completion_note?: string | null;
   time_spent_minutes?: number | null;
   category?: Category;
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
+  scheduled_block_id?: string | null;
+  is_auto_scheduled?: boolean;
+}
+
+export type TimeBlockType = 'class' | 'tuition' | 'project' | 'study' | 'cp' | 'break';
+
+export interface TimeBlock {
+  id: string;
+  user_id?: string | null;
+  weekday: DayOfWeek;
+  start_time: string; // "HH:MM" e.g. "09:50"
+  end_time: string;   // "HH:MM" e.g. "11:10"
+  type: TimeBlockType;
+  label: string;
+  default_category?: string | null;
+  is_fixed: boolean;
+  is_active?: boolean;
+  override_date?: string | null; // "YYYY-MM-DD" for single-day template override
+  created_at?: string;
+}
+
+export type AcademicEventType = 'class_override' | 'holiday' | 'exam' | 'deadline' | 'payment';
+
+export interface AcademicEvent {
+  id: string;
+  user_id?: string | null;
+  date: string; // "YYYY-MM-DD"
+  end_date?: string | null; // "YYYY-MM-DD" for ranges
+  title: string;
+  type: AcademicEventType;
+  details?: string | null;
+  created_at?: string;
+}
+
+export interface ResolvedTimeBlock extends TimeBlock {
+  isOnline?: boolean;
+  isOverridden?: boolean;
+  overrideReason?: string;
+  date: string; // "YYYY-MM-DD"
+  scheduledMissions?: Mission[];
 }
 
 export interface ClassScheduleItem {

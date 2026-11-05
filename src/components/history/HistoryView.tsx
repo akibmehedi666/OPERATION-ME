@@ -16,18 +16,20 @@ import {
   FileText,
   Edit3
 } from "lucide-react";
-import { Mission, Category, Priority } from "@/types/database";
+import { Mission, Category, Priority, AcademicEvent } from "@/types/database";
 import { 
   formatTime12, 
   formatDateWithDay 
 } from "@/lib/formatters";
 import { getCategoryTheme } from "@/lib/categoryTheme";
 import { AnimatedCounter } from "@/components/ui/AnimatedCounter";
+import { getEventsForDate } from "@/lib/scheduleResolver";
 
 interface HistoryViewProps {
   missions: Mission[];
   categories: Category[];
   streak: number;
+  academicEvents?: AcademicEvent[];
   onEditNote?: (mission: Mission) => void;
 }
 
@@ -51,6 +53,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   missions,
   categories,
   streak,
+  academicEvents = [],
   onEditNote,
 }) => {
   const now = useMemo(() => new Date(), []);
@@ -424,6 +427,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               now.getMonth() === currentMonth &&
               now.getDate() === dayNum;
 
+            const dayEvents = getEventsForDate(dateKey, academicEvents);
+            const isExam = dayEvents.some((e) => e.type === "exam");
+
             const getHeatmapColorClass = () => {
               if (count >= 4) {
                 return "bg-[#1f7a4d] border-[#18633e] text-white dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-green";
@@ -433,6 +439,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               }
               if (count === 1) {
                 return "bg-[#cfe8d8] border-[#a9d7b9] text-[#1f2421] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-text";
+              }
+              if (isExam) {
+                return "bg-[#fce8e0]/30 border-spy-red/40 text-spy-red dark:bg-spy-red/10 dark:border-spy-red/40";
               }
               return "bg-spy-surface border-spy-border text-spy-muted hover:border-spy-borderLight dark:bg-spy-surface dark:border-spy-border";
             };
@@ -488,6 +497,28 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     }`}
                   >
                     +{xp} XP
+                  </div>
+                ) : dayEvents.length > 0 ? (
+                  <div className="flex items-center gap-0.5 mt-0.5">
+                    {dayEvents.slice(0, 3).map((ev) => {
+                      const dotColor =
+                        ev.type === "exam"
+                          ? "bg-spy-red"
+                          : ev.type === "payment"
+                          ? "bg-amber-500"
+                          : ev.type === "deadline"
+                          ? "bg-orange-500"
+                          : ev.type === "class_override"
+                          ? "bg-blue-500"
+                          : "bg-gray-400";
+                      return (
+                        <span
+                          key={ev.id}
+                          className={`w-1.5 h-1.5 rounded-full ${dotColor}`}
+                          title={ev.title}
+                        />
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="h-2" />
