@@ -7,6 +7,7 @@
      LIGHT THEME: "DECLASSIFIED DOSSIER" (Warm Paper Case File)
      ======================================================== */
   --bg-page: #f4f1ea;
+  --bg-page-gradient: linear-gradient(180deg, #f6f2e9 0%, #f1efe6 100%);
   --bg-surface: #fffdf8;
   --bg-surface-2: #f7f4ed;
   --bg-surface-hover: #f1ede3;
@@ -30,9 +31,9 @@
   --danger-muted: #fbeae8;
   --danger-border: rgba(180, 35, 24, 0.35);
 
-  --hero-bg: #eef6f0;
-  --hero-border: #9bcba7;
-  --hero-shadow: 0 4px 16px rgba(31, 122, 77, 0.08);
+  --hero-bg: linear-gradient(135deg, #e3f4e9 0%, #f1f9f3 100%);
+  --hero-border: #92caa2;
+  --hero-shadow: 0 4px 20px rgba(31, 122, 77, 0.12);
 
   --chip-bg: #ece6d8;
   --chip-border: #ddd6c8;
@@ -45,9 +46,9 @@
   --scrollbar-thumb: #ddd6c8;
   --scrollbar-thumb-hover: #c7beae;
 
-  --heatmap-0: #f4f1ea;
-  --heatmap-1: #d8e8dc;
-  --heatmap-2: #80b996;
+  --heatmap-0: #fffdf8;
+  --heatmap-1: #cfe8d8;
+  --heatmap-2: #8fceaa;
   --heatmap-3: #1f7a4d;
 }
 
@@ -56,6 +57,7 @@
      DARK THEME: "TACTICAL STEALTH"
      ======================================================== */
   --bg-page: #0b0f0d;
+  --bg-page-gradient: #0b0f0d;
   --bg-surface: #111714;
   --bg-surface-2: #141d18;
   --bg-surface-hover: #18231d;
@@ -102,11 +104,12 @@
 
 body {
   color: var(--text-main);
+  background: var(--bg-page-gradient);
   background-color: var(--bg-page);
   font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
   min-height: 100vh;
-  transition: background-color 200ms ease-in-out, color 200ms ease-in-out;
+  transition: background 200ms ease-in-out, background-color 200ms ease-in-out, color 200ms ease-in-out;
 }
 
 /* Subtle clean scrollbar */
@@ -136,11 +139,14 @@ body {
 
 /* Active Mission card: gets hero background and shadow/glow */
 .active-mission-card {
-  background-color: var(--hero-bg);
-  border: 1px solid var(--hero-border);
+  background: var(--hero-bg);
+  border: 2px solid var(--hero-border);
   box-shadow: var(--hero-shadow);
   border-radius: 6px;
-  transition: background-color 200ms ease-in-out, border-color 200ms ease-in-out, box-shadow 200ms ease-in-out;
+  transition: background 200ms ease-in-out, border-color 200ms ease-in-out, box-shadow 200ms ease-in-out;
+}
+.dark .active-mission-card {
+  border-width: 1px;
 }
 
 /* Rubber Stamp Touch for light and dark modes */

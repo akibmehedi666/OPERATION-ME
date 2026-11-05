@@ -9,10 +9,12 @@ import {
   Trash2, 
   ChevronDown, 
   Crosshair,
-  FileText
+  FileText,
+  Target
 } from "lucide-react";
 import { Mission, Category } from "@/types/database";
 import { formatDueText } from "@/lib/formatters";
+import { getCategoryTheme } from "@/lib/categoryTheme";
 import { Button } from "./Button";
 
 interface MissionCardProps {
@@ -38,6 +40,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const isCompleted = mission.status === "completed";
+  const catTheme = getCategoryTheme(category?.name || category?.codename);
 
   // Use 12-hour unified due text
   const dueInfo = formatDueText(mission.deadline);
@@ -69,7 +72,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({
               ACTIVE MISSION
             </span>
             {category && (
-              <span className="text-xs bg-spy-chipBg text-spy-chipText border border-spy-chipBorder px-2 py-0.5 rounded-[3px] font-medium">
+              <span className={`text-xs px-2.5 py-0.5 rounded-[3px] border font-medium ${catTheme.chipClass}`}>
+                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 inline-block ${catTheme.dotClass}`} />
                 {category.name}
               </span>
             )}
@@ -142,13 +146,21 @@ export const MissionCard: React.FC<MissionCardProps> = ({
     >
       <div className="p-3.5 sm:p-4">
         <div className="flex items-center justify-between gap-3">
+          {/* Category Icon Tile */}
+          <div
+            className={`p-2 rounded-[4px] border shrink-0 ${catTheme.iconTileClass}`}
+            title={category?.name || "Target"}
+          >
+            <Target className="w-3.5 h-3.5 stroke-[2.2]" />
+          </div>
+
           {/* Main Info: Title + Category + Due Time */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
-              {/* Category (Neutral tan chip in light, dark chip in dark) */}
+              {/* Category (Soft tint bg + darker text of same hue) */}
               {category && (
-                <span className="text-[11px] bg-spy-chipBg text-spy-chipText border border-spy-chipBorder px-1.5 py-0.5 rounded-[2px] inline-flex items-center gap-1.5 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-spy-muted" />
+                <span className={`text-[11px] px-2 py-0.5 rounded-[3px] border inline-flex items-center gap-1.5 font-medium ${catTheme.chipClass}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${catTheme.dotClass}`} />
                   {category.name}
                 </span>
               )}
@@ -180,7 +192,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             {!isCompleted && onComplete && (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 onClick={() => onComplete(mission)}
               >

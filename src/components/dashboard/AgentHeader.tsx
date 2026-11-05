@@ -51,20 +51,41 @@ export function AgentHeader({
     setSoundEnabled(newState);
   };
 
+  const getRankBadgeClass = (rankName: string) => {
+    const r = rankName.toLowerCase();
+    if (r.includes("director")) {
+      return "bg-[#fbf3cc] text-[#8a6a00] border-[#f5e499] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border";
+    }
+    if (r.includes("elite")) {
+      return "bg-[#f0e6fa] text-[#6b2fa0] border-[#dfcbf5] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border";
+    }
+    if (r.includes("agent")) {
+      return "bg-[#e4eefc] text-[#1d4f9f] border-[#c6ddf9] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border";
+    }
+    return "bg-[#dcf3e4] text-[#14663a] border-[#b9e7c8] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border";
+  };
+
   return (
-    <div className="clean-card p-4 sm:p-5 mb-6 relative">
+    <div className="clean-card bg-gradient-to-r from-[#eef7f1] via-[#f7f5ed] to-[#faf8f2] border border-[#d8e8dc] shadow-[0_1px_3px_rgba(31,122,77,0.06)] dark:from-transparent dark:via-transparent dark:to-transparent dark:bg-spy-surface dark:border-spy-border dark:shadow-none p-4 sm:p-5 mb-6 relative">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Left: Agent name & Rank */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[4px] bg-spy-surface2 border border-spy-border flex items-center justify-center font-mono font-bold text-spy-green">
+          <div className="w-10 h-10 rounded-[4px] bg-[#dcf3e4] text-[#14663a] border border-[#b9e7c8] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border flex items-center justify-center font-mono font-bold">
             AK
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-mono font-bold text-spy-text tracking-wide">
               {agentName}
             </h1>
-            <div className="text-xs text-spy-muted font-mono">
-              RANK: <span className="text-spy-text font-medium">{rankInfo.rank.toUpperCase()}</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[11px] text-spy-muted font-mono uppercase">Rank:</span>
+              <span
+                className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-[3px] border ${getRankBadgeClass(
+                  rankInfo.rank
+                )}`}
+              >
+                {rankInfo.rank}
+              </span>
             </div>
           </div>
         </div>

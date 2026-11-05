@@ -40,7 +40,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variantStyles = {
       primary:
-        "bg-spy-green text-spy-contrast border border-spy-green hover:bg-spy-greenHover shadow-button-glow font-bold",
+        "bg-gradient-to-b from-[#248a57] to-[#1f7a4d] hover:from-[#1f7a4d] hover:to-[#18633e] text-white border border-[#1b6b43] hover:-translate-y-px transition-all duration-150 shadow-[0_1px_2px_rgba(31,122,77,0.25)] dark:bg-spy-green dark:from-transparent dark:to-transparent dark:text-spy-contrast dark:border-spy-green dark:hover:bg-spy-greenHover dark:hover:translate-y-0 dark:shadow-button-glow font-bold",
       danger:
         "bg-transparent text-spy-red border border-spy-red hover:bg-spy-redMuted",
       amber:

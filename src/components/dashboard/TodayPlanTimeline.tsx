@@ -4,6 +4,7 @@ import React from "react";
 import { BookOpen, GraduationCap, Target, Check, Clock } from "lucide-react";
 import { Mission, Category, ClassScheduleItem, DayOfWeek } from "@/types/database";
 import { formatTime12, formatTimeRange12 } from "@/lib/formatters";
+import { getCategoryTheme } from "@/lib/categoryTheme";
 import { Button } from "@/components/ui/Button";
 
 const DAY_KEYS: DayOfWeek[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -129,101 +130,107 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {mergedItems.map((item) => (
-            <div
-              key={`${item.type}-${item.id}`}
-              className={`p-3.5 rounded-[4px] bg-spy-surface2 border border-spy-border transition-colors flex items-center justify-between gap-3 ${getBorderLeftClass(
-                item
-              )} ${item.isOverdue ? "bg-spy-redMuted" : ""} ${item.isCompleted ? "opacity-60" : ""}`}
-            >
-              {/* Left Details: Icon + Time + Title + Category Chip */}
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                {/* Type Icon */}
-                <div
-                  className={`p-2 rounded-[4px] shrink-0 border ${
-                    item.type === "mission"
-                      ? "bg-spy-surface border-spy-border text-spy-green"
-                      : item.type === "tuition"
-                      ? "bg-spy-surface border-spy-border text-spy-amber"
-                      : "bg-spy-surface border-spy-border text-spy-muted"
-                  }`}
-                  title={item.type.toUpperCase()}
-                >
-                  {item.type === "mission" ? (
-                    <Target className="w-3.5 h-3.5 stroke-[2.2]" />
-                  ) : item.type === "tuition" ? (
-                    <GraduationCap className="w-3.5 h-3.5" />
-                  ) : (
-                    <BookOpen className="w-3.5 h-3.5" />
+          {mergedItems.map((item) => {
+            const catTheme =
+              item.type === "tuition"
+                ? getCategoryTheme("tuition")
+                : item.type === "class"
+                ? getCategoryTheme(item.title)
+                : getCategoryTheme(item.categoryName || item.title);
+
+            return (
+              <div
+                key={`${item.type}-${item.id}`}
+                className={`p-3.5 rounded-[4px] bg-spy-surface2 border border-spy-border transition-colors flex items-center justify-between gap-3 ${getBorderLeftClass(
+                  item
+                )} ${item.isOverdue ? "bg-spy-redMuted" : ""} ${item.isCompleted ? "opacity-60" : ""}`}
+              >
+                {/* Left Details: Icon + Time + Title + Category Chip */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {/* Type Icon taking Category/Course Color */}
+                  <div
+                    className={`p-2 rounded-[4px] shrink-0 border ${catTheme.iconTileClass}`}
+                    title={item.type.toUpperCase()}
+                  >
+                    {item.type === "mission" ? (
+                      <Target className="w-3.5 h-3.5 stroke-[2.2]" />
+                    ) : item.type === "tuition" ? (
+                      <GraduationCap className="w-3.5 h-3.5" />
+                    ) : (
+                      <BookOpen className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      {/* Time in 12h format */}
+                      <span className="text-xs font-mono text-spy-muted flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-spy-dim" />
+                        {item.timeDisplay}
+                      </span>
+
+                      {/* Category Chip */}
+                      {item.categoryName && (
+                        <span
+                          className={`text-[11px] px-2 py-0.5 rounded-[3px] border font-medium inline-flex items-center gap-1.5 ${catTheme.chipClass}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${catTheme.dotClass}`} />
+                          {item.categoryName}
+                        </span>
+                      )}
+
+                      {/* Overdue alert */}
+                      {item.isOverdue && (
+                        <span className="rubber-stamp rubber-stamp-red text-[10px]">
+                          Overdue
+                        </span>
+                      )}
+
+                      {item.room && (
+                        <span className="text-[11px] font-mono text-spy-dim">
+                          Room {item.room}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Title */}
+                    <div
+                      className={`text-sm font-medium text-spy-text truncate ${
+                        item.isCompleted ? "line-through text-spy-dim" : ""
+                      }`}
+                    >
+                      {item.title}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Action Button (Missions get Accomplish button) */}
+                <div className="shrink-0">
+                  {item.type === "mission" && item.missionObj && !item.isCompleted && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => onCompleteMission(item.missionObj!)}
+                    >
+                      <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span className="hidden sm:inline">Accomplish</span>
+                    </Button>
+                  )}
+
+                  {item.type === "mission" && item.isCompleted && (
+                    <span className="text-xs font-mono text-spy-dim">Done</span>
+                  )}
+
+                  {item.type !== "mission" && (
+                    <span className="text-xs font-mono text-spy-dim uppercase">
+                      {item.type}
+                    </span>
                   )}
                 </div>
-
-                {/* Content */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    {/* Time in 12h format */}
-                    <span className="text-xs font-mono text-spy-muted flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-spy-dim" />
-                      {item.timeDisplay}
-                    </span>
-
-                    {/* Category Chip */}
-                    {item.categoryName && (
-                      <span className="text-[11px] bg-spy-chipBg border border-spy-chipBorder px-1.5 py-0.5 rounded-[2px] text-spy-chipText font-medium">
-                        {item.categoryName}
-                      </span>
-                    )}
-
-                    {/* Overdue alert */}
-                    {item.isOverdue && (
-                      <span className="rubber-stamp rubber-stamp-red text-[10px]">
-                        Overdue
-                      </span>
-                    )}
-
-                    {item.room && (
-                      <span className="text-[11px] font-mono text-spy-dim">
-                        Room {item.room}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Title */}
-                  <div
-                    className={`text-sm font-medium text-spy-text truncate ${
-                      item.isCompleted ? "line-through text-spy-dim" : ""
-                    }`}
-                  >
-                    {item.title}
-                  </div>
-                </div>
               </div>
-
-              {/* Right Action Button (Missions get Accomplish button) */}
-              <div className="shrink-0">
-                {item.type === "mission" && item.missionObj && !item.isCompleted && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onCompleteMission(item.missionObj!)}
-                  >
-                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                    <span className="hidden sm:inline">Accomplish</span>
-                  </Button>
-                )}
-
-                {item.type === "mission" && item.isCompleted && (
-                  <span className="text-xs font-mono text-spy-dim">Done</span>
-                )}
-
-                {item.type !== "mission" && (
-                  <span className="text-xs font-mono text-spy-dim uppercase">
-                    {item.type}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

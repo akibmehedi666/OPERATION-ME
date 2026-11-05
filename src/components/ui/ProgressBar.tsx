@@ -33,7 +33,8 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   };
 
   const colorStyles = {
-    green: "bg-spy-green",
+    green:
+      "bg-gradient-to-r from-[#1f7a4d] to-[#14b8a6] dark:from-spy-green dark:to-spy-green dark:bg-spy-green",
     amber: "bg-spy-amber",
     red: "bg-spy-red",
   };

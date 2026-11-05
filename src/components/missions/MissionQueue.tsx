@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Search, ChevronDown, ArrowUpDown } from "lucide-react";
 import { Mission, Category, Priority } from "@/types/database";
 import { MissionCard } from "@/components/ui/MissionCard";
+import { getCategoryTheme } from "@/lib/categoryTheme";
 
 interface MissionQueueProps {
   missions: Mission[];
@@ -241,14 +242,15 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-1">
           {CATEGORY_CHIPS.map((chip) => {
             const isSelected = selectedChip === chip.key;
+            const catTheme = getCategoryTheme(chip.key === "all" ? null : chip.key);
             return (
               <button
                 key={chip.key}
                 onClick={() => setSelectedChip(chip.key)}
-                className={`px-2.5 py-1 text-xs font-mono rounded-[3px] transition-colors border shrink-0 ${
+                className={`px-2.5 py-1 text-xs font-mono rounded-[3px] transition-all border shrink-0 ${
                   isSelected
-                    ? "bg-spy-green/10 text-spy-green border-spy-green/40 font-semibold"
-                    : "bg-spy-surface2 text-spy-muted border-spy-border hover:text-spy-text"
+                    ? catTheme.filterChipActiveClass
+                    : "bg-[#fffdf8] text-[#6b6a63] border-[#ddd6c8] hover:text-[#1f2421] dark:bg-spy-surface2 dark:text-spy-muted dark:border-spy-border dark:hover:text-spy-text"
                 }`}
               >
                 {chip.label}

@@ -21,6 +21,7 @@ import {
   formatTime12, 
   formatDateWithDay 
 } from "@/lib/formatters";
+import { getCategoryTheme } from "@/lib/categoryTheme";
 
 interface HistoryViewProps {
   missions: Mission[];
@@ -119,7 +120,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay();
 
-    const completionCountMap: Record<string, number> = {};
+    const completionMap: Record<string, { count: number; xp: number }> = {};
     allCompleted.forEach((m) => {
       const d = new Date(m.completed_at!);
       if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
@@ -127,14 +128,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         const mm = String(d.getMonth() + 1).padStart(2, "0");
         const dd = String(d.getDate()).padStart(2, "0");
         const key = `${yyyy}-${mm}-${dd}`;
-        completionCountMap[key] = (completionCountMap[key] || 0) + 1;
+        const prev = completionMap[key] || { count: 0, xp: 0 };
+        completionMap[key] = {
+          count: prev.count + 1,
+          xp: prev.xp + (m.xp || 50),
+        };
       }
     });
 
     return {
       daysInMonth,
       firstDayOfWeek,
-      completionCountMap,
+      completionMap,
     };
   }, [currentYear, currentMonth, allCompleted]);
 
@@ -295,60 +300,64 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 1. TOP SUMMARY STATS ROW */}
+      {/* 1. TOP SUMMARY STATS ROW (Blue, Purple, Orange, Gold) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="clean-card p-4 flex items-center justify-between">
+        {/* This Week (Blue) */}
+        <div className="clean-card p-4 flex items-center justify-between bg-[#eef4fd] border-[#d0e1f9] dark:bg-spy-surface dark:border-spy-border">
           <div>
-            <div className="text-xs font-mono uppercase tracking-wider text-spy-muted">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#1d4f9f] dark:text-spy-muted">
               This Week
             </div>
-            <div className="text-lg font-mono font-bold text-spy-text mt-0.5">
+            <div className="text-lg font-mono font-bold text-[#1d4f9f] dark:text-spy-text mt-0.5">
               {summaryStats.thisWeek} done
             </div>
           </div>
-          <div className="p-2 bg-spy-surface2 border border-spy-border rounded-[4px] text-spy-green">
+          <div className="p-2 bg-[#e4eefc] border border-[#c6ddf9] rounded-[4px] text-[#1d4f9f] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-green">
             <CheckCircle2 className="w-4 h-4 stroke-[2.2]" />
           </div>
         </div>
 
-        <div className="clean-card p-4 flex items-center justify-between">
+        {/* This Month (Purple) */}
+        <div className="clean-card p-4 flex items-center justify-between bg-[#f6f0fb] border-[#e3d4f5] dark:bg-spy-surface dark:border-spy-border">
           <div>
-            <div className="text-xs font-mono uppercase tracking-wider text-spy-muted">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#6b2fa0] dark:text-spy-muted">
               This Month
             </div>
-            <div className="text-lg font-mono font-bold text-spy-text mt-0.5">
+            <div className="text-lg font-mono font-bold text-[#6b2fa0] dark:text-spy-text mt-0.5">
               {summaryStats.thisMonth} done
             </div>
           </div>
-          <div className="p-2 bg-spy-surface2 border border-spy-border rounded-[4px] text-spy-text">
+          <div className="p-2 bg-[#f0e6fa] border border-[#dfcbf5] rounded-[4px] text-[#6b2fa0] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-text">
             <CalendarIcon className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="clean-card p-4 flex items-center justify-between">
+        {/* Best Streak (Orange) */}
+        <div className="clean-card p-4 flex items-center justify-between bg-[#fdf2ea] border-[#fcd7c0] dark:bg-spy-surface dark:border-spy-border">
           <div>
-            <div className="text-xs font-mono uppercase tracking-wider text-spy-muted">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#a8500f] dark:text-spy-muted">
               Best Streak
             </div>
-            <div className="text-lg font-mono font-bold text-spy-amber mt-0.5">
+            <div className="text-lg font-mono font-bold text-[#a8500f] dark:text-spy-amber mt-0.5">
               {summaryStats.bestStreak} days
             </div>
           </div>
-          <div className="p-2 bg-spy-surface2 border border-spy-border rounded-[4px] text-spy-amber">
+          <div className="p-2 bg-[#fdeadb] border border-[#facfb7] rounded-[4px] text-[#a8500f] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-amber">
             <Flame className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="clean-card p-4 flex items-center justify-between">
+        {/* Top Category (Gold) */}
+        <div className="clean-card p-4 flex items-center justify-between bg-[#fcf7e6] border-[#f6e9b8] dark:bg-spy-surface dark:border-spy-border">
           <div className="min-w-0 pr-2">
-            <div className="text-xs font-mono uppercase tracking-wider text-spy-muted">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#8a6a00] dark:text-spy-muted">
               Top Category
             </div>
-            <div className="text-sm font-mono font-bold text-spy-text mt-0.5 truncate">
+            <div className="text-sm font-mono font-bold text-[#8a6a00] dark:text-spy-text mt-0.5 truncate">
               {summaryStats.mostActiveCat}
             </div>
           </div>
-          <div className="p-2 bg-spy-surface2 border border-spy-border rounded-[4px] text-spy-amber shrink-0">
+          <div className="p-2 bg-[#fbf3cc] border border-[#f5e499] rounded-[4px] text-[#8a6a00] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-amber shrink-0">
             <Trophy className="w-4 h-4" />
           </div>
         </div>
@@ -405,17 +414,33 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             const mm = String(currentMonth + 1).padStart(2, "0");
             const dd = String(dayNum).padStart(2, "0");
             const dateKey = `${yyyy}-${mm}-${dd}`;
-            const count = calendarData.completionCountMap[dateKey] || 0;
+            const dayData = calendarData.completionMap[dateKey] || { count: 0, xp: 0 };
+            const count = dayData.count;
+            const xp = dayData.xp;
             const isSelected = selectedDayFilter === dateKey;
             const isToday =
               now.getFullYear() === currentYear &&
               now.getMonth() === currentMonth &&
               now.getDate() === dayNum;
 
+            const getHeatmapColorClass = () => {
+              if (count >= 4) {
+                return "bg-[#1f7a4d] border-[#18633e] text-white dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-green";
+              }
+              if (count >= 2) {
+                return "bg-[#8fceaa] border-[#6fb98f] text-[#1f2421] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-text";
+              }
+              if (count === 1) {
+                return "bg-[#cfe8d8] border-[#a9d7b9] text-[#1f2421] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-text";
+              }
+              return "bg-spy-surface border-spy-border text-spy-muted hover:border-spy-borderLight dark:bg-spy-surface dark:border-spy-border";
+            };
+
             return (
               <button
                 key={dateKey}
                 type="button"
+                title={count > 0 ? `${count} completed - ${xp} XP` : "No missions completed"}
                 onClick={() => {
                   if (isSelected) {
                     setSelectedDayFilter(null);
@@ -423,21 +448,21 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     setSelectedDayFilter(dateKey);
                   }
                 }}
-                className={`h-10 sm:h-12 rounded-[4px] p-1.5 text-left border flex flex-col justify-between transition-colors relative group ${
-                  isSelected
-                    ? "border-spy-green bg-spy-greenMuted"
-                    : count > 0
-                    ? "bg-spy-surface2 border-spy-border hover:border-spy-green"
-                    : "bg-spy-surface border-spy-border hover:border-spy-borderLight"
-                }`}
+                className={`h-11 sm:h-13 rounded-[4px] p-1.5 text-left border flex flex-col justify-between transition-all relative group ${getHeatmapColorClass()} ${
+                  isToday
+                    ? "ring-2 ring-[#1f7a4d] dark:ring-spy-green ring-offset-1 ring-offset-spy-surface z-10 font-bold"
+                    : ""
+                } ${isSelected ? "ring-2 ring-[#1d4f9f] shadow-sm" : ""}`}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between w-full">
                   <span
                     className={`text-xs font-mono ${
-                      isToday
-                        ? "text-spy-green font-bold underline"
-                        : isSelected
-                        ? "text-spy-text font-bold"
+                      count >= 4
+                        ? "text-white font-bold"
+                        : isToday
+                        ? "text-[#14663a] dark:text-spy-green font-bold underline"
+                        : count > 0
+                        ? "text-[#1f2421] dark:text-spy-text font-bold"
                         : "text-spy-muted"
                     }`}
                   >
@@ -445,27 +470,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   </span>
 
                   {count > 0 && (
-                    <span className="text-[10px] font-mono text-spy-muted font-medium">
+                    <span
+                      className={`text-[10px] font-mono font-semibold ${
+                        count >= 4 ? "text-white/90" : "text-[#14663a] dark:text-spy-green"
+                      }`}
+                    >
                       {count}
                     </span>
                   )}
                 </div>
 
-                {/* Light/Dark Heatmap Activity Indicator */}
                 {count > 0 ? (
-                  <div className="flex items-center gap-1">
-                    <span
-                      className={`h-1.5 rounded-full inline-block ${
-                        count >= 3
-                          ? "w-4 bg-spy-green"
-                          : count === 2
-                          ? "w-3 bg-spy-green/75"
-                          : "w-2 bg-spy-green/45"
-                      }`}
-                    />
+                  <div
+                    className={`text-[9px] font-mono truncate ${
+                      count >= 4 ? "text-white/80" : "text-[#14663a] dark:text-spy-dim"
+                    }`}
+                  >
+                    +{xp} XP
                   </div>
                 ) : (
-                  <div className="h-1.5" />
+                  <div className="h-2" />
                 )}
               </button>
             );
@@ -538,14 +562,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-1">
           {CATEGORY_CHIPS.map((chip) => {
             const isSelected = categoryChip === chip.key;
+            const catTheme = getCategoryTheme(chip.key === "all" ? null : chip.key);
             return (
               <button
                 key={chip.key}
                 onClick={() => setCategoryChip(chip.key)}
-                className={`px-2.5 py-1 text-xs font-mono rounded-[3px] transition-colors border shrink-0 ${
+                className={`px-2.5 py-1 text-xs font-mono rounded-[3px] transition-all border shrink-0 ${
                   isSelected
-                    ? "bg-spy-greenMuted text-spy-green border-spy-green font-semibold"
-                    : "bg-spy-chipBg text-spy-chipText border-spy-chipBorder hover:border-spy-borderLight"
+                    ? catTheme.filterChipActiveClass
+                    : "bg-[#fffdf8] text-[#6b6a63] border-[#ddd6c8] hover:text-[#1f2421] dark:bg-spy-chipBg dark:text-spy-chipText dark:border-spy-chipBorder dark:hover:border-spy-borderLight"
                 }`}
               >
                 {chip.label}
@@ -580,6 +605,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <div className="space-y-2.5">
               {group.items.map((mission) => {
                 const category = categories.find((c) => c.id === mission.category_id);
+                const catTheme = getCategoryTheme(category?.name || category?.codename);
                 const isLate =
                   mission.deadline &&
                   mission.completed_at &&
@@ -588,10 +614,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 return (
                   <div
                     key={mission.id}
-                    className={`clean-card p-3.5 sm:p-4 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${getPriorityBorderClass(
+                    className={`clean-card p-3.5 sm:p-4 transition-colors flex items-center justify-between gap-3 ${getPriorityBorderClass(
                       mission.priority
                     )}`}
                   >
+                    {/* Icon tile taking category color */}
+                    <div
+                      className={`p-2 rounded-[4px] border shrink-0 ${catTheme.iconTileClass}`}
+                      title={category?.name || "Completed"}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.2]" />
+                    </div>
+
                     {/* Left Details: Time + Title + Category + Late Tag + Completion Note */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -603,8 +637,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                         {/* Category Chip */}
                         {category && (
-                          <span className="text-[11px] bg-spy-chipBg text-spy-chipText border border-spy-chipBorder px-1.5 py-0.5 rounded-[2px] inline-flex items-center gap-1.5 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-spy-muted" />
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-[3px] border inline-flex items-center gap-1.5 font-medium ${catTheme.chipClass}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${catTheme.dotClass}`} />
                             {category.name}
                           </span>
                         )}

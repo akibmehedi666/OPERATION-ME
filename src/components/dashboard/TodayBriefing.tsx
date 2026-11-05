@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ClassScheduleItem, DayOfWeek } from "@/types/database";
 import { formatTimeRange12, formatCountdown, formatDate } from "@/lib/formatters";
+import { getCategoryTheme } from "@/lib/categoryTheme";
 
 interface TodayBriefingProps {
   schedule: ClassScheduleItem[];
@@ -178,6 +179,8 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
           <div className="space-y-2.5">
             {daySchedule.map((item) => {
               const status = getEventStatus(item);
+              const catTheme = getCategoryTheme(item.type === "tuition" ? "tuition" : item.course_name);
+
               return (
                 <div
                   key={item.id}
@@ -190,11 +193,11 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-1.5 bg-spy-surface border border-spy-border rounded-[3px] text-spy-muted shrink-0">
+                    <div className={`p-2 rounded-[4px] border shrink-0 ${catTheme.iconTileClass}`}>
                       {item.type === "tuition" ? (
-                        <GraduationCap className="w-4 h-4 text-spy-amber" />
+                        <GraduationCap className="w-3.5 h-3.5" />
                       ) : (
-                        <BookOpen className="w-4 h-4 text-spy-text" />
+                        <BookOpen className="w-3.5 h-3.5" />
                       )}
                     </div>
 

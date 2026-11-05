@@ -238,14 +238,14 @@ export default function Home() {
           onLogout={logout}
         />
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs (Active tab: green underline + green tinted background pill) */}
         <div className="flex items-center gap-2 mb-6 border-b border-spy-border pb-1">
           <button
             onClick={() => setActiveTab("dashboard")}
-            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] ${
+            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-all border-b-2 -mb-[5px] rounded-t-[4px] ${
               activeTab === "dashboard"
-                ? "text-spy-green border-spy-green font-bold"
-                : "text-spy-muted border-transparent hover:text-spy-text"
+                ? "bg-[#dcf3e4] text-[#14663a] border-[#1f7a4d] font-bold shadow-xs dark:bg-transparent dark:text-spy-green dark:border-spy-green"
+                : "text-spy-muted border-transparent hover:text-spy-text hover:bg-spy-surface2"
             }`}
           >
             Dashboard
@@ -253,28 +253,40 @@ export default function Home() {
 
           <button
             onClick={() => setActiveTab("missions")}
-            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] flex items-center gap-1.5 ${
+            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-all border-b-2 -mb-[5px] rounded-t-[4px] flex items-center gap-1.5 ${
               activeTab === "missions"
-                ? "text-spy-green border-spy-green font-bold"
-                : "text-spy-muted border-transparent hover:text-spy-text"
+                ? "bg-[#dcf3e4] text-[#14663a] border-[#1f7a4d] font-bold shadow-xs dark:bg-transparent dark:text-spy-green dark:border-spy-green"
+                : "text-spy-muted border-transparent hover:text-spy-text hover:bg-spy-surface2"
             }`}
           >
             <span>Missions</span>
-            <span className="text-[11px] bg-spy-surface2 border border-spy-border px-1.5 py-0.5 rounded-[2px] text-spy-muted">
+            <span
+              className={`text-[11px] px-1.5 py-0.5 rounded-[2px] border ${
+                activeTab === "missions"
+                  ? "bg-[#c5e9d0] text-[#14663a] border-[#a4dab3] dark:bg-spy-surface2 dark:text-spy-muted dark:border-spy-border"
+                  : "bg-spy-surface2 border-spy-border text-spy-muted"
+              }`}
+            >
               {missions.length}
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab("history")}
-            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] flex items-center gap-1.5 ${
+            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-all border-b-2 -mb-[5px] rounded-t-[4px] flex items-center gap-1.5 ${
               activeTab === "history"
-                ? "text-spy-green border-spy-green font-bold"
-                : "text-spy-muted border-transparent hover:text-spy-text"
+                ? "bg-[#dcf3e4] text-[#14663a] border-[#1f7a4d] font-bold shadow-xs dark:bg-transparent dark:text-spy-green dark:border-spy-green"
+                : "text-spy-muted border-transparent hover:text-spy-text hover:bg-spy-surface2"
             }`}
           >
             <span>History</span>
-            <span className="text-[11px] bg-spy-surface2 border border-spy-border px-1.5 py-0.5 rounded-[2px] text-spy-muted">
+            <span
+              className={`text-[11px] px-1.5 py-0.5 rounded-[2px] border ${
+                activeTab === "history"
+                  ? "bg-[#c5e9d0] text-[#14663a] border-[#a4dab3] dark:bg-spy-surface2 dark:text-spy-muted dark:border-spy-border"
+                  : "bg-spy-surface2 border-spy-border text-spy-muted"
+              }`}
+            >
               {missions.filter((m) => m.status === "completed").length}
             </span>
           </button>
