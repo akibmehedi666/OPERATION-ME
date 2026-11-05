@@ -10,6 +10,7 @@ import { TodayBriefing } from "@/components/dashboard/TodayBriefing";
 import { TodayPlanTimeline } from "@/components/dashboard/TodayPlanTimeline";
 import { MissionCard } from "@/components/ui/MissionCard";
 import { MissionQueue } from "@/components/missions/MissionQueue";
+import { HistoryView } from "@/components/history/HistoryView";
 import { MissionModal } from "@/components/missions/MissionModal";
 import { MissionCelebration } from "@/components/missions/MissionCelebration";
 import { Button } from "@/components/ui/Button";
@@ -36,7 +37,7 @@ export default function Home() {
     completeMission,
   } = useAgencyState();
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "missions">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "missions" | "history">("dashboard");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
 
@@ -177,6 +178,20 @@ export default function Home() {
               {missions.length}
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] flex items-center gap-1.5 ${
+              activeTab === "history"
+                ? "text-spy-green border-spy-green font-bold"
+                : "text-slate-400 border-transparent hover:text-slate-200"
+            }`}
+          >
+            <span>History</span>
+            <span className="text-[11px] bg-[#141d18] border border-spy-border px-1.5 py-0.2 rounded-[2px] text-slate-400">
+              {missions.filter((m) => m.status === "completed").length}
+            </span>
+          </button>
         </div>
 
         {/* ================= DASHBOARD TAB ================= */}
@@ -286,6 +301,17 @@ export default function Home() {
               onEdit={handleOpenEdit}
               onDelete={handleDelete}
               onSetActive={setActiveMission}
+            />
+          </div>
+        )}
+
+        {/* ================= HISTORY TAB ================= */}
+        {activeTab === "history" && (
+          <div>
+            <HistoryView
+              missions={missions}
+              categories={categories}
+              streak={streak}
             />
           </div>
         )}

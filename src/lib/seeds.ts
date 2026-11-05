@@ -207,6 +207,45 @@ export const INITIAL_STARTER_MISSIONS: Mission[] = [
     status: "locked",
     xp: 30,
     created_at: new Date(Date.now() - 100000).toISOString(),
+  },
+  {
+    id: "m-006",
+    title: "Configure Operating Systems xv6 Kernel Build Environment",
+    codename: "OP-KERNEL-INIT",
+    category_id: "cat-1",
+    priority: "urgent",
+    deadline: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+    completed_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString(), // Completed today
+    notes: "Verified RISC-V cross-compilation toolchain on development machine.",
+    status: "completed",
+    xp: 50,
+    created_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: "m-007",
+    title: "Submit Economics Assignment Problem Set 1",
+    codename: "OP-ECON-01",
+    category_id: "cat-3",
+    priority: "medium",
+    deadline: new Date(Date.now() - 26 * 3600 * 1000).toISOString(),
+    completed_at: new Date(Date.now() - 28 * 3600 * 1000).toISOString(), // Completed yesterday
+    notes: "Macroeconomic inflation modeling and monetary policy analysis.",
+    status: "completed",
+    xp: 40,
+    created_at: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: "m-008",
+    title: "Read Transformer Attention Recon Paper",
+    codename: "OP-PAPER-ATTN",
+    category_id: "cat-9",
+    priority: "high",
+    deadline: new Date(Date.now() - 4 * 86400 * 1000).toISOString(),
+    completed_at: new Date(Date.now() - (3 * 86400) * 1000).toISOString(), // Completed late after deadline
+    notes: "Deep dive into multi-head self-attention mechanisms and query-key-value vectors.",
+    status: "completed",
+    xp: 60,
+    created_at: new Date(Date.now() - 6 * 86400 * 1000).toISOString(),
   }
 ];
 

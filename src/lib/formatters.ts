@@ -25,7 +25,7 @@ export function formatTime12(input: string | Date | null | undefined): string {
 
     const ampm = hours >= 12 ? "PM" : "AM";
     hours = hours % 12;
-    if (hours === 0) hours = 12; // 0:00 -> 12:00 AM, 12:00 -> 12:00 PM
+    if (hours === 0) hours = 12;
     return `${hours}:${minutes.padStart(2, "0")} ${ampm}`;
   }
 
@@ -65,6 +65,24 @@ export function formatDate(input: string | Date | null | undefined): string {
       day: "numeric",
       year: "numeric",
     });
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Formats a date with day of week as "Thu, Nov 5, 2026"
+ */
+export function formatDateWithDay(input: string | Date | null | undefined): string {
+  if (!input) return "";
+  try {
+    const d = input instanceof Date ? input : new Date(input);
+    if (isNaN(d.getTime())) return "";
+    const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
+    const month = d.toLocaleDateString("en-US", { month: "short" });
+    const day = d.getDate();
+    const year = d.getFullYear();
+    return `${weekday}, ${month} ${day}, ${year}`;
   } catch {
     return "";
   }
