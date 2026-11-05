@@ -3,25 +3,132 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #06080c;
+  --foreground: #e2e8f0;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  overflow-x: hidden;
+  min-height: 100vh;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+/* Subtle Tactical Grid Overlay */
+.tactical-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+}
+
+.tactical-grid-green {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, rgba(0, 255, 102, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 255, 102, 0.04) 1px, transparent 1px);
+}
+
+/* CRT Scanline Filter */
+.scanlines {
+  position: relative;
+}
+.scanlines::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+              linear-gradient(90deg, rgba(255, 0, 0, 0.015), rgba(0, 255, 0, 0.008), rgba(0, 0, 255, 0.015));
+  z-index: 99;
+  background-size: 100% 3px, 6px 100%;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+/* Tactical Corner Accents */
+.tactical-card {
+  position: relative;
+  background: #0c1117;
+  border: 1px solid #1e293b;
+}
+
+.tactical-card::before,
+.tactical-card::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}
+
+.tactical-card::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid #00ff66;
+  border-left: 2px solid #00ff66;
+}
+
+.tactical-card::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid #00ff66;
+  border-right: 2px solid #00ff66;
+}
+
+/* Amber tactical corners */
+.tactical-card-amber::before {
+  border-color: #ffb700;
+}
+.tactical-card-amber::after {
+  border-color: #ffb700;
+}
+
+/* Red tactical corners */
+.tactical-card-red::before {
+  border-color: #ff2a44;
+}
+.tactical-card-red::after {
+  border-color: #ff2a44;
+}
+
+/* Custom Tactical Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #06080c;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00ff66;
+}
+
+/* Glow Utilities */
+.text-glow-green {
+  text-shadow: 0 0 8px rgba(0, 255, 102, 0.6);
+}
+.text-glow-amber {
+  text-shadow: 0 0 8px rgba(255, 183, 0, 0.6);
+}
+.text-glow-red {
+  text-shadow: 0 0 8px rgba(255, 42, 68, 0.7);
+}
+
+/* Stamp Effect */
+.classified-stamp {
+  font-family: var(--font-jetbrains), monospace;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border: 2px solid currentColor;
+  mask-image: radial-gradient(circle, rgba(0,0,0,1) 85%, rgba(0,0,0,0.7) 100%);
+  position: relative;
 }
