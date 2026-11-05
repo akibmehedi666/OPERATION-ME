@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Share_Tech_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -8,16 +14,9 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-const shareTechMono = Share_Tech_Mono({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-share-tech",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   title: "OPERATION: ME // AGENT AKIB",
-  description: "Tactical Classified Task Tracker for Agent Akib",
+  description: "Personal tactical task tracker for Agent Akib",
 };
 
 export default function RootLayout({
@@ -28,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${jetbrainsMono.variable} ${shareTechMono.variable} font-mono bg-spy-bg text-spy-text antialiased min-h-screen selection:bg-spy-green selection:text-black scanlines`}
+        className={`${inter.variable} ${jetbrainsMono.variable} font-sans bg-[#0b0f0d] text-[#e2e8f0] antialiased min-h-screen selection:bg-spy-green selection:text-black`}
       >
         {children}
       </body>

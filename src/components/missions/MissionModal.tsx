@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ShieldAlert, Sparkles, Wand2, Calendar, FileText } from "lucide-react";
+import { X, Wand2 } from "lucide-react";
 import { Mission, Category, Priority } from "@/types/database";
 import { Button } from "@/components/ui/Button";
 
@@ -56,13 +56,11 @@ export const MissionModal: React.FC<MissionModalProps> = ({
       setXp(editingMission.xp || 50);
       setStatus(editingMission.status === "completed" ? "active" : (editingMission.status as "active" | "locked"));
     } else {
-      // Defaults for new mission
       setTitle("");
       generateCodename();
       setCategoryId(categories[0]?.id || "");
       setPriority("medium");
-      
-      // Default deadline to tomorrow 23:59
+
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const yyyy = tomorrow.getFullYear();
@@ -70,7 +68,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
       const dd = String(tomorrow.getDate()).padStart(2, "0");
       setDeadlineDate(`${yyyy}-${mm}-${dd}`);
       setDeadlineTime("23:59");
-      
+
       setNotes("");
       setXp(50);
       setStatus("active");
@@ -112,53 +110,52 @@ export const MissionModal: React.FC<MissionModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="relative w-full max-w-lg bg-spy-surface border-2 border-spy-border tactical-card p-6 font-mono text-spy-text max-h-[90vh] overflow-y-auto"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="relative w-full max-w-lg bg-[#111714] border border-spy-border rounded-[6px] p-6 text-slate-200 max-h-[90vh] overflow-y-auto"
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-spy-border mb-4">
-            <div className="flex items-center gap-2 text-spy-green font-bold text-sm tracking-wider">
-              <ShieldAlert className="w-4 h-4 text-spy-green" />
-              <span>{editingMission ? "MODIFY DIRECTIVE" : "AUTHORIZE NEW MISSION"}</span>
-            </div>
+            <span className="font-mono text-sm font-semibold text-slate-100">
+              {editingMission ? "EDIT MISSION" : "NEW MISSION"}
+            </span>
             <button
               onClick={onClose}
-              className="p-1 text-slate-400 hover:text-spy-red transition-colors"
+              className="text-slate-400 hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
             {/* Title */}
             <div>
-              <label className="block text-spy-dim uppercase tracking-wider mb-1 font-semibold">
-                Objective Title <span className="text-spy-green">*</span>
+              <label className="block text-slate-400 mb-1 font-medium">
+                Title <span className="text-spy-green">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Implement Operating Systems Page Replacement Algo"
-                className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-text focus:outline-none focus:border-spy-green text-sm"
+                placeholder="e.g. Implement OS Page Replacement"
+                className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
               />
             </div>
 
             {/* Codename Generator */}
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="block text-spy-dim uppercase tracking-wider font-semibold">
+                <label className="block text-slate-400 font-medium">
                   Codename
                 </label>
                 <button
                   type="button"
                   onClick={generateCodename}
-                  className="flex items-center gap-1 text-[11px] text-spy-green hover:underline"
+                  className="flex items-center gap-1 text-[11px] font-mono text-spy-green hover:underline"
                 >
                   <Wand2 className="w-3 h-3" />
                   <span>Randomize</span>
@@ -169,23 +166,23 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                 value={codename}
                 onChange={(e) => setCodename(e.target.value.toUpperCase())}
                 placeholder="OP-SHADOW-01"
-                className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-green font-bold tracking-widest focus:outline-none focus:border-spy-green uppercase text-sm"
+                className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs font-mono font-medium text-slate-200 focus:outline-none focus:border-spy-borderLight uppercase rounded-[3px]"
               />
             </div>
 
             {/* Category & Priority Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-spy-dim uppercase tracking-wider mb-1 font-semibold">
-                  Department / Category
+                <label className="block text-slate-400 mb-1 font-medium">
+                  Category
                 </label>
                 <select
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
-                  className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-text focus:outline-none focus:border-spy-green"
+                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
                 >
                   {categories.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-slate-900">
+                    <option key={c.id} value={c.id} className="bg-[#111714]">
                       {c.name}
                     </option>
                   ))}
@@ -193,25 +190,25 @@ export const MissionModal: React.FC<MissionModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-spy-dim uppercase tracking-wider mb-1 font-semibold">
-                  Threat Level / Priority
+                <label className="block text-slate-400 mb-1 font-medium">
+                  Priority
                 </label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as Priority)}
-                  className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-text focus:outline-none focus:border-spy-green"
+                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
                 >
-                  <option value="urgent" className="bg-slate-900 text-red-400">
-                    URGENT (OMEGA)
+                  <option value="urgent" className="bg-[#111714]">
+                    Urgent (Red)
                   </option>
-                  <option value="high" className="bg-slate-900 text-amber-400">
-                    HIGH (ALPHA)
+                  <option value="high" className="bg-[#111714]">
+                    High (Amber)
                   </option>
-                  <option value="medium" className="bg-slate-900 text-sky-400">
-                    MEDIUM (BRAVO)
+                  <option value="medium" className="bg-[#111714]">
+                    Medium (Green)
                   </option>
-                  <option value="low" className="bg-slate-900 text-slate-400">
-                    LOW (CHARLIE)
+                  <option value="low" className="bg-[#111714]">
+                    Low (Normal)
                   </option>
                 </select>
               </div>
@@ -219,22 +216,21 @@ export const MissionModal: React.FC<MissionModalProps> = ({
 
             {/* Deadline Date & Time */}
             <div>
-              <label className="block text-spy-dim uppercase tracking-wider mb-1 font-semibold flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-spy-green" />
-                <span>Target Deadline (Cutoff Time)</span>
+              <label className="block text-slate-400 mb-1 font-medium">
+                Deadline
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <input
                   type="date"
                   value={deadlineDate}
                   onChange={(e) => setDeadlineDate(e.target.value)}
-                  className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-text focus:outline-none focus:border-spy-green"
+                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
                 />
                 <input
                   type="time"
                   value={deadlineTime}
                   onChange={(e) => setDeadlineTime(e.target.value)}
-                  className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-text focus:outline-none focus:border-spy-green"
+                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
                 />
               </div>
             </div>
@@ -242,9 +238,8 @@ export const MissionModal: React.FC<MissionModalProps> = ({
             {/* XP and Initial Status */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-spy-dim uppercase tracking-wider mb-1 font-semibold flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-spy-amber" />
-                  <span>XP Bounty</span>
+                <label className="block text-slate-400 mb-1 font-medium">
+                  XP Bounty
                 </label>
                 <input
                   type="number"
@@ -253,51 +248,50 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                   step="5"
                   value={xp}
                   onChange={(e) => setXp(Number(e.target.value))}
-                  className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-amber font-bold focus:outline-none focus:border-spy-green"
+                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
                 />
               </div>
 
               <div>
-                <label className="block text-spy-dim uppercase tracking-wider mb-1 font-semibold">
-                  Queue Status
+                <label className="block text-slate-400 mb-1 font-medium">
+                  Initial Status
                 </label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as "active" | "locked")}
-                  className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-text focus:outline-none focus:border-spy-green"
+                  className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
                 >
-                  <option value="active" className="bg-slate-900 text-spy-green">
-                    ACTIVE DIRECTIVE
+                  <option value="active" className="bg-[#111714]">
+                    Active
                   </option>
-                  <option value="locked" className="bg-slate-900 text-slate-400">
-                    QUEUED (STANDBY)
+                  <option value="locked" className="bg-[#111714]">
+                    Queued
                   </option>
                 </select>
               </div>
             </div>
 
-            {/* Tactical Notes / Intel */}
+            {/* Notes */}
             <div>
-              <label className="block text-spy-dim uppercase tracking-wider mb-1 font-semibold flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5 text-spy-green" />
-                <span>Tactical Briefing / Intel Notes</span>
+              <label className="block text-slate-400 mb-1 font-medium">
+                Notes
               </label>
               <textarea
                 rows={3}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Key directives, reference links, specific chapter problems, or requirements..."
-                className="w-full bg-black/60 border border-spy-border px-3 py-2 text-spy-text focus:outline-none focus:border-spy-green"
+                placeholder="Brief instructions, references, or links..."
+                className="w-full bg-[#141d18] border border-spy-border px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
               />
             </div>
 
             {/* Submit / Cancel Buttons */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-spy-border">
               <Button type="button" variant="stealth" size="sm" onClick={onClose}>
-                DISMISS
+                Cancel
               </Button>
               <Button type="submit" variant="primary" size="sm">
-                {editingMission ? "UPDATE DIRECTIVE" : "DEPLOY MISSION"}
+                {editingMission ? "Save Changes" : "Create Mission"}
               </Button>
             </div>
           </form>
@@ -306,4 +300,3 @@ export const MissionModal: React.FC<MissionModalProps> = ({
     </AnimatePresence>
   );
 };
-

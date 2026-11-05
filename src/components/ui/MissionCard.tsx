@@ -1,22 +1,17 @@
 "use client";
 
-import React from "react";
-import { motion } from "framer-motion";
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
-  CheckCircle2, 
+  Check, 
   Clock, 
-  AlertTriangle, 
-  Crosshair, 
   Edit3, 
   Trash2, 
-  Sparkles,
-  Radio,
-  FileText
+  ChevronDown, 
+  Crosshair
 } from "lucide-react";
 import { Mission, Category } from "@/types/database";
-import { Badge } from "./Badge";
 import { Button } from "./Button";
-import { StampLabel } from "./StampLabel";
 
 interface MissionCardProps {
   mission: Mission;
@@ -37,195 +32,251 @@ export const MissionCard: React.FC<MissionCardProps> = ({
   onDelete,
   onSetActive,
 }) => {
-  // Check if overdue
+  const [isExpanded, setIsExpanded] = useState(false);
   const now = new Date();
   const deadlineDate = mission.deadline ? new Date(mission.deadline) : null;
   const isOverdue = deadlineDate ? deadlineDate < now && mission.status !== "completed" : false;
   const isCompleted = mission.status === "completed";
-  const isActive = mission.status === "active";
 
-  // Format deadline and relative time
-  const formatDeadline = (date: Date) => {
-    const diffMs = date.getTime() - now.getTime();
+  // Calculate clean due text
+  const getDueText = () => {
+    if (!deadlineDate) return null;
+    const diffMs = deadlineDate.getTime() - now.getTime();
     const diffHours = Math.round(diffMs / (1000 * 60 * 60));
     const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
     if (diffMs < 0) {
       const overdueHours = Math.abs(diffHours);
-      if (overdueHours < 24) return `OVERDUE BY ${overdueHours}h`;
-      return `OVERDUE BY ${Math.abs(diffDays)}d`;
+      if (overdueHours < 24) return `Overdue ${overdueHours}h`;
+      return `Overdue ${Math.abs(diffDays)}d`;
     }
 
-    if (diffHours < 24) return `T-MINUS ${diffHours}h`;
-    return `T-MINUS ${diffDays}d (${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })})`;
+    if (diffHours === 0) return "Due within an hour";
+    if (diffHours < 24) return `Due in ${diffHours}h`;
+    if (diffDays === 1) return "Due tomorrow";
+    return `Due in ${diffDays}d`;
   };
 
-  const priorityVariant =
-    mission.priority === "urgent"
-      ? "urgent"
-      : mission.priority === "high"
-      ? "high"
-      : mission.priority === "medium"
-      ? "medium"
-      : "low";
+  const dueText = getDueText();
 
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.2 }}
-      className={`relative group font-mono border transition-all duration-200 overflow-hidden ${
-        isOverdue
-          ? "tactical-card-red bg-red-950/20 border-spy-red/60 shadow-spy-red"
-          : isHero
-          ? "tactical-card bg-spy-surface border-spy-green/50 shadow-spy-green"
-          : isCompleted
-          ? "bg-spy-bg/60 border-spy-border/50 opacity-60"
-          : "tactical-card bg-spy-surface border-spy-border hover:border-spy-green/40 hover:shadow-hud-card"
-      } ${isHero ? "p-5 sm:p-7" : "p-4 sm:p-5"}`}
-    >
-      {/* Visual scanline flicker highlight on hover */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-spy-green/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
+  // Priority left border styling (small colored left border)
+  const getBorderLeftClass = () => {
+    if (isOverdue) return "border-l-[3px] border-l-spy-red";
+    switch (mission.priority) {
+      case "urgent":
+        return "border-l-[3px] border-l-spy-red";
+      case "high":
+        return "border-l-[3px] border-l-spy-amber";
+      case "medium":
+        return "border-l-[3px] border-l-spy-green";
+      case "low":
+      default:
+        return "border-l-[3px] border-l-slate-700";
+    }
+  };
 
-      {/* Header bar: Codename, Status, Priority */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs sm:text-sm font-black tracking-widest text-spy-green flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 animate-pulse text-spy-green" />
-            [{mission.codename || `TARGET-${mission.id.slice(0, 4)}`}]
-          </span>
-
-          {category && (
-            <span
-              className="text-[10px] sm:text-xs px-2 py-0.5 border uppercase tracking-wider font-semibold"
-              style={{
-                color: category.color || "#00ff66",
-                borderColor: `${category.color}40` || "#00ff6640",
-                backgroundColor: `${category.color}15` || "#00ff6615",
-              }}
-            >
-              {category.name}
+  // If this is the Hero Active Mission card
+  if (isHero) {
+    return (
+      <div className="active-mission-card p-6 transition-all duration-200">
+        {/* Header line: Category + Due Time */}
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-spy-green animate-pulse" />
+            <span className="text-xs font-mono font-medium uppercase tracking-wider text-spy-green">
+              Active Mission
             </span>
-          )}
+            {category && (
+              <span className="text-xs text-slate-400 bg-[#16201b] border border-[#23332a] px-2 py-0.5 rounded-[3px]">
+                {category.name}
+              </span>
+            )}
+          </div>
 
-          <Badge variant={priorityVariant}>
-            {mission.priority === "urgent" ? "OMEGA" : mission.priority}
-          </Badge>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Status badge */}
-          {isOverdue ? (
-            <StampLabel text="FAILING" variant="danger" size="sm" rotate={-3} />
-          ) : isCompleted ? (
-            <Badge variant="completed">ACCOMPLISHED</Badge>
-          ) : isActive ? (
-            <Badge variant="active" pulse>
-              ACTIVE DIRECTIVE
-            </Badge>
-          ) : (
-            <Badge variant="locked">QUEUED</Badge>
-          )}
-
-          {/* XP Reward Indicator */}
-          <span className="flex items-center gap-1 text-[11px] font-bold text-spy-amber bg-spy-amber/10 border border-spy-amber/30 px-2 py-0.5">
-            <Sparkles className="w-3 h-3 text-spy-amber" />
-            +{mission.xp} XP
-          </span>
-        </div>
-      </div>
-
-      {/* Mission Title */}
-      <h3
-        className={`font-mono font-bold tracking-tight text-spy-text mb-2 ${
-          isHero ? "text-lg sm:text-2xl text-glow-green" : "text-base sm:text-lg"
-        } ${isCompleted ? "line-through text-slate-500" : ""}`}
-      >
-        {mission.title}
-      </h3>
-
-      {/* Mission Notes / Tactical Intel */}
-      {mission.notes && (
-        <div className="mb-4 text-xs sm:text-sm text-spy-dim bg-black/40 border-l-2 border-spy-green/60 p-2.5 rounded-none flex items-start gap-2">
-          <FileText className="w-4 h-4 text-spy-green shrink-0 mt-0.5" />
-          <p className="line-clamp-3 whitespace-pre-wrap">{mission.notes}</p>
-        </div>
-      )}
-
-      {/* Footer info: Deadline & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-spy-border/50">
-        <div className="flex items-center gap-2 text-xs">
-          {deadlineDate ? (
+          {dueText && (
             <div
-              className={`flex items-center gap-1.5 font-bold ${
-                isOverdue
-                  ? "text-spy-red text-glow-red animate-pulse"
-                  : "text-spy-dim"
+              className={`flex items-center gap-1 text-xs font-medium ${
+                isOverdue ? "text-spy-red" : "text-slate-400"
               }`}
             >
-              {isOverdue ? (
-                <AlertTriangle className="w-4 h-4 text-spy-red shrink-0" />
-              ) : (
-                <Clock className="w-3.5 h-3.5 text-spy-green shrink-0" />
-              )}
-              <span>{formatDeadline(deadlineDate)}</span>
+              <Clock className="w-3.5 h-3.5" />
+              <span>{dueText}</span>
             </div>
-          ) : (
-            <span className="text-slate-600 text-[11px]">NO DEADLINE SET</span>
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
-          {!isCompleted && onComplete && (
-            <Button
-              variant={isHero ? "primary" : "outline"}
-              size={isHero ? "md" : "sm"}
-              onClick={() => onComplete(mission)}
-              className="group/btn"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 transition-transform group-hover/btn:scale-110" />
-              <span>ACCOMPLISH</span>
-            </Button>
-          )}
+        {/* Title */}
+        <h2 className="text-lg sm:text-xl font-medium text-slate-100 mb-3 leading-snug">
+          {mission.title}
+        </h2>
 
-          {!isActive && !isCompleted && onSetActive && (
-            <Button
-              variant="stealth"
-              size="sm"
-              onClick={() => onSetActive(mission)}
-              title="Promote to Active Mission"
-            >
-              <Crosshair className="w-3.5 h-3.5 text-spy-green" />
-              <span className="hidden sm:inline">SET ACTIVE</span>
-            </Button>
-          )}
+        {/* Notes (visible on hero) */}
+        {mission.notes && (
+          <p className="text-sm text-slate-300 leading-relaxed bg-[#111714] border border-spy-border p-3.5 rounded-[4px] mb-5">
+            {mission.notes}
+          </p>
+        )}
 
-          {onEdit && (
-            <button
-              onClick={() => onEdit(mission)}
-              className="p-1.5 text-slate-400 hover:text-spy-amber hover:bg-spy-amber/10 border border-transparent hover:border-spy-amber/30 transition-colors"
-              title="Edit Mission Directives"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-          )}
+        {/* Footer: Accomplish button + Details toggle */}
+        <div className="flex items-center justify-between gap-3 pt-3 border-t border-spy-border">
+          <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
+            <span>[{mission.codename}]</span>
+            <span className="text-slate-500">+{mission.xp} XP</span>
+          </div>
 
-          {onDelete && (
-            <button
-              onClick={() => onDelete(mission)}
-              className="p-1.5 text-slate-500 hover:text-spy-red hover:bg-spy-red/10 border border-transparent hover:border-spy-red/30 transition-colors"
-              title="Abort / Discard Mission"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {onEdit && (
+              <button
+                onClick={() => onEdit(mission)}
+                className="p-2 text-slate-400 hover:text-white border border-transparent hover:border-spy-border rounded-[3px] transition-colors"
+                title="Edit Mission"
+              >
+                <Edit3 className="w-4 h-4" />
+              </button>
+            )}
+
+            {onComplete && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => onComplete(mission)}
+              >
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>Accomplish</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
-    </motion.div>
+    );
+  }
+
+  // Standard Mission Card (Queue & Compact lists)
+  return (
+    <div
+      className={`group clean-card transition-all duration-150 ${getBorderLeftClass()} ${
+        isCompleted ? "opacity-50" : ""
+      }`}
+    >
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Main Info: Title + Category + Due Time */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+              {/* Category (Neutral gray badge) */}
+              {category && (
+                <span className="text-xs text-slate-300 bg-[#16201b] border border-[#23332a] px-2 py-0.5 rounded-[3px] inline-flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                  {category.name}
+                </span>
+              )}
+
+              {/* Due time */}
+              {dueText && (
+                <span
+                  className={`text-xs inline-flex items-center gap-1 ${
+                    isOverdue ? "text-spy-red font-medium" : "text-slate-400"
+                  }`}
+                >
+                  <Clock className="w-3 h-3" />
+                  {dueText}
+                </span>
+              )}
+            </div>
+
+            {/* Title (Clean Sans-Serif, minimum 14px, relaxed line height) */}
+            <h3
+              className={`text-sm sm:text-base font-medium text-slate-100 leading-snug ${
+                isCompleted ? "line-through text-slate-500" : ""
+              }`}
+            >
+              {mission.title}
+            </h3>
+          </div>
+
+          {/* Action Button: Accomplish (Single visible button) */}
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            {!isCompleted && onComplete && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onComplete(mission)}
+              >
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Accomplish</span>
+              </Button>
+            )}
+
+            {/* Details expand toggle (reveals codename, XP, notes, edit/delete) */}
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+              title={isExpanded ? "Hide details" : "Show details"}
+            >
+              <ChevronDown
+                className={`w-4 h-4 transition-transform duration-200 ${
+                  isExpanded ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Revealed details on hover (desktop) or expand (mobile/click) */}
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="pt-3 mt-3 border-t border-spy-border text-xs text-slate-400 space-y-2 overflow-hidden"
+            >
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-400">[{mission.codename}]</span>
+                <span className="text-slate-400">+{mission.xp} XP</span>
+              </div>
+
+              {mission.notes && (
+                <div className="bg-[#0e1411] p-3 rounded-[3px] text-slate-300 leading-relaxed font-sans text-xs">
+                  {mission.notes}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                {onSetActive && mission.status !== "active" && !isCompleted && (
+                  <button
+                    onClick={() => onSetActive(mission)}
+                    className="px-2.5 py-1 text-xs font-mono text-spy-green hover:underline flex items-center gap-1"
+                  >
+                    <Crosshair className="w-3.5 h-3.5" />
+                    Set as Active
+                  </button>
+                )}
+
+                {onEdit && (
+                  <button
+                    onClick={() => onEdit(mission)}
+                    className="p-1.5 text-slate-400 hover:text-white"
+                    title="Edit"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
+                {onDelete && (
+                  <button
+                    onClick={() => onDelete(mission)}
+                    className="p-1.5 text-slate-400 hover:text-spy-red"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 };
-

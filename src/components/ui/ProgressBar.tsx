@@ -12,9 +12,8 @@ export interface ProgressBarProps {
   value: number; // 0 to 100
   label?: string;
   sublabel?: string;
-  variant?: "green" | "amber" | "red" | "cyan";
-  size?: "sm" | "md" | "lg";
-  showSegments?: boolean;
+  variant?: "green" | "amber" | "red";
+  size?: "sm" | "md";
   className?: string;
 }
 
@@ -23,53 +22,43 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   label,
   sublabel,
   variant = "green",
-  size = "md",
-  showSegments = true,
+  size = "sm",
   className,
 }) => {
   const clampedValue = Math.min(100, Math.max(0, value));
 
   const heightStyles = {
     sm: "h-1.5",
-    md: "h-2.5",
-    lg: "h-4",
+    md: "h-2",
   };
 
   const colorStyles = {
-    green: "bg-spy-green shadow-[0_0_10px_rgba(0,255,102,0.5)]",
-    amber: "bg-spy-amber shadow-[0_0_10px_rgba(255,183,0,0.5)]",
-    red: "bg-spy-red shadow-[0_0_10px_rgba(255,42,68,0.5)]",
-    cyan: "bg-spy-cyan shadow-[0_0_10px_rgba(0,240,255,0.5)]",
+    green: "bg-spy-green",
+    amber: "bg-spy-amber",
+    red: "bg-spy-red",
   };
 
   return (
-    <div className={cn("w-full font-mono select-none", className)}>
+    <div className="w-full select-none">
       {(label || sublabel) && (
-        <div className="flex justify-between items-center text-xs tracking-wider uppercase mb-1.5 text-spy-dim">
-          <span className="font-semibold text-spy-text flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 bg-spy-green inline-block" />
-            {label}
-          </span>
-          {sublabel && <span className="text-spy-green font-mono">{sublabel}</span>}
+        <div className="flex justify-between items-center text-xs font-mono tracking-wider uppercase mb-1 text-spy-dim">
+          <span className="font-medium text-slate-300">{label}</span>
+          {sublabel && <span className="text-spy-green">{sublabel}</span>}
         </div>
       )}
 
-      <div className={cn("relative w-full bg-slate-900/90 border border-spy-border overflow-hidden p-[1px]", heightStyles[size])}>
+      <div
+        className={cn(
+          "relative w-full bg-[#141d18] border border-spy-border overflow-hidden rounded-[2px]",
+          heightStyles[size],
+          className
+        )}
+      >
         <div
-          className={cn("h-full transition-all duration-500 ease-out", colorStyles[variant])}
+          className={cn("h-full transition-all duration-300 ease-out", colorStyles[variant])}
           style={{ width: `${clampedValue}%` }}
         />
-
-        {showSegments && (
-          <div
-            className="absolute inset-0 pointer-events-none opacity-20"
-            style={{
-              backgroundImage: "repeating-linear-gradient(90deg, #000, #000 4px, transparent 4px, transparent 8px)",
-            }}
-          />
-        )}
       </div>
     </div>
   );
 };
-

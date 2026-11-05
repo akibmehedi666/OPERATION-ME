@@ -2,16 +2,14 @@
 
 import React, { useState } from "react";
 import { 
-  Crosshair, 
-  Plus, 
-  Radio, 
-  Zap
+  ArrowRight,
+  Plus
 } from "lucide-react";
 import { useAgencyState } from "@/lib/useAgencyState";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { AgentHeader } from "@/components/dashboard/AgentHeader";
 import { TodayBriefing } from "@/components/dashboard/TodayBriefing";
-import { TodayChecklist } from "@/components/dashboard/TodayChecklist";
+import { DueTodayList } from "@/components/dashboard/DueTodayList";
 import { MissionCard } from "@/components/ui/MissionCard";
 import { MissionQueue } from "@/components/missions/MissionQueue";
 import { MissionModal } from "@/components/missions/MissionModal";
@@ -40,6 +38,9 @@ export default function Home() {
     completeMission,
   } = useAgencyState();
 
+  // Tab State: "dashboard" or "missions"
+  const [activeTab, setActiveTab] = useState<"dashboard" | "missions">("dashboard");
+
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
@@ -55,7 +56,6 @@ export default function Home() {
     isOpen: false,
   });
 
-  // Handle Mission Completion with Flow Animation
   const handleComplete = async (mission: Mission) => {
     soundFX.playBlip();
     const result = await completeMission(mission);
@@ -66,32 +66,28 @@ export default function Home() {
     });
   };
 
-  // Open Add modal
   const handleOpenAdd = () => {
     soundFX.playBlip();
     setEditingMission(null);
     setIsModalOpen(true);
   };
 
-  // Open Edit modal
   const handleOpenEdit = (mission: Mission) => {
     soundFX.playBlip();
     setEditingMission(mission);
     setIsModalOpen(true);
   };
 
-  // Handle Delete with confirmation
   const handleDelete = (mission: Mission) => {
     soundFX.playWarning();
     const confirmed = window.confirm(
-      `ABORT MISSION: [${mission.codename}] "${mission.title}"?\nThis directive will be expunged from agency records.`
+      `Delete mission: "${mission.title}"?`
     );
     if (confirmed) {
       deleteMission(mission.id);
     }
   };
 
-  // Handle Save
   const handleSaveMission = (data: Partial<Mission>) => {
     if (editingMission) {
       editMission(data);
@@ -103,16 +99,13 @@ export default function Home() {
   // Loading Screen
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-spy-bg font-mono text-spy-green">
-        <div className="flex flex-col items-center gap-3">
-          <Radio className="w-8 h-8 animate-spin" />
-          <div className="text-xs tracking-widest uppercase">INITIALIZING CLASSIFIED LINK...</div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-[#0b0f0d] font-mono text-slate-400 text-xs">
+        INITIALIZING SECURE SESSION...
       </div>
     );
   }
 
-  // If not authenticated, show themed spy login
+  // If not authenticated, show calm login
   if (!isAuthenticated) {
     return (
       <LoginPage
@@ -123,18 +116,22 @@ export default function Home() {
     );
   }
 
-  // Find the primary active mission for the big hero card
-  // Sort active missions by priority (urgent > high > medium > low)
+  // Find the primary active mission for hero card
   const activeMissions = missions.filter((m) => m.status === "active");
   const heroMission = activeMissions.length > 0 ? activeMissions[0] : null;
   const heroCategory = heroMission
     ? categories.find((c) => c.id === heroMission.category_id)
     : undefined;
 
+  // Next 3 queued missions (excluding the hero mission, non-completed)
+  const nextQueuedMissions = missions
+    .filter((m) => m.status !== "completed" && m.id !== heroMission?.id)
+    .slice(0, 3);
+
   return (
-    <div className="min-h-screen bg-spy-bg text-spy-text font-mono tactical-grid pb-24">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
-        {/* Global Agent Akib Header */}
+    <div className="min-h-screen bg-[#0b0f0d] text-slate-200 pb-20">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-7">
+        {/* Header: Agent name, rank + XP bar, streak, New Mission button, logout */}
         <AgentHeader
           agentName="Agent Akib"
           totalXp={totalXp}
@@ -143,94 +140,137 @@ export default function Home() {
           onLogout={logout}
         />
 
-        {/* Dashboard Main Grid: Active Target & Daily Recon Briefing */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-          {/* Left Column: ACTIVE MISSION Hero Card & Quick Checklist */}
-          <div className="lg:col-span-7 space-y-6">
-            {/* The Active Mission Card */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-spy-green">
-                  <Crosshair className="w-4 h-4 text-spy-green animate-spin" />
-                  <span>PRIMARY DIRECTIVE // ACTIVE TARGET</span>
+        {/* Navigation Tabs ("Dashboard" / "Missions") */}
+        <div className="flex items-center gap-2 mb-6 border-b border-spy-border pb-1">
+          <button
+            onClick={() => setActiveTab("dashboard")}
+            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] ${
+              activeTab === "dashboard"
+                ? "text-spy-green border-spy-green font-bold"
+                : "text-slate-400 border-transparent hover:text-slate-200"
+            }`}
+          >
+            Dashboard
+          </button>
+
+          <button
+            onClick={() => setActiveTab("missions")}
+            className={`px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors border-b-2 -mb-[5px] flex items-center gap-1.5 ${
+              activeTab === "missions"
+                ? "text-spy-green border-spy-green font-bold"
+                : "text-slate-400 border-transparent hover:text-slate-200"
+            }`}
+          >
+            <span>Missions</span>
+            <span className="text-[11px] bg-[#141d18] border border-spy-border px-1.5 py-0.2 rounded-[2px] text-slate-400">
+              {missions.length}
+            </span>
+          </button>
+        </div>
+
+        {/* Tab 1: Dashboard View */}
+        {activeTab === "dashboard" && (
+          <div className="space-y-6">
+            {/* Active Mission + Today's Briefing Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+              {/* Left Column: Active Mission Hero + Remaining Due Today */}
+              <div className="space-y-6">
+                <div>
+                  {heroMission ? (
+                    <MissionCard
+                      mission={heroMission}
+                      category={heroCategory}
+                      isHero={true}
+                      onComplete={handleComplete}
+                      onEdit={handleOpenEdit}
+                      onDelete={handleDelete}
+                      onSetActive={setActiveMission}
+                    />
+                  ) : (
+                    <div className="clean-card p-8 text-center">
+                      <h3 className="text-sm font-medium text-slate-200 mb-1">
+                        No active mission
+                      </h3>
+                      <p className="text-xs text-slate-400 mb-4 font-sans">
+                        All primary directives accomplished. Assign a queued target or create a new mission.
+                      </p>
+                      <Button variant="primary" size="sm" onClick={handleOpenAdd}>
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>New Mission</span>
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                {activeMissions.length > 1 && (
-                  <span className="text-[10px] text-spy-dim bg-slate-900 border border-slate-800 px-2 py-0.5">
-                    +{activeMissions.length - 1} OTHER ACTIVE TARGETS
-                  </span>
-                )}
+
+                {/* Remaining missions due today (simple compact list, excluding active one) */}
+                <DueTodayList
+                  missions={missions}
+                  categories={categories}
+                  activeMissionId={heroMission?.id}
+                  onComplete={handleComplete}
+                />
               </div>
 
-              {heroMission ? (
-                <MissionCard
-                  mission={heroMission}
-                  category={heroCategory}
-                  isHero={true}
-                  onComplete={handleComplete}
-                  onEdit={handleOpenEdit}
-                  onDelete={handleDelete}
-                  onSetActive={setActiveMission}
-                />
+              {/* Right Column: Today's Briefing (Classes + Tuition side by side) */}
+              <div>
+                <TodayBriefing schedule={schedule} />
+              </div>
+            </div>
+
+            {/* Next 3 Queued Missions with "View all" link */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-spy-border">
+                <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-slate-300">
+                  Next in Queue
+                </h3>
+                <button
+                  onClick={() => setActiveTab("missions")}
+                  className="text-xs font-mono text-spy-green hover:underline flex items-center gap-1"
+                >
+                  <span>View all missions</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              {nextQueuedMissions.length === 0 ? (
+                <div className="clean-card p-6 text-center text-xs text-slate-500 font-sans">
+                  No other missions currently queued.
+                </div>
               ) : (
-                <div className="p-8 sm:p-12 text-center bg-spy-surface border-2 border-dashed border-spy-border tactical-card">
-                  <Zap className="w-10 h-10 text-spy-green mx-auto mb-3 opacity-60" />
-                  <h3 className="text-base font-bold text-white uppercase tracking-wider mb-1">
-                    NO ACTIVE TARGET ACQUIRED
-                  </h3>
-                  <p className="text-xs text-spy-dim max-w-sm mx-auto mb-4">
-                    All primary directives executed. Select a mission from the queue or authorize a new directive.
-                  </p>
-                  <Button variant="primary" size="sm" onClick={handleOpenAdd}>
-                    <Plus className="w-4 h-4" />
-                    <span>AUTHORIZE NEW MISSION</span>
-                  </Button>
+                <div className="space-y-3">
+                  {nextQueuedMissions.map((mission) => {
+                    const category = categories.find((c) => c.id === mission.category_id);
+                    return (
+                      <MissionCard
+                        key={mission.id}
+                        mission={mission}
+                        category={category}
+                        onComplete={handleComplete}
+                        onEdit={handleOpenEdit}
+                        onDelete={handleDelete}
+                        onSetActive={setActiveMission}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
+          </div>
+        )}
 
-            {/* Today's Checklist */}
-            <TodayChecklist
+        {/* Tab 2: Full Missions Queue */}
+        {activeTab === "missions" && (
+          <div>
+            <MissionQueue
               missions={missions}
               categories={categories}
-              onToggleComplete={(m) => {
-                if (m.status === "completed") {
-                  // Mark back to active
-                  setActiveMission(m);
-                } else {
-                  handleComplete(m);
-                }
-              }}
+              onComplete={handleComplete}
+              onEdit={handleOpenEdit}
+              onDelete={handleDelete}
+              onSetActive={setActiveMission}
             />
           </div>
-
-          {/* Right Column: Today's Briefing (Classes + Tuition + Countdown) */}
-          <div className="lg:col-span-5">
-            <TodayBriefing schedule={schedule} />
-          </div>
-        </div>
-
-        {/* Full Tactical Mission Queue Dossier */}
-        <section className="mt-10">
-          <MissionQueue
-            missions={missions}
-            categories={categories}
-            onComplete={handleComplete}
-            onEdit={handleOpenEdit}
-            onDelete={handleDelete}
-            onSetActive={setActiveMission}
-          />
-        </section>
-      </div>
-
-      {/* Floating Quick-Add Action Button (Always Accessible on Mobile + Desktop) */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center gap-2 px-4 py-3 bg-spy-green text-black font-mono font-bold text-xs sm:text-sm tracking-wider uppercase border-2 border-spy-green shadow-[0_0_20px_rgba(0,255,102,0.5)] hover:bg-[#00e65c] hover:scale-105 active:scale-95 transition-all"
-        >
-          <Plus className="w-5 h-5 stroke-[2.5]" />
-          <span>NEW MISSION</span>
-        </button>
+        )}
       </div>
 
       {/* Modals & Overlays */}

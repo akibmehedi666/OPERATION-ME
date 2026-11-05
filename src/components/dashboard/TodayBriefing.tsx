@@ -2,29 +2,26 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  CalendarDays, 
+  Calendar, 
   Clock, 
   MapPin, 
-  GraduationCap, 
   BookOpen, 
-  CheckCircle,
-  AlertCircle
+  GraduationCap
 } from "lucide-react";
 import { ClassScheduleItem, DayOfWeek } from "@/types/database";
-import { Badge } from "@/components/ui/Badge";
 
 interface TodayBriefingProps {
   schedule: ClassScheduleItem[];
 }
 
 const DAY_NAMES: Record<DayOfWeek, string> = {
-  SUN: "SUNDAY",
-  MON: "MONDAY",
-  TUE: "TUESDAY",
-  WED: "WEDNESDAY",
-  THU: "THURSDAY",
-  FRI: "FRIDAY",
-  SAT: "SATURDAY",
+  SUN: "Sunday",
+  MON: "Monday",
+  TUE: "Tuesday",
+  WED: "Wednesday",
+  THU: "Thursday",
+  FRI: "Friday",
+  SAT: "Saturday",
 };
 
 const DAY_KEYS: DayOfWeek[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -35,9 +32,8 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
   const [countdownText, setCountdownText] = useState<string>("");
   const [nextEvent, setNextEvent] = useState<ClassScheduleItem | null>(null);
 
-  // Sync with real current day on mount
   useEffect(() => {
-    const todayIndex = new Date().getDay(); // 0 is SUN ... 6 is SAT
+    const todayIndex = new Date().getDay();
     const realDayKey = DAY_KEYS[todayIndex];
     setSelectedDay(realDayKey);
 
@@ -48,12 +44,10 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Filter schedule for selected day
   const daySchedule = schedule
     .filter((item) => item.day_of_week === selectedDay)
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
-  // Determine next upcoming event and countdown
   useEffect(() => {
     const now = currentTime;
     const todayIndex = now.getDay();
@@ -61,7 +55,7 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
 
     if (selectedDay !== todayKey) {
       setNextEvent(null);
-      setCountdownText("PREVIEWING DIFFERENT DAY SCHEDULE");
+      setCountdownText("");
       return;
     }
 
@@ -78,7 +72,6 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
       const endMinutes = eh * 60 + em;
 
       if (currentMinutes < endMinutes) {
-        // Either in progress or upcoming
         if (currentMinutes < startMinutes) {
           const diffSec = (startMinutes - currentMinutes) * 60 - currentSeconds;
           if (diffSec < shortestDiffSeconds) {
@@ -86,7 +79,6 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
             upcoming = item;
           }
         } else {
-          // In progress!
           upcoming = item;
           shortestDiffSeconds = 0;
           break;
@@ -97,15 +89,15 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
     setNextEvent(upcoming);
 
     if (!upcoming) {
-      setCountdownText("ALL DIRECTIVES CONCLUDED FOR TODAY");
+      setCountdownText("Completed for today");
     } else if (shortestDiffSeconds === 0) {
-      setCountdownText("STATUS: CURRENTLY IN PROGRESS // ACTIVE");
+      setCountdownText("In progress now");
     } else {
       const h = Math.floor(shortestDiffSeconds / 3600);
       const m = Math.floor((shortestDiffSeconds % 3600) / 60);
       const s = shortestDiffSeconds % 60;
       setCountdownText(
-        `T-MINUS ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+        `Next in ${h > 0 ? `${h}h ` : ""}${m}m ${s}s`
       );
     }
   }, [currentTime, selectedDay, daySchedule]);
@@ -127,140 +119,119 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
   };
 
   return (
-    <div className="tactical-card bg-spy-surface border border-spy-border p-4 sm:p-6 font-mono text-spy-text">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-spy-border mb-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-spy-dim">
-            <CalendarDays className="w-4 h-4 text-spy-green" />
-            <span>DAILY BRIEFING // OPERATION CALENDAR</span>
+    <div className="clean-card p-6 h-full flex flex-col justify-between">
+      <div>
+        {/* Header line: Title + Day tabs */}
+        <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-spy-border">
+          <div>
+            <div className="text-xs font-mono font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-spy-green" />
+              <span>Today&apos;s Briefing</span>
+            </div>
+            <h2 className="text-base font-semibold text-white mt-0.5">
+              {DAY_NAMES[selectedDay]} Schedule
+            </h2>
           </div>
-          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white mt-1">
-            {DAY_NAMES[selectedDay]} ITINERARY
-          </h2>
+
+          {/* Clean Day Selector */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+            {DAY_KEYS.map((day) => {
+              const isToday = DAY_KEYS[currentTime.getDay()] === day;
+              const isSelected = selectedDay === day;
+              return (
+                <button
+                  key={day}
+                  onClick={() => setSelectedDay(day)}
+                  className={`px-2 py-1 text-xs font-mono rounded-[3px] transition-colors border ${
+                    isSelected
+                      ? "bg-spy-green/10 text-spy-green border-spy-green/40 font-semibold"
+                      : isToday
+                      ? "bg-[#16201b] text-slate-200 border-[#23332a]"
+                      : "bg-transparent text-slate-500 border-transparent hover:text-slate-300"
+                  }`}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Day selector tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          {DAY_KEYS.map((day) => {
-            const isToday = DAY_KEYS[currentTime.getDay()] === day;
-            const isSelected = selectedDay === day;
-            return (
-              <button
-                key={day}
-                onClick={() => setSelectedDay(day)}
-                className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider transition-colors border ${
-                  isSelected
-                    ? "bg-spy-green text-black border-spy-green shadow-[0_0_8px_rgba(0,255,102,0.3)]"
-                    : isToday
-                    ? "bg-spy-surface text-spy-green border-spy-green/50"
-                    : "bg-black/40 text-slate-400 border-slate-800 hover:border-slate-700"
-                }`}
-              >
-                {day}
-                {isToday && <span className="ml-1 text-[9px] text-spy-amber font-mono">●</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Countdown Alert Banner */}
-      <div className="bg-black/60 border-l-2 border-spy-green p-3 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-spy-green animate-pulse" />
-          <span className="text-xs uppercase tracking-wider text-spy-dim">
-            NEXT TARGET INITIATION:
-          </span>
-          {nextEvent && (
-            <span className="text-xs font-bold text-white bg-slate-800/80 px-2 py-0.5 border border-slate-700">
-              {nextEvent.course_name}
+        {/* Live Countdown status if applicable */}
+        {countdownText && (
+          <div className="mb-4 bg-[#141d18] border border-spy-border p-2.5 rounded-[4px] flex items-center justify-between text-xs font-mono">
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-spy-green" />
+              {nextEvent ? nextEvent.course_name : "Schedule"}
             </span>
-          )}
-        </div>
+            <span className="text-spy-green font-medium">
+              {countdownText}
+            </span>
+          </div>
+        )}
 
-        <div className="text-xs sm:text-sm font-bold text-spy-green tracking-widest text-glow-green">
-          {countdownText}
-        </div>
-      </div>
-
-      {/* Schedule List */}
-      {daySchedule.length === 0 ? (
-        <div className="text-center py-8 text-xs text-slate-500 border border-dashed border-slate-800">
-          NO CLASSIFIED SESSIONS SCHEDULED FOR {DAY_NAMES[selectedDay]}. RECON & STUDY DAY.
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          {daySchedule.map((item) => {
-            const status = getEventStatus(item);
-            return (
-              <div
-                key={item.id}
-                className={`p-3 border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                  status === "in-progress"
-                    ? "bg-spy-green/10 border-spy-green shadow-spy-green"
-                    : status === "concluded"
-                    ? "bg-black/30 border-slate-800/60 opacity-60"
-                    : "bg-spy-card border-spy-border hover:border-spy-border/80"
-                }`}
-              >
-                <div className="flex items-start sm:items-center gap-3">
-                  <div className="p-2 bg-black/60 border border-slate-800 shrink-0">
-                    {item.type === "tuition" ? (
-                      <GraduationCap className="w-4 h-4 text-spy-amber" />
-                    ) : (
-                      <BookOpen className="w-4 h-4 text-cyan-400" />
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-spy-text">
-                        {item.course_name}
-                      </span>
-                      <Badge variant={item.type === "tuition" ? "tuition" : "class"}>
-                        {item.type === "tuition" ? "TUITION (TEACHING)" : "ACADEMIC CLASS"}
-                      </Badge>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-xs text-spy-dim mt-1">
-                      <span className="flex items-center gap-1 font-mono text-spy-text">
-                        <Clock className="w-3.5 h-3.5 text-spy-green" />
-                        {item.start_time} - {item.end_time}
-                      </span>
-                      {item.room && (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-spy-dim" />
-                          ROOM {item.room}
-                        </span>
+        {/* Schedule List */}
+        {daySchedule.length === 0 ? (
+          <div className="text-center py-8 text-xs text-slate-500 font-mono">
+            No academic sessions or tuition scheduled today.
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {daySchedule.map((item) => {
+              const status = getEventStatus(item);
+              return (
+                <div
+                  key={item.id}
+                  className={`p-3 rounded-[4px] border transition-colors flex items-center justify-between gap-3 ${
+                    status === "in-progress"
+                      ? "bg-spy-green/10 border-spy-green/40"
+                      : status === "concluded"
+                      ? "bg-[#0e1411]/60 border-slate-900 opacity-50"
+                      : "bg-[#141d18] border-spy-border"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-1.5 bg-[#0e1411] border border-spy-border rounded-[3px] text-slate-400 shrink-0">
+                      {item.type === "tuition" ? (
+                        <GraduationCap className="w-4 h-4 text-amber-400" />
+                      ) : (
+                        <BookOpen className="w-4 h-4 text-slate-300" />
                       )}
                     </div>
+
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-slate-100 truncate">
+                        {item.course_name}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
+                        <span>{item.start_time} - {item.end_time}</span>
+                        {item.room && (
+                          <span className="flex items-center gap-1 text-slate-500">
+                            <MapPin className="w-3 h-3" />
+                            {item.room}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 text-xs font-mono">
+                    {status === "in-progress" ? (
+                      <span className="text-spy-green font-semibold">Active now</span>
+                    ) : status === "concluded" ? (
+                      <span className="text-slate-500">Done</span>
+                    ) : (
+                      <span className="text-slate-400">
+                        {item.type === "tuition" ? "Tuition" : "Class"}
+                      </span>
+                    )}
                   </div>
                 </div>
-
-                <div className="self-end sm:self-center">
-                  {status === "in-progress" ? (
-                    <span className="text-[10px] uppercase font-bold text-spy-green border border-spy-green px-2 py-0.5 animate-pulse bg-spy-green/10 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3 text-spy-green" />
-                      IN PROGRESS
-                    </span>
-                  ) : status === "concluded" ? (
-                    <span className="text-[10px] uppercase font-bold text-slate-500 border border-slate-800 px-2 py-0.5 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3 text-slate-500" />
-                      CONCLUDED
-                    </span>
-                  ) : (
-                    <span className="text-[10px] uppercase font-semibold text-slate-400 border border-slate-800 px-2 py-0.5">
-                      UPCOMING
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
-

@@ -3,10 +3,10 @@
 import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Crosshair, Sparkles, ShieldCheck, Flame, ArrowRight } from "lucide-react";
+import { Check, ArrowRight, Sparkles, Flame } from "lucide-react";
 import { Mission } from "@/types/database";
-import { StampLabel } from "@/components/ui/StampLabel";
 import { soundFX } from "@/lib/sound";
+import { Button } from "@/components/ui/Button";
 
 interface MissionCelebrationProps {
   completedMission: Mission | null;
@@ -25,23 +25,22 @@ export const MissionCelebration: React.FC<MissionCelebrationProps> = ({
     if (isOpen && completedMission) {
       soundFX.playMissionAccomplished();
 
-      // Launch green + gold tactical confetti
+      // Gentle celebratory confetti
       try {
         confetti({
-          particleCount: 50,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ["#00ff66", "#ffb700", "#00f0ff", "#ffffff"],
+          particleCount: 35,
+          spread: 60,
+          origin: { y: 0.65 },
+          colors: ["#00ff66", "#f59e0b", "#ffffff"],
         });
       } catch {
         // Safe catch
       }
 
-      // If next mission acquired, play radar sound after short delay
       if (nextMission) {
         const timer = setTimeout(() => {
           soundFX.playTargetAcquired();
-        }, 1200);
+        }, 1000);
         return () => clearTimeout(timer);
       }
     }
@@ -51,117 +50,78 @@ export const MissionCelebration: React.FC<MissionCelebrationProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
         <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
+          initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          className="relative w-full max-w-lg p-6 sm:p-8 bg-spy-surface border-2 border-spy-green shadow-[0_0_50px_rgba(0,255,102,0.3)] tactical-card text-center font-mono"
+          exit={{ scale: 0.95, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="relative w-full max-w-md p-6 bg-[#111714] border border-spy-border rounded-[6px] shadow-2xl text-slate-100"
         >
-          {/* Top Classified Header */}
-          <div className="flex items-center justify-between text-xs text-spy-dim mb-4 border-b border-spy-border/60 pb-2">
-            <span className="flex items-center gap-1.5 text-spy-green font-bold">
-              <ShieldCheck className="w-4 h-4 text-spy-green" />
-              AGENCY DISPATCH // CLASSIFIED
-            </span>
-            <span className="text-[10px] bg-slate-900 px-2 py-0.5 border border-slate-700">
-              STATUS: RECORDED
-            </span>
+          {/* Header */}
+          <div className="flex items-center gap-2 text-xs font-mono font-medium text-spy-green mb-4 pb-2 border-b border-spy-border">
+            <Check className="w-4 h-4 text-spy-green stroke-[2.5]" />
+            <span>Mission Accomplished</span>
           </div>
 
-          {/* Massive Slammed Stamp */}
-          <motion.div
-            initial={{ scale: 3, opacity: 0, rotate: -25 }}
-            animate={{ scale: 1, opacity: 1, rotate: -6 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="my-6"
-          >
-            <StampLabel
-              text="MISSION ACCOMPLISHED"
-              variant="green"
-              size="lg"
-              rotate={-5}
-            />
-          </motion.div>
-
-          {/* Completed Mission Title */}
-          <h2 className="text-lg sm:text-xl font-black text-spy-text tracking-wide mb-1">
+          {/* Title */}
+          <h2 className="text-base sm:text-lg font-medium text-white mb-1 leading-snug">
             {completedMission.title}
           </h2>
-          <p className="text-xs text-spy-green tracking-widest uppercase mb-4">
-            [{completedMission.codename || "DIRECTIVE"}]
-          </p>
+          <div className="text-xs font-mono text-slate-400 mb-5">
+            [{completedMission.codename}]
+          </div>
 
-          {/* XP & Rewards Bar */}
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="grid grid-cols-2 gap-3 bg-black/50 border border-spy-border p-3 mb-6"
-          >
-            <div className="flex items-center justify-center gap-2 border-r border-spy-border/50">
-              <Sparkles className="w-4 h-4 text-spy-amber animate-pulse" />
-              <div className="text-left">
-                <div className="text-[10px] text-spy-dim">XP AUTHORIZED</div>
-                <div className="text-sm sm:text-base font-bold text-spy-amber">
-                  +{completedMission.xp} XP
-                </div>
+          {/* XP & Streak Stat Box */}
+          <div className="grid grid-cols-2 gap-3 bg-[#141d18] border border-spy-border p-3 rounded-[4px] mb-5 text-xs">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <div className="text-slate-400 text-[11px]">XP Awarded</div>
+                <div className="font-mono font-bold text-amber-400">+{completedMission.xp} XP</div>
               </div>
             </div>
 
-            <div className="flex items-center justify-center gap-2">
-              <Flame className="w-4 h-4 text-orange-400 animate-bounce" />
-              <div className="text-left">
-                <div className="text-[10px] text-spy-dim">DAILY STREAK</div>
-                <div className="text-sm sm:text-base font-bold text-orange-400">
-                  MAINTAINED
-                </div>
+            <div className="flex items-center gap-2">
+              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
+              <div>
+                <div className="text-slate-400 text-[11px]">Daily Streak</div>
+                <div className="font-mono font-bold text-amber-400">Active</div>
               </div>
             </div>
-          </motion.div>
+          </div>
 
-          {/* Next Target Acquired Section */}
+          {/* Next Mission Section */}
           {nextMission ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.8 }}
-              className="bg-spy-card border border-spy-amber/50 p-4 text-left relative overflow-hidden mb-6"
-            >
-              <div className="flex items-center gap-2 text-xs font-bold text-spy-amber uppercase tracking-widest mb-1.5">
-                <Crosshair className="w-4 h-4 animate-spin text-spy-amber" />
-                <span>NEXT TARGET ACQUIRED</span>
-                <span className="w-2 h-2 rounded-full bg-spy-amber animate-ping ml-auto" />
+            <div className="bg-[#141d18] border border-spy-border p-3.5 rounded-[4px] mb-5 text-left">
+              <div className="text-[11px] font-mono text-spy-green uppercase tracking-wider mb-1">
+                Next Target Acquired
               </div>
-
-              <div className="text-sm font-bold text-spy-text line-clamp-2">
+              <div className="text-sm font-medium text-slate-200 line-clamp-2">
                 {nextMission.title}
               </div>
-
-              <div className="flex items-center justify-between text-xs text-spy-dim mt-2 pt-2 border-t border-slate-800">
-                <span className="text-spy-green">[{nextMission.codename}]</span>
-                <span className="uppercase text-[11px] font-bold text-amber-400">
-                  PRIORITY: {nextMission.priority}
-                </span>
+              <div className="text-xs font-mono text-slate-400 mt-1">
+                [{nextMission.codename}] &middot; Priority: {nextMission.priority}
               </div>
-            </motion.div>
-          ) : (
-            <div className="text-xs text-slate-500 py-3 mb-4">
-              ALL DIRECTIVES EXECUTED. AWAITING FURTHER AGENCY ORDERS.
             </div>
+          ) : (
+            <p className="text-xs text-slate-500 font-mono mb-5">
+              All primary objectives cleared.
+            </p>
           )}
 
           {/* Dismiss button */}
-          <button
+          <Button
+            variant="primary"
+            size="md"
             onClick={onClose}
-            className="w-full py-3 bg-spy-green text-black font-bold text-xs uppercase tracking-widest hover:bg-[#00e65c] transition-colors flex items-center justify-center gap-2"
+            className="w-full"
           >
-            <span>CONFIRM ACKNOWLEDGMENT</span>
+            <span>Continue</span>
             <ArrowRight className="w-4 h-4" />
-          </button>
+          </Button>
         </motion.div>
       </div>
     </AnimatePresence>
   );
 };
-

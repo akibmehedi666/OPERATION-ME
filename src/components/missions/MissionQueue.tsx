@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { 
-  Crosshair, 
-  Filter, 
-  Search, 
-  AlertTriangle, 
-  Layers 
-} from "lucide-react";
+import { Search, AlertCircle } from "lucide-react";
 import { Mission, Category } from "@/types/database";
 import { MissionCard } from "@/components/ui/MissionCard";
 
@@ -36,16 +30,13 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
 
   const now = new Date();
 
-  // Helper to test if a mission is overdue/failing
   const isMissionFailing = (m: Mission) => {
     if (m.status === "completed") return false;
     if (!m.deadline) return false;
     return new Date(m.deadline) < now;
   };
 
-  // Filter missions
   const filteredMissions = missions.filter((m) => {
-    // Search query match
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitle = m.title.toLowerCase().includes(q);
@@ -54,12 +45,10 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
       if (!matchTitle && !matchCodename && !matchNotes) return false;
     }
 
-    // Category filter
     if (categoryFilter !== "all" && m.category_id !== categoryFilter) {
       return false;
     }
 
-    // Status filter
     if (statusFilter === "all") return true;
     if (statusFilter === "failing") return isMissionFailing(m);
     if (statusFilter === "completed") return m.status === "completed";
@@ -74,121 +63,107 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
   const completedCount = missions.filter((m) => m.status === "completed").length;
 
   return (
-    <div className="space-y-4 font-mono">
-      {/* Tactical Queue Header with Stats Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 bg-spy-surface border border-spy-border tactical-card">
-        <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-spy-dim">
-            <Layers className="w-4 h-4 text-spy-green" />
-            <span>MISSION DOSSIER // TACTICAL QUEUE</span>
-          </div>
-          <h2 className="text-xl font-bold tracking-tight text-white mt-1">
-            TARGET QUEUE ({missions.length} DIRECTIVES)
-          </h2>
-        </div>
-
-        {/* Status quick counts */}
-        <div className="flex items-center gap-2 flex-wrap text-xs">
+    <div className="space-y-4">
+      {/* Filter and Search Bar */}
+      <div className="clean-card p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Status filter tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs font-mono">
           <button
             onClick={() => setStatusFilter("all")}
-            className={`px-2.5 py-1 border transition-colors ${
+            className={`px-3 py-1.5 rounded-[3px] transition-colors border ${
               statusFilter === "all"
-                ? "bg-slate-800 text-white border-slate-600 font-bold"
-                : "bg-black/40 text-slate-400 border-slate-800 hover:border-slate-700"
+                ? "bg-slate-800 text-white border-slate-700 font-semibold"
+                : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
             }`}
           >
-            ALL ({missions.length})
+            All ({missions.length})
           </button>
 
           <button
             onClick={() => setStatusFilter("active")}
-            className={`px-2.5 py-1 border transition-colors ${
+            className={`px-3 py-1.5 rounded-[3px] transition-colors border ${
               statusFilter === "active"
-                ? "bg-spy-green/20 text-spy-green border-spy-green font-bold shadow-spy-green"
-                : "bg-black/40 text-spy-green/70 border-slate-800 hover:border-spy-green/40"
+                ? "bg-spy-green/10 text-spy-green border-spy-green/40 font-semibold"
+                : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
             }`}
           >
-            ACTIVE ({activeCount})
+            Active ({activeCount})
           </button>
 
           <button
             onClick={() => setStatusFilter("locked")}
-            className={`px-2.5 py-1 border transition-colors ${
+            className={`px-3 py-1.5 rounded-[3px] transition-colors border ${
               statusFilter === "locked"
-                ? "bg-slate-800 text-slate-300 border-slate-600 font-bold"
-                : "bg-black/40 text-slate-400 border-slate-800 hover:border-slate-700"
+                ? "bg-slate-800 text-slate-300 border-slate-700 font-semibold"
+                : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
             }`}
           >
-            QUEUED ({lockedCount})
+            Queued ({lockedCount})
           </button>
 
           {failingCount > 0 && (
             <button
               onClick={() => setStatusFilter("failing")}
-              className={`px-2.5 py-1 border transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-[3px] transition-colors border flex items-center gap-1 ${
                 statusFilter === "failing"
-                  ? "bg-spy-red text-black border-spy-red font-black shadow-spy-red"
-                  : "bg-spy-red/20 text-spy-red border-spy-red/60 animate-pulse font-bold"
+                  ? "bg-red-950/40 text-spy-red border-spy-red/60 font-semibold"
+                  : "bg-transparent text-spy-red/80 border-transparent hover:text-spy-red"
               }`}
             >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              FAILING ({failingCount})
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>Overdue ({failingCount})</span>
             </button>
           )}
 
           <button
             onClick={() => setStatusFilter("completed")}
-            className={`px-2.5 py-1 border transition-colors ${
+            className={`px-3 py-1.5 rounded-[3px] transition-colors border ${
               statusFilter === "completed"
-                ? "bg-emerald-950/60 text-emerald-400 border-emerald-500 font-bold"
-                : "bg-black/40 text-slate-500 border-slate-800 hover:border-slate-700"
+                ? "bg-slate-800 text-slate-300 border-slate-700 font-semibold"
+                : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
             }`}
           >
-            COMPLETED ({completedCount})
+            Completed ({completedCount})
           </button>
         </div>
-      </div>
 
-      {/* Filter and Search Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Search Input */}
-        <div className="relative sm:col-span-2">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search directives by codename, objective, or notes..."
-            className="w-full bg-black/60 border border-spy-border pl-9 pr-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green"
-          />
-        </div>
+        {/* Search & Category Inputs */}
+        <div className="flex items-center gap-2 flex-1 md:max-w-md">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search missions..."
+              className="w-full bg-[#141d18] border border-spy-border pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+            />
+          </div>
 
-        {/* Category Filter */}
-        <div className="relative">
-          <Filter className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full bg-black/60 border border-spy-border pl-9 pr-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green appearance-none cursor-pointer"
-          >
-            <option value="all">ALL DEPARTMENTS</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative shrink-0">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="bg-[#141d18] border border-spy-border px-3 py-1.5 text-xs text-slate-300 focus:outline-none rounded-[3px] cursor-pointer"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id} className="bg-[#111714]">
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Grid of Missions */}
       {filteredMissions.length === 0 ? (
-        <div className="p-12 text-center text-xs text-slate-500 border border-dashed border-slate-800 bg-spy-surface/40">
-          <Crosshair className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-          NO DIRECTIVES FOUND MATCHING GIVEN PARAMETERS.
+        <div className="clean-card p-12 text-center text-xs text-slate-500">
+          No directives found matching the selected filters.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-3">
           {filteredMissions.map((mission) => {
             const category = categories.find((c) => c.id === mission.category_id);
             return (
@@ -208,4 +183,3 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
     </div>
   );
 };
-
