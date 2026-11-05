@@ -8,9 +8,10 @@ import {
   Edit3, 
   Trash2, 
   ChevronDown, 
-  Crosshair
+  Crosshair 
 } from "lucide-react";
 import { Mission, Category } from "@/types/database";
+import { formatDueText } from "@/lib/formatters";
 import { Button } from "./Button";
 
 interface MissionCardProps {
@@ -33,35 +34,14 @@ export const MissionCard: React.FC<MissionCardProps> = ({
   onSetActive,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const now = new Date();
-  const deadlineDate = mission.deadline ? new Date(mission.deadline) : null;
-  const isOverdue = deadlineDate ? deadlineDate < now && mission.status !== "completed" : false;
   const isCompleted = mission.status === "completed";
 
-  // Calculate clean due text
-  const getDueText = () => {
-    if (!deadlineDate) return null;
-    const diffMs = deadlineDate.getTime() - now.getTime();
-    const diffHours = Math.round(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffMs < 0) {
-      const overdueHours = Math.abs(diffHours);
-      if (overdueHours < 24) return `Overdue ${overdueHours}h`;
-      return `Overdue ${Math.abs(diffDays)}d`;
-    }
-
-    if (diffHours === 0) return "Due within an hour";
-    if (diffHours < 24) return `Due in ${diffHours}h`;
-    if (diffDays === 1) return "Due tomorrow";
-    return `Due in ${diffDays}d`;
-  };
-
-  const dueText = getDueText();
+  // Use 12-hour unified due text
+  const dueInfo = formatDueText(mission.deadline);
 
   // Priority left border styling (small colored left border)
   const getBorderLeftClass = () => {
-    if (isOverdue) return "border-l-[3px] border-l-spy-red";
+    if (dueInfo.isOverdue && !isCompleted) return "border-l-[3px] border-l-spy-red";
     switch (mission.priority) {
       case "urgent":
         return "border-l-[3px] border-l-spy-red";
@@ -78,7 +58,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
   // If this is the Hero Active Mission card
   if (isHero) {
     return (
-      <div className="active-mission-card p-6 transition-all duration-200">
+      <div className="active-mission-card p-5 sm:p-6 transition-all duration-200">
         {/* Header line: Category + Due Time */}
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
@@ -87,20 +67,20 @@ export const MissionCard: React.FC<MissionCardProps> = ({
               Active Mission
             </span>
             {category && (
-              <span className="text-xs text-slate-400 bg-[#16201b] border border-[#23332a] px-2 py-0.5 rounded-[3px]">
+              <span className="text-xs text-slate-300 bg-[#16201b] border border-[#23332a] px-2 py-0.5 rounded-[3px]">
                 {category.name}
               </span>
             )}
           </div>
 
-          {dueText && (
+          {dueInfo.text && (
             <div
               className={`flex items-center gap-1 text-xs font-medium ${
-                isOverdue ? "text-spy-red" : "text-slate-400"
+                dueInfo.isOverdue ? "text-spy-red" : "text-slate-400"
               }`}
             >
               <Clock className="w-3.5 h-3.5" />
-              <span>{dueText}</span>
+              <span>{dueInfo.text}</span>
             </div>
           )}
         </div>
@@ -151,42 +131,42 @@ export const MissionCard: React.FC<MissionCardProps> = ({
     );
   }
 
-  // Standard Mission Card (Queue & Compact lists)
+  // Standard Mission Card (aligned grid)
   return (
     <div
       className={`group clean-card transition-all duration-150 ${getBorderLeftClass()} ${
         isCompleted ? "opacity-50" : ""
       }`}
     >
-      <div className="p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-3.5 sm:p-4">
+        <div className="flex items-center justify-between gap-3">
           {/* Main Info: Title + Category + Due Time */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
-              {/* Category (Neutral gray badge) */}
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              {/* Category (Neutral gray chip) */}
               {category && (
-                <span className="text-xs text-slate-300 bg-[#16201b] border border-[#23332a] px-2 py-0.5 rounded-[3px] inline-flex items-center gap-1.5">
+                <span className="text-[11px] text-slate-300 bg-[#16201b] border border-[#23332a] px-1.5 py-0.5 rounded-[2px] inline-flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                   {category.name}
                 </span>
               )}
 
-              {/* Due time */}
-              {dueText && (
+              {/* Due time in 12-hour format */}
+              {dueInfo.text && (
                 <span
                   className={`text-xs inline-flex items-center gap-1 ${
-                    isOverdue ? "text-spy-red font-medium" : "text-slate-400"
+                    dueInfo.isOverdue ? "text-spy-red font-semibold" : "text-slate-400 font-mono"
                   }`}
                 >
                   <Clock className="w-3 h-3" />
-                  {dueText}
+                  {dueInfo.text}
                 </span>
               )}
             </div>
 
-            {/* Title (Clean Sans-Serif, minimum 14px, relaxed line height) */}
+            {/* Title (Clean Sans-Serif, minimum 14px) */}
             <h3
-              className={`text-sm sm:text-base font-medium text-slate-100 leading-snug ${
+              className={`text-sm sm:text-base font-medium text-slate-100 leading-snug truncate ${
                 isCompleted ? "line-through text-slate-500" : ""
               }`}
             >
@@ -195,7 +175,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           </div>
 
           {/* Action Button: Accomplish (Single visible button) */}
-          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          <div className="flex items-center gap-2 shrink-0">
             {!isCompleted && onComplete && (
               <Button
                 variant="outline"
@@ -203,11 +183,11 @@ export const MissionCard: React.FC<MissionCardProps> = ({
                 onClick={() => onComplete(mission)}
               >
                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Accomplish</span>
+                <span className="hidden sm:inline">Accomplish</span>
               </Button>
             )}
 
-            {/* Details expand toggle (reveals codename, XP, notes, edit/delete) */}
+            {/* Details expand toggle */}
             <button
               onClick={() => setIsExpanded(!isExpanded)}
               className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
@@ -222,7 +202,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({
           </div>
         </div>
 
-        {/* Revealed details on hover (desktop) or expand (mobile/click) */}
+        {/* Revealed details on expand */}
         <AnimatePresence>
           {isExpanded && (
             <motion.div

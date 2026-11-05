@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import { 
-  ArrowRight,
-  Plus
-} from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 import { useAgencyState } from "@/lib/useAgencyState";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { AgentHeader } from "@/components/dashboard/AgentHeader";
+import { StatCardsRow } from "@/components/dashboard/StatCardsRow";
 import { TodayBriefing } from "@/components/dashboard/TodayBriefing";
-import { DueTodayList } from "@/components/dashboard/DueTodayList";
+import { TodayPlanTimeline } from "@/components/dashboard/TodayPlanTimeline";
 import { MissionCard } from "@/components/ui/MissionCard";
 import { MissionQueue } from "@/components/missions/MissionQueue";
 import { MissionModal } from "@/components/missions/MissionModal";
@@ -38,14 +36,10 @@ export default function Home() {
     completeMission,
   } = useAgencyState();
 
-  // Tab State: "dashboard" or "missions"
   const [activeTab, setActiveTab] = useState<"dashboard" | "missions">("dashboard");
-
-  // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
 
-  // Celebration state
   const [celebrationData, setCelebrationData] = useState<{
     completed: Mission | null;
     next: Mission | null;
@@ -80,9 +74,7 @@ export default function Home() {
 
   const handleDelete = (mission: Mission) => {
     soundFX.playWarning();
-    const confirmed = window.confirm(
-      `Delete mission: "${mission.title}"?`
-    );
+    const confirmed = window.confirm(`Delete mission: "${mission.title}"?`);
     if (confirmed) {
       deleteMission(mission.id);
     }
@@ -96,7 +88,6 @@ export default function Home() {
     }
   };
 
-  // Loading Screen
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0b0f0d] font-mono text-slate-400 text-xs">
@@ -105,7 +96,6 @@ export default function Home() {
     );
   }
 
-  // If not authenticated, show calm login
   if (!isAuthenticated) {
     return (
       <LoginPage
@@ -116,22 +106,43 @@ export default function Home() {
     );
   }
 
-  // Find the primary active mission for hero card
+  // 1. Primary Active Mission for Hero card
   const activeMissions = missions.filter((m) => m.status === "active");
   const heroMission = activeMissions.length > 0 ? activeMissions[0] : null;
   const heroCategory = heroMission
     ? categories.find((c) => c.id === heroMission.category_id)
     : undefined;
 
-  // Next 3 queued missions (excluding the hero mission, non-completed)
-  const nextQueuedMissions = missions
-    .filter((m) => m.status !== "completed" && m.id !== heroMission?.id)
+  // 2. Identify missions shown in Today's Plan to avoid ANY duplicates on screen
+  const now = new Date();
+  const missionsInTodayPlanIds = new Set<string>();
+  if (heroMission) {
+    missionsInTodayPlanIds.add(heroMission.id);
+  }
+
+  missions.forEach((m) => {
+    if (m.status === "completed") return;
+    if (!m.deadline) return;
+    const d = new Date(m.deadline);
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    const isOverdue = d < now;
+    if (isToday || isOverdue) {
+      missionsInTodayPlanIds.add(m.id);
+    }
+  });
+
+  // 3. "Up Next" = exactly 3 missions, strictly NO DUPLICATES of anything already shown above!
+  const upNextMissions = missions
+    .filter((m) => m.status !== "completed" && !missionsInTodayPlanIds.has(m.id))
     .slice(0, 3);
 
   return (
     <div className="min-h-screen bg-[#0b0f0d] text-slate-200 pb-20">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-7">
-        {/* Header: Agent name, rank + XP bar, streak, New Mission button, logout */}
+        {/* A. Header (Agent name, rank + XP bar, streak, New Mission button, logout) */}
         <AgentHeader
           agentName="Agent Akib"
           totalXp={totalXp}
@@ -140,7 +151,7 @@ export default function Home() {
           onLogout={logout}
         />
 
-        {/* Navigation Tabs ("Dashboard" / "Missions") */}
+        {/* Navigation Tabs */}
         <div className="flex items-center gap-2 mb-6 border-b border-spy-border pb-1">
           <button
             onClick={() => setActiveTab("dashboard")}
@@ -168,13 +179,17 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Tab 1: Dashboard View */}
+        {/* ================= DASHBOARD TAB ================= */}
         {activeTab === "dashboard" && (
           <div className="space-y-6">
-            {/* Active Mission + Today's Briefing Side by Side */}
+            {/* B. Row of 3 small stat cards */}
+            <StatCardsRow missions={missions} streak={streak} />
+
+            {/* C. Two Columns: Left (Hero + Today's Plan) & Right (Today's Briefing) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              {/* Left Column: Active Mission Hero + Remaining Due Today */}
+              {/* Left Column: Active Mission (hero), then Today's Plan */}
               <div className="space-y-6">
+                {/* Hero Active Mission Card */}
                 <div>
                   {heroMission ? (
                     <MissionCard
@@ -202,43 +217,46 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* Remaining missions due today (simple compact list, excluding active one) */}
-                <DueTodayList
+                {/* D. Today's Plan (ONE merged chronological timeline of classes, tuition & missions) */}
+                <TodayPlanTimeline
+                  schedule={schedule}
                   missions={missions}
                   categories={categories}
                   activeMissionId={heroMission?.id}
-                  onComplete={handleComplete}
+                  onCompleteMission={handleComplete}
                 />
               </div>
 
-              {/* Right Column: Today's Briefing (Classes + Tuition side by side) */}
+              {/* Right Column: Today's Briefing (classes + tuition timetable) */}
               <div>
                 <TodayBriefing schedule={schedule} />
               </div>
             </div>
 
-            {/* Next 3 Queued Missions with "View all" link */}
+            {/* E. "Up Next" = exactly 3 missions, no duplicates of anything above + "View all" */}
             <div className="pt-2">
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-spy-border">
-                <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-slate-300">
-                  Next in Queue
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-mono font-medium uppercase tracking-wider text-slate-300">
+                    UP NEXT ({upNextMissions.length})
+                  </h3>
+                </div>
                 <button
                   onClick={() => setActiveTab("missions")}
                   className="text-xs font-mono text-spy-green hover:underline flex items-center gap-1"
                 >
-                  <span>View all missions</span>
+                  <span>View all</span>
                   <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
 
-              {nextQueuedMissions.length === 0 ? (
+              {upNextMissions.length === 0 ? (
                 <div className="clean-card p-6 text-center text-xs text-slate-500 font-sans">
-                  No other missions currently queued.
+                  No other upcoming missions queued.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {nextQueuedMissions.map((mission) => {
+                <div className="space-y-2.5">
+                  {upNextMissions.map((mission) => {
                     const category = categories.find((c) => c.id === mission.category_id);
                     return (
                       <MissionCard
@@ -258,7 +276,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Tab 2: Full Missions Queue */}
+        {/* ================= MISSIONS TAB ================= */}
         {activeTab === "missions" && (
           <div>
             <MissionQueue

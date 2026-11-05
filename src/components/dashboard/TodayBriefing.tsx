@@ -9,6 +9,7 @@ import {
   GraduationCap
 } from "lucide-react";
 import { ClassScheduleItem, DayOfWeek } from "@/types/database";
+import { formatTimeRange12, formatCountdown, formatDate } from "@/lib/formatters";
 
 interface TodayBriefingProps {
   schedule: ClassScheduleItem[];
@@ -93,12 +94,7 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
     } else if (shortestDiffSeconds === 0) {
       setCountdownText("In progress now");
     } else {
-      const h = Math.floor(shortestDiffSeconds / 3600);
-      const m = Math.floor((shortestDiffSeconds % 3600) / 60);
-      const s = shortestDiffSeconds % 60;
-      setCountdownText(
-        `Next in ${h > 0 ? `${h}h ` : ""}${m}m ${s}s`
-      );
+      setCountdownText(`Next in ${formatCountdown(shortestDiffSeconds)}`);
     }
   }, [currentTime, selectedDay, daySchedule]);
 
@@ -119,9 +115,9 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
   };
 
   return (
-    <div className="clean-card p-6 h-full flex flex-col justify-between">
+    <div className="clean-card p-5 h-full flex flex-col justify-between">
       <div>
-        {/* Header line: Title + Day tabs */}
+        {/* Header line: Title + Date + Day tabs */}
         <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-spy-border">
           <div>
             <div className="text-xs font-mono font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -131,6 +127,9 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
             <h2 className="text-base font-semibold text-white mt-0.5">
               {DAY_NAMES[selectedDay]} Schedule
             </h2>
+            <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+              {formatDate(currentTime)}
+            </div>
           </div>
 
           {/* Clean Day Selector */}
@@ -160,11 +159,11 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
         {/* Live Countdown status if applicable */}
         {countdownText && (
           <div className="mb-4 bg-[#141d18] border border-spy-border p-2.5 rounded-[4px] flex items-center justify-between text-xs font-mono">
-            <span className="text-slate-400 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-spy-green" />
-              {nextEvent ? nextEvent.course_name : "Schedule"}
+            <span className="text-slate-400 flex items-center gap-1.5 truncate">
+              <Clock className="w-3.5 h-3.5 text-spy-green shrink-0" />
+              <span className="truncate">{nextEvent ? nextEvent.course_name : "Timetable"}</span>
             </span>
-            <span className="text-spy-green font-medium">
+            <span className="text-spy-green font-medium shrink-0 ml-2">
               {countdownText}
             </span>
           </div>
@@ -172,7 +171,7 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
 
         {/* Schedule List */}
         {daySchedule.length === 0 ? (
-          <div className="text-center py-8 text-xs text-slate-500 font-mono">
+          <div className="text-center py-8 text-xs text-slate-500 font-sans">
             No academic sessions or tuition scheduled today.
           </div>
         ) : (
@@ -204,7 +203,8 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({ schedule }) => {
                         {item.course_name}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
-                        <span>{item.start_time} - {item.end_time}</span>
+                        {/* 12-hour format range */}
+                        <span>{formatTimeRange12(item.start_time, item.end_time)}</span>
                         {item.room && (
                           <span className="flex items-center gap-1 text-slate-500">
                             <MapPin className="w-3 h-3" />

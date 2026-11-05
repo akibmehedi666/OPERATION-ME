@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Search, AlertCircle } from "lucide-react";
-import { Mission, Category } from "@/types/database";
+import { Search, ChevronDown, ArrowUpDown } from "lucide-react";
+import { Mission, Category, Priority } from "@/types/database";
 import { MissionCard } from "@/components/ui/MissionCard";
 
 interface MissionQueueProps {
@@ -14,7 +14,28 @@ interface MissionQueueProps {
   onSetActive: (mission: Mission) => void;
 }
 
-type FilterStatus = "all" | "active" | "locked" | "failing" | "completed";
+// Category filter chips requested by user:
+// All, OS, DIP, Eco, P&S, FYDP, CP, Cyber, Projects, Research, Tuition
+const CATEGORY_CHIPS = [
+  { label: "All", key: "all" },
+  { label: "OS", key: "os" },
+  { label: "DIP", key: "dip" },
+  { label: "Eco", key: "eco" },
+  { label: "P&S", key: "p&s" },
+  { label: "FYDP", key: "fydp" },
+  { label: "CP", key: "cp" },
+  { label: "Cyber", key: "cyber" },
+  { label: "Projects", key: "projects" },
+  { label: "Research", key: "research" },
+  { label: "Tuition", key: "tuition" },
+];
+
+const PRIORITY_ORDER: Record<Priority, number> = {
+  urgent: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+};
 
 export const MissionQueue: React.FC<MissionQueueProps> = ({
   missions,
@@ -24,19 +45,60 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
   onDelete,
   onSetActive,
 }) => {
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [selectedChip, setSelectedChip] = useState("all");
+  const [sortBy, setSortBy] = useState<"deadline" | "priority">("deadline");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Completed is collapsed by default; others expanded
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    completed: true,
+  });
+
+  const toggleSection = (sectionKey: string) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+  };
 
   const now = new Date();
 
-  const isMissionFailing = (m: Mission) => {
-    if (m.status === "completed") return false;
-    if (!m.deadline) return false;
-    return new Date(m.deadline) < now;
+  // Helper to match category chip
+  const matchCategoryChip = (m: Mission) => {
+    if (selectedChip === "all") return true;
+    const cat = categories.find((c) => c.id === m.category_id);
+    const catName = (cat?.name || "").toLowerCase();
+    const catCode = (cat?.codename || "").toLowerCase();
+
+    switch (selectedChip) {
+      case "os":
+        return catName.includes("operating") || catName.includes("os") || catCode.includes("os");
+      case "dip":
+        return catName.includes("image") || catName.includes("dip") || catCode.includes("dip");
+      case "eco":
+        return catName.includes("econ") || catCode.includes("econ");
+      case "p&s":
+        return catName.includes("prob") || catName.includes("stat") || catCode.includes("stat");
+      case "fydp":
+        return catName.includes("fydp") || catCode.includes("fydp");
+      case "cp":
+        return catName.includes("codeforces") || catName.includes("cp") || catCode.includes("cf");
+      case "cyber":
+        return catName.includes("cyber") || catCode.includes("cyber");
+      case "projects":
+        return catName.includes("side") || catName.includes("project");
+      case "research":
+        return catName.includes("paper") || catName.includes("research");
+      case "tuition":
+        return catName.includes("tuition");
+      default:
+        return true;
+    }
   };
 
+  // Filter missions
   const filteredMissions = missions.filter((m) => {
+    // 1. Text search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitle = m.title.toLowerCase().includes(q);
@@ -45,141 +107,218 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
       if (!matchTitle && !matchCodename && !matchNotes) return false;
     }
 
-    if (categoryFilter !== "all" && m.category_id !== categoryFilter) {
-      return false;
-    }
-
-    if (statusFilter === "all") return true;
-    if (statusFilter === "failing") return isMissionFailing(m);
-    if (statusFilter === "completed") return m.status === "completed";
-    if (statusFilter === "active") return m.status === "active";
-    if (statusFilter === "locked") return m.status === "locked";
-    return true;
+    // 2. Category chip
+    return matchCategoryChip(m);
   });
 
-  const failingCount = missions.filter(isMissionFailing).length;
-  const activeCount = missions.filter((m) => m.status === "active").length;
-  const lockedCount = missions.filter((m) => m.status === "locked").length;
-  const completedCount = missions.filter((m) => m.status === "completed").length;
+  // Sort helper function
+  const sortMissions = (list: Mission[]) => {
+    return [...list].sort((a, b) => {
+      if (sortBy === "priority") {
+        const weightA = PRIORITY_ORDER[a.priority] || 1;
+        const weightB = PRIORITY_ORDER[b.priority] || 1;
+        if (weightB !== weightA) return weightB - weightA;
+      }
+
+      // Deadline sort
+      if (a.deadline && b.deadline) {
+        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      }
+      if (a.deadline && !b.deadline) return -1;
+      if (!a.deadline && b.deadline) return 1;
+      return 0;
+    });
+  };
+
+  // Group missions into the requested 6 buckets:
+  // Overdue (red) → Today → Tomorrow → This Week → Later → Completed
+  const overdueList: Mission[] = [];
+  const todayList: Mission[] = [];
+  const tomorrowList: Mission[] = [];
+  const thisWeekList: Mission[] = [];
+  const laterList: Mission[] = [];
+  const completedList: Mission[] = [];
+
+  const tomorrowDate = new Date(now);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+
+  const endOfWeekDate = new Date(now);
+  // Days until Sunday or 7 days out
+  const daysToSunday = 7 - now.getDay();
+  endOfWeekDate.setDate(now.getDate() + daysToSunday);
+  endOfWeekDate.setHours(23, 59, 59, 999);
+
+  filteredMissions.forEach((m) => {
+    if (m.status === "completed") {
+      completedList.push(m);
+      return;
+    }
+
+    if (!m.deadline) {
+      laterList.push(m);
+      return;
+    }
+
+    const d = new Date(m.deadline);
+
+    if (d < now) {
+      overdueList.push(m);
+      return;
+    }
+
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+
+    if (isToday) {
+      todayList.push(m);
+      return;
+    }
+
+    const isTomorrow =
+      d.getDate() === tomorrowDate.getDate() &&
+      d.getMonth() === tomorrowDate.getMonth() &&
+      d.getFullYear() === tomorrowDate.getFullYear();
+
+    if (isTomorrow) {
+      tomorrowList.push(m);
+      return;
+    }
+
+    if (d <= endOfWeekDate) {
+      thisWeekList.push(m);
+      return;
+    }
+
+    laterList.push(m);
+  });
+
+  const groups = [
+    { key: "overdue", label: "OVERDUE", list: sortMissions(overdueList), isRed: true },
+    { key: "today", label: "TODAY", list: sortMissions(todayList), isRed: false },
+    { key: "tomorrow", label: "TOMORROW", list: sortMissions(tomorrowList), isRed: false },
+    { key: "thisWeek", label: "THIS WEEK", list: sortMissions(thisWeekList), isRed: false },
+    { key: "later", label: "LATER", list: sortMissions(laterList), isRed: false },
+    { key: "completed", label: "COMPLETED", list: sortMissions(completedList), isRed: false },
+  ];
 
   return (
-    <div className="space-y-4">
-      {/* Filter and Search Bar */}
-      <div className="clean-card p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        {/* Status filter tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs font-mono">
-          <button
-            onClick={() => setStatusFilter("all")}
-            className={`px-3 py-1.5 rounded-[3px] transition-colors border ${
-              statusFilter === "all"
-                ? "bg-slate-800 text-white border-slate-700 font-semibold"
-                : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
-            }`}
-          >
-            All ({missions.length})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter("active")}
-            className={`px-3 py-1.5 rounded-[3px] transition-colors border ${
-              statusFilter === "active"
-                ? "bg-spy-green/10 text-spy-green border-spy-green/40 font-semibold"
-                : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
-            }`}
-          >
-            Active ({activeCount})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter("locked")}
-            className={`px-3 py-1.5 rounded-[3px] transition-colors border ${
-              statusFilter === "locked"
-                ? "bg-slate-800 text-slate-300 border-slate-700 font-semibold"
-                : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
-            }`}
-          >
-            Queued ({lockedCount})
-          </button>
-
-          {failingCount > 0 && (
-            <button
-              onClick={() => setStatusFilter("failing")}
-              className={`px-3 py-1.5 rounded-[3px] transition-colors border flex items-center gap-1 ${
-                statusFilter === "failing"
-                  ? "bg-red-950/40 text-spy-red border-spy-red/60 font-semibold"
-                  : "bg-transparent text-spy-red/80 border-transparent hover:text-spy-red"
-              }`}
-            >
-              <AlertCircle className="w-3.5 h-3.5" />
-              <span>Overdue ({failingCount})</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => setStatusFilter("completed")}
-            className={`px-3 py-1.5 rounded-[3px] transition-colors border ${
-              statusFilter === "completed"
-                ? "bg-slate-800 text-slate-300 border-slate-700 font-semibold"
-                : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
-            }`}
-          >
-            Completed ({completedCount})
-          </button>
-        </div>
-
-        {/* Search & Category Inputs */}
-        <div className="flex items-center gap-2 flex-1 md:max-w-md">
+    <div className="space-y-5">
+      {/* Search & Sort Bar */}
+      <div className="clean-card p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Search input */}
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search missions..."
+              placeholder="Search missions by title, codename, notes..."
               className="w-full bg-[#141d18] border border-spy-border pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-spy-borderLight rounded-[3px]"
             />
           </div>
 
-          <div className="relative shrink-0">
+          {/* Sort Dropdown */}
+          <div className="flex items-center gap-2 shrink-0 text-xs font-mono">
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-400">Sort:</span>
             <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="bg-[#141d18] border border-spy-border px-3 py-1.5 text-xs text-slate-300 focus:outline-none rounded-[3px] cursor-pointer"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as "deadline" | "priority")}
+              className="bg-[#141d18] border border-spy-border px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none rounded-[3px] cursor-pointer"
             >
-              <option value="all">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id} className="bg-[#111714]">
-                  {c.name}
-                </option>
-              ))}
+              <option value="deadline" className="bg-[#111714]">Deadline (Earliest)</option>
+              <option value="priority" className="bg-[#111714]">Priority (Highest)</option>
             </select>
           </div>
         </div>
-      </div>
 
-      {/* Grid of Missions */}
-      {filteredMissions.length === 0 ? (
-        <div className="clean-card p-12 text-center text-xs text-slate-500">
-          No directives found matching the selected filters.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredMissions.map((mission) => {
-            const category = categories.find((c) => c.id === mission.category_id);
+        {/* Filter Chips by Category */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-1">
+          {CATEGORY_CHIPS.map((chip) => {
+            const isSelected = selectedChip === chip.key;
             return (
-              <MissionCard
-                key={mission.id}
-                mission={mission}
-                category={category}
-                onComplete={onComplete}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onSetActive={onSetActive}
-              />
+              <button
+                key={chip.key}
+                onClick={() => setSelectedChip(chip.key)}
+                className={`px-2.5 py-1 text-xs font-mono rounded-[3px] transition-colors border shrink-0 ${
+                  isSelected
+                    ? "bg-spy-green/10 text-spy-green border-spy-green/40 font-semibold"
+                    : "bg-[#141d18] text-slate-400 border-spy-border hover:text-slate-200"
+                }`}
+              >
+                {chip.label}
+              </button>
             );
           })}
         </div>
-      )}
+      </div>
+
+      {/* Grouped Collapsible Sections */}
+      <div className="space-y-6">
+        {groups.map((group) => {
+          // If no items in group, skip rendering empty group except if search is empty
+          if (group.list.length === 0) return null;
+
+          const isCollapsed = Boolean(collapsedSections[group.key]);
+
+          return (
+            <div key={group.key} className="space-y-3">
+              {/* Collapsible Section Heading: small uppercase label + count with divider */}
+              <button
+                type="button"
+                onClick={() => toggleSection(group.key)}
+                className="w-full flex items-center gap-3 text-left group/btn select-none py-1"
+              >
+                <span
+                  className={`text-xs font-mono font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
+                    group.isRed ? "text-spy-red" : "text-slate-300"
+                  }`}
+                >
+                  <span>{group.label}</span>
+                  <span className="text-[11px] opacity-75">({group.list.length})</span>
+                </span>
+
+                <div className="flex-1 h-[1px] bg-spy-border group-hover/btn:bg-spy-borderLight transition-colors" />
+
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                    isCollapsed ? "-rotate-90" : ""
+                  }`}
+                />
+              </button>
+
+              {/* Mission Items */}
+              {!isCollapsed && (
+                <div className="space-y-2.5">
+                  {group.list.map((mission) => {
+                    const category = categories.find((c) => c.id === mission.category_id);
+                    return (
+                      <MissionCard
+                        key={mission.id}
+                        mission={mission}
+                        category={category}
+                        onComplete={onComplete}
+                        onEdit={onEdit}
+                        onDelete={onDelete}
+                        onSetActive={onSetActive}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {filteredMissions.length === 0 && (
+          <div className="clean-card p-12 text-center text-xs text-slate-500 font-sans">
+            No missions found matching the selected filter parameters.
+          </div>
+        )}
+      </div>
     </div>
   );
 };
