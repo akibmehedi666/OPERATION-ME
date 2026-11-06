@@ -38,15 +38,22 @@ test.describe('Dashboard & Missions E2E Flow', () => {
   });
 
   test('Mission accomplishment flow: debrief modal, note storage, auto-assign next target', async ({ page }) => {
-    // Click Accomplish on the hero mission card
+    // Wait for dashboard to settle
     const heroCard = page.locator('.active-mission-card');
+    await expect(heroCard).toBeVisible();
+    await page.waitForTimeout(500);
+
+    // Click Accomplish on the hero mission card
+    const heroTitle = (await heroCard.locator('h2').first().textContent())?.trim();
     const accomplishBtn = heroCard.getByRole('button', { name: 'Accomplish' });
     await accomplishBtn.click();
 
     // 1. Debrief note modal opens
     const debriefModal = page.locator('.clean-card', { hasText: 'Mission Debrief' });
     await expect(debriefModal).toBeVisible();
-    await expect(debriefModal.getByText('Implement Virtual Memory Paging')).toBeVisible();
+    if (heroTitle) {
+      await expect(debriefModal.locator('h3')).toContainText(heroTitle);
+    }
 
     // Fill note and time spent
     const noteInput = page.getByPlaceholder(/e\.g\. solved with DP/i);

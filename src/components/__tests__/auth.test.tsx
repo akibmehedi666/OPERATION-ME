@@ -4,24 +4,56 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LoginPage } from "../auth/LoginPage";
 
-describe("LoginPage Component", () => {
-  it("renders login authorization page with inputs and credentials", () => {
+describe("LoginPage Component - Cloud Isolation & Hardened Auth", () => {
+  it("in cloud mode: removes direct-access bypass button and removes sign-up link entirely", () => {
     render(
       <LoginPage
         onLogin={vi.fn()}
         onGuestBypass={vi.fn()}
+        isSupabaseConnected={true}
+      />
+    );
+
+    // Header and normal placeholders
+    expect(screen.getByText("OPERATION: ME")).toBeInTheDocument();
+    expect(screen.getByText("Agent Authorization")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("••••••••••••")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Authenticate/i })).toBeInTheDocument();
+
+    // STRICT CHECK: Direct Access button MUST NOT exist in cloud mode
+    expect(screen.queryByRole("button", { name: /Direct Access/i })).toBeNull();
+    expect(screen.queryByText(/Direct Access/i)).toBeNull();
+
+    // STRICT CHECK: Sign up link MUST NOT exist (single-user app)
+    expect(screen.queryByText(/Sign up/i)).toBeNull();
+    expect(screen.queryByText(/Need an account/i)).toBeNull();
+
+    // Cloud mode indicator
+    expect(screen.getByText(/Cloud Mode/i)).toBeInTheDocument();
+  });
+
+  it("in local mode: keeps Direct Access clearly labeled with Local Mode notice", async () => {
+    const user = userEvent.setup();
+    const mockBypass = vi.fn();
+
+    render(
+      <LoginPage
+        onLogin={vi.fn()}
+        onGuestBypass={mockBypass}
         isSupabaseConnected={false}
       />
     );
 
-    expect(screen.getByText("OPERATION: ME")).toBeInTheDocument();
-    expect(screen.getByText("Agent Authorization")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/agent\.akib@agency\.internal/i)).toBeInTheDocument();
-    expect(screen.getByText("Authenticate")).toBeInTheDocument();
-    expect(screen.getByText(/Direct Access as Agent Akib/i)).toBeInTheDocument();
+    const bypassBtn = screen.getByRole("button", { name: /Direct Access \(Local Mode\)/i });
+    expect(bypassBtn).toBeInTheDocument();
+    expect(screen.getByText(/Local mode: data stays on this device/i)).toBeInTheDocument();
+
+    await user.click(bypassBtn);
+    expect(mockBypass).toHaveBeenCalledTimes(1);
   });
 
-  it("submits login form and calls onLogin with email and password", async () => {
+  it("submits login form and calls onLogin with entered email and password", async () => {
     const user = userEvent.setup();
     const mockLogin = vi.fn().mockResolvedValue({ success: true });
 
@@ -33,24 +65,22 @@ describe("LoginPage Component", () => {
       />
     );
 
-    const emailInput = screen.getByPlaceholderText(/agent\.akib@agency\.internal/i);
-    const passwordInput = screen.getByPlaceholderText(/••••••••••••/i);
-    const submitBtn = screen.getByText("Authenticate");
+    const emailInput = screen.getByPlaceholderText("you@example.com");
+    const passwordInput = screen.getByPlaceholderText("••••••••••••");
+    const submitBtn = screen.getByRole("button", { name: /Authenticate/i });
 
-    await user.clear(emailInput);
-    await user.type(emailInput, "test.akib@hq.internal");
-    await user.clear(passwordInput);
-    await user.type(passwordInput, "correct-pass");
+    await user.type(emailInput, "akib@example.com");
+    await user.type(passwordInput, "secret-pass-2026");
     await user.click(submitBtn);
 
-    expect(mockLogin).toHaveBeenCalledWith("test.akib@hq.internal", "correct-pass", false);
+    expect(mockLogin).toHaveBeenCalledWith("akib@example.com", "secret-pass-2026");
   });
 
-  it("displays error message banner when onLogin returns an error", async () => {
+  it("displays themed error banner when wrong password or credentials are submitted", async () => {
     const user = userEvent.setup();
     const mockLogin = vi.fn().mockResolvedValue({
       success: false,
-      error: "Invalid clearance passcode. Access denied.",
+      error: "Invalid login credentials. Access denied.",
     });
 
     render(
@@ -61,30 +91,54 @@ describe("LoginPage Component", () => {
       />
     );
 
-    const submitBtn = screen.getByText("Authenticate");
+    const emailInput = screen.getByPlaceholderText("you@example.com");
+    const passwordInput = screen.getByPlaceholderText("••••••••••••");
+    const submitBtn = screen.getByRole("button", { name: /Authenticate/i });
+
+    await user.type(emailInput, "akib@example.com");
+    await user.type(passwordInput, "wrong-password");
     await user.click(submitBtn);
 
     await waitFor(() => {
-      expect(screen.getByText("Invalid clearance passcode. Access denied.")).toBeInTheDocument();
+      const alert = screen.getByRole("alert");
+      expect(alert).toBeInTheDocument();
+      expect(alert).toHaveTextContent("Invalid login credentials. Access denied.");
     });
   });
 
-  it("calls onGuestBypass when direct bypass button is clicked", async () => {
+  it("forgot password link requires email and calls onResetPassword with success notice", async () => {
     const user = userEvent.setup();
-    const mockBypass = vi.fn();
+    const mockResetPassword = vi.fn().mockResolvedValue({
+      success: true,
+      message: "Password recovery link dispatched to your inbox.",
+    });
 
     render(
       <LoginPage
         onLogin={vi.fn()}
-        onGuestBypass={mockBypass}
+        onResetPassword={mockResetPassword}
+        onGuestBypass={vi.fn()}
         isSupabaseConnected={true}
       />
     );
 
-    const bypassBtn = screen.getByText(/Direct Access as Agent Akib/i);
-    await user.click(bypassBtn);
+    const forgotBtn = screen.getByRole("button", { name: /Forgot password\?/i });
+    
+    // 1. Click without typing email -> prompts user
+    await user.click(forgotBtn);
+    expect(screen.getByRole("alert")).toHaveTextContent("Please enter your email address to reset password.");
+    expect(mockResetPassword).not.toHaveBeenCalled();
 
-    expect(mockBypass).toHaveBeenCalledTimes(1);
+    // 2. Type email and click again -> calls reset and shows success status
+    const emailInput = screen.getByPlaceholderText("you@example.com");
+    await user.type(emailInput, "operative@agency.org");
+    await user.click(forgotBtn);
+
+    await waitFor(() => {
+      expect(mockResetPassword).toHaveBeenCalledWith("operative@agency.org");
+      const status = screen.getByRole("status");
+      expect(status).toHaveTextContent("Password recovery link dispatched to your inbox.");
+    });
   });
 
   it("toggles password visibility between text and password", async () => {
@@ -98,7 +152,7 @@ describe("LoginPage Component", () => {
       />
     );
 
-    const passwordInput = screen.getByPlaceholderText(/••••••••••••/i) as HTMLInputElement;
+    const passwordInput = screen.getByPlaceholderText("••••••••••••") as HTMLInputElement;
     expect(passwordInput.type).toBe("password");
 
     const toggleBtn = screen.getByTitle("Show password");
@@ -108,23 +162,5 @@ describe("LoginPage Component", () => {
     const hideBtn = screen.getByTitle("Hide password");
     await user.click(hideBtn);
     expect(passwordInput.type).toBe("password");
-  });
-
-  it("toggles between Authenticate and Sign up modes", async () => {
-    const user = userEvent.setup();
-
-    render(
-      <LoginPage
-        onLogin={vi.fn()}
-        onGuestBypass={vi.fn()}
-        isSupabaseConnected={true}
-      />
-    );
-
-    const toggleModeBtn = screen.getByText(/Need an account\? Sign up/i);
-    await user.click(toggleModeBtn);
-
-    expect(screen.getByText("Register Account")).toBeInTheDocument();
-    expect(screen.getByText(/Existing agent\? Sign in/i)).toBeInTheDocument();
   });
 });

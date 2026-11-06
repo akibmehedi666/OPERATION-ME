@@ -1,15 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { seedTestState } from './e2e-seed';
 
 test.describe('Theme & Settings Single Source of Truth Verification', () => {
   test('User selects Light, Dark, System in Settings with zero flicker, stable background and no clipping', async ({ page }) => {
-    // Navigate to local dev app
-    await page.goto('http://localhost:3000');
-
-    // Bypass login if on login portal
-    const bypass = page.getByRole('button', { name: /Direct Access/i });
-    if (await bypass.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await bypass.click();
-    }
+    // Navigate to local dev app with authenticated session
+    await seedTestState(page, { isAuthenticated: true });
+    await page.goto('/');
 
     await expect(page.getByText('Agent Akib')).toBeVisible();
 

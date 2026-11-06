@@ -7,10 +7,19 @@ function runStep(name, command, args) {
     const startTime = Date.now();
 
     const fullCmd = `${command} ${args.join(' ')}`;
+    const testEnv = {
+      ...process.env,
+      NODE_ENV: 'test',
+      NEXT_PUBLIC_TEST_MODE: 'true',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://test-isolation.supabase.co',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key-isolated-12345',
+      FORCE_COLOR: '1'
+    };
+
     const child = spawn(fullCmd, {
       stdio: 'inherit',
       shell: true,
-      env: { ...process.env, FORCE_COLOR: '1' }
+      env: testEnv
     });
 
     child.on('close', (code) => {

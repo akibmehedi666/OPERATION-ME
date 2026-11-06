@@ -1,5 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_CATEGORIES, DEFAULT_SCHEDULE, INITIAL_STARTER_MISSIONS } from "../seeds";
+import {
+  DEFAULT_CATEGORIES,
+  DEFAULT_SCHEDULE,
+  DEFAULT_TIME_BLOCKS,
+  DEFAULT_ACADEMIC_EVENTS,
+  DEFAULT_RECURRING_RULES,
+  DEFAULT_COURSES,
+  DEFAULT_CYBER_TOPICS,
+  DEFAULT_LECTURE_LOGS,
+  DEFAULT_PAPERS,
+  DEFAULT_SIDE_PROJECTS,
+  DEFAULT_CF_LOGS,
+  DEFAULT_WEEKLY_REVIEWS,
+  INITIAL_STARTER_MISSIONS,
+  DEMO_STARTER_MISSIONS,
+} from "../seeds";
 
 describe("seeds - routine & categories requirement verification", () => {
   it("contains all 11 required seed categories", () => {
@@ -127,10 +142,42 @@ describe("seeds - routine & categories requirement verification", () => {
     });
   });
 
-  describe("INITIAL_STARTER_MISSIONS verification", () => {
-    it("has starter missions with required fields and valid priorities", () => {
-      expect(INITIAL_STARTER_MISSIONS.length).toBeGreaterThan(0);
-      INITIAL_STARTER_MISSIONS.forEach((m) => {
+  describe("STRUCTURE vs DEMO separation & fresh install baseline", () => {
+    it("ensures fresh installs start with 0 missions and 0 progress logs", () => {
+      expect(INITIAL_STARTER_MISSIONS).toHaveLength(0);
+      expect(DEFAULT_LECTURE_LOGS).toHaveLength(0);
+      expect(DEFAULT_PAPERS).toHaveLength(0);
+      expect(DEFAULT_SIDE_PROJECTS).toHaveLength(0);
+      expect(DEFAULT_CF_LOGS).toHaveLength(0);
+      expect(DEFAULT_WEEKLY_REVIEWS).toHaveLength(0);
+    });
+
+    it("ensures STRUCTURE is complete: courses, routine, time-blocks, and calendar are preserved", () => {
+      expect(DEFAULT_COURSES).toHaveLength(6);
+      DEFAULT_COURSES.forEach((c) => {
+        expect(c.code).toBeTruthy();
+        expect(c.faculty).toBeTruthy();
+        expect(c.room).toBeTruthy();
+        expect(c.resources).toHaveLength(0); // Clean slate for user resources
+      });
+
+      expect(DEFAULT_TIME_BLOCKS.length).toBeGreaterThan(20);
+      expect(DEFAULT_ACADEMIC_EVENTS.length).toBeGreaterThan(10);
+      expect(DEFAULT_RECURRING_RULES.length).toBeGreaterThan(5);
+    });
+
+    it("ensures all 28 cybersecurity roadmap topics start with not_started and 0 minutes", () => {
+      expect(DEFAULT_CYBER_TOPICS).toHaveLength(28);
+      DEFAULT_CYBER_TOPICS.forEach((t) => {
+        expect(t.status).toBe("not_started");
+        expect(t.time_spent_minutes).toBe(0);
+        expect(t.notes).toBeUndefined();
+      });
+    });
+
+    it("preserves DEMO missions in DEMO_STARTER_MISSIONS with valid fields", () => {
+      expect(DEMO_STARTER_MISSIONS.length).toBe(8);
+      DEMO_STARTER_MISSIONS.forEach((m) => {
         expect(m.id).toBeDefined();
         expect(m.title).toBeTruthy();
         expect(m.codename).toBeTruthy();

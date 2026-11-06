@@ -8,7 +8,10 @@ const mockSignInWithPassword = vi.fn();
 const mockSignUp = vi.fn();
 const mockSignOut = vi.fn();
 const mockGetSession = vi.fn();
+const mockResetPasswordForEmail = vi.fn();
+const mockOnAuthStateChange = vi.fn();
 const mockFrom = vi.fn();
+let isConfiguredMock = true;
 
 const createChainableMock = () => {
   const chain: Record<string, unknown> = {
@@ -33,13 +36,15 @@ vi.mock("@/lib/supabase/client", () => ({
       signUp: mockSignUp,
       signOut: mockSignOut,
       getSession: mockGetSession,
+      resetPasswordForEmail: mockResetPasswordForEmail,
+      onAuthStateChange: mockOnAuthStateChange,
     },
     from: mockFrom,
   }),
 }));
 
 vi.mock("@/lib/supabase/config", () => ({
-  isSupabaseConfigured: () => true,
+  isSupabaseConfigured: () => isConfiguredMock,
 }));
 
 describe("useAgencyState - State, Auth, RLS, and Mission Completion", () => {
@@ -47,21 +52,61 @@ describe("useAgencyState - State, Auth, RLS, and Mission Completion", () => {
     localStorage.clear();
     sessionStorage.clear();
     vi.clearAllMocks();
+    isConfiguredMock = true;
 
     mockFrom.mockImplementation(() => createChainableMock());
     mockGetSession.mockResolvedValue({ data: { session: null } });
+    mockOnAuthStateChange.mockReturnValue({
+      data: {
+        subscription: {
+          unsubscribe: vi.fn(),
+        },
+      },
+    });
   });
 
   describe("Auth & Session handling", () => {
-    it("starts unauthenticated when no session exists", async () => {
+    it("starts unauthenticated when no session exists in cloud mode", async () => {
+      isConfiguredMock = true;
       const { result } = renderHook(() => useAgencyState());
       await act(async () => {});
 
       expect(result.current.loading).toBe(false);
       expect(result.current.isAuthenticated).toBe(false);
+      expect(result.current.currentUser).toBeNull();
     });
 
-    it("handles login failure with clear error message (wrong credentials)", async () => {
+    it("cloud mode blocks guestBypass entirely and never sets operation_me_auth", async () => {
+      isConfiguredMock = true;
+      const { result } = renderHook(() => useAgencyState());
+      await act(async () => {});
+
+      act(() => {
+        result.current.guestBypass();
+      });
+
+      // Guest bypass is ignored in cloud mode: user remains unauthenticated
+      expect(result.current.isAuthenticated).toBe(false);
+      expect(result.current.currentUser).toBeNull();
+      expect(localStorage.getItem("operation_me_auth")).toBeNull();
+    });
+
+    it("local mode allows guestBypass and sets operation_me_auth", async () => {
+      isConfiguredMock = false;
+      const { result } = renderHook(() => useAgencyState());
+      await act(async () => {});
+
+      act(() => {
+        result.current.guestBypass();
+      });
+
+      expect(result.current.isAuthenticated).toBe(true);
+      expect(result.current.currentUser?.id).toBe("agent-akib-direct");
+      expect(localStorage.getItem("operation_me_auth")).toBe("true");
+    });
+
+    it("handles login failure with clear error message (wrong credentials) in cloud mode", async () => {
+      isConfiguredMock = true;
       mockSignInWithPassword.mockResolvedValueOnce({
         data: { user: null },
         error: { message: "Invalid login credentials" },
@@ -80,16 +125,17 @@ describe("useAgencyState - State, Auth, RLS, and Mission Completion", () => {
         error: "Invalid login credentials",
       });
       expect(result.current.isAuthenticated).toBe(false);
+      expect(localStorage.getItem("operation_me_auth")).toBeNull();
     });
 
-    it("handles login success and authenticates user", async () => {
+    it("handles login success and authenticates user in cloud mode via Supabase", async () => {
+      isConfiguredMock = true;
       const mockUser = { id: "user-123", email: "operative@agency.test" };
       mockSignInWithPassword.mockResolvedValueOnce({
         data: { user: mockUser },
         error: null,
       });
 
-      // Mock database calls for this user
       mockFrom.mockReturnValue({
         select: vi.fn().mockReturnThis(),
         or: vi.fn().mockResolvedValue({ data: [] }),
@@ -108,26 +154,43 @@ describe("useAgencyState - State, Auth, RLS, and Mission Completion", () => {
 
       expect(loginResult).toEqual({ success: true });
       expect(result.current.isAuthenticated).toBe(true);
+      expect(result.current.currentUser?.id).toBe("user-123");
+      // Cloud login must never write local bypass token
+      expect(localStorage.getItem("operation_me_auth")).toBeNull();
     });
 
-    it("guestBypass authenticates immediately with direct credentials", async () => {
+    it("dispatches password reset request via Supabase resetPasswordForEmail", async () => {
+      isConfiguredMock = true;
+      mockResetPasswordForEmail.mockResolvedValueOnce({ error: null });
+
       const { result } = renderHook(() => useAgencyState());
       await act(async () => {});
 
-      act(() => {
-        result.current.guestBypass();
+      let resetResult;
+      await act(async () => {
+        resetResult = await result.current.resetPassword("operative@agency.test");
       });
 
-      expect(result.current.isAuthenticated).toBe(true);
-      expect(localStorage.getItem("operation_me_auth")).toBe("true");
+      expect(mockResetPasswordForEmail).toHaveBeenCalledWith("operative@agency.test");
+      expect(resetResult).toEqual({
+        success: true,
+        message: "Password reset link sent to your email.",
+      });
     });
 
-    it("logout clears credentials and returns to unauthenticated state", async () => {
+    it("logout calls Supabase signOut and clears session state completely", async () => {
+      isConfiguredMock = true;
+      const mockUser = { id: "user-123", email: "operative@agency.test" };
+      mockSignInWithPassword.mockResolvedValueOnce({
+        data: { user: mockUser },
+        error: null,
+      });
+
       const { result } = renderHook(() => useAgencyState());
       await act(async () => {});
 
-      act(() => {
-        result.current.guestBypass();
+      await act(async () => {
+        await result.current.login("operative@agency.test", "correctpass");
       });
       expect(result.current.isAuthenticated).toBe(true);
 
@@ -135,12 +198,40 @@ describe("useAgencyState - State, Auth, RLS, and Mission Completion", () => {
         await result.current.logout();
       });
 
+      expect(mockSignOut).toHaveBeenCalled();
       expect(result.current.isAuthenticated).toBe(false);
+      expect(result.current.currentUser).toBeNull();
       expect(localStorage.getItem("operation_me_auth")).toBeNull();
+    });
+
+    it("auto-refreshes session when Supabase triggers TOKEN_REFRESHED", async () => {
+      isConfiguredMock = true;
+      let authStateCallback: (event: string, session: { user: { id: string; email: string } } | null) => void = () => {};
+      mockOnAuthStateChange.mockImplementation((cb: (event: string, session: { user: { id: string; email: string } } | null) => void) => {
+        authStateCallback = cb;
+        return { data: { subscription: { unsubscribe: vi.fn() } } };
+      });
+
+      const { result } = renderHook(() => useAgencyState());
+      await act(async () => {});
+
+      // Simulate token auto-refresh event from Supabase auth listener
+      act(() => {
+        authStateCallback("TOKEN_REFRESHED", {
+          user: { id: "user-refreshed-99", email: "refreshed@agency.org" },
+        });
+      });
+
+      expect(result.current.isAuthenticated).toBe(true);
+      expect(result.current.currentUser?.id).toBe("user-refreshed-99");
+      expect(result.current.currentUser?.email).toBe("refreshed@agency.org");
     });
   });
 
   describe("Mission Completion & Auto-Assignment Algorithm", () => {
+    beforeEach(() => {
+      isConfiguredMock = false;
+    });
     it("completes a mission, awards XP, increments streak, and auto-assigns next target", async () => {
       const { result } = renderHook(() => useAgencyState());
       await act(async () => {});
@@ -337,6 +428,7 @@ describe("useAgencyState - State, Auth, RLS, and Mission Completion", () => {
 
   describe("Data CRUD & Error Simulation", () => {
     it("adds, edits, and deletes missions in state and storage", async () => {
+      isConfiguredMock = false;
       const { result } = renderHook(() => useAgencyState());
       await act(async () => {});
       act(() => {
@@ -388,10 +480,12 @@ describe("useAgencyState - State, Auth, RLS, and Mission Completion", () => {
       const { result } = renderHook(() => useAgencyState());
       await act(async () => {});
 
-      // App gracefully catches the error and loads fallback seed data
+      // App gracefully catches the error and keeps baseline state intact
       expect(result.current.isAuthenticated).toBe(true);
-      expect(result.current.missions.length).toBeGreaterThan(0);
-      expect(result.current.totalXp).toBeGreaterThan(0);
+      expect(result.current.categories.length).toBe(11);
+      expect(result.current.schedule.length).toBe(13);
+      expect(result.current.missions).toHaveLength(0);
+      expect(result.current.totalXp).toBe(0);
     });
 
     it("RLS isolation: ensures user_id filtering is included on queries", async () => {
@@ -421,6 +515,136 @@ describe("useAgencyState - State, Auth, RLS, and Mission Completion", () => {
       expect(result.current.isAuthenticated).toBe(true);
       // Verify queries filtered for user-alpha
       expect(mockEq).toHaveBeenCalledWith("user_id", "user-alpha");
+    });
+  });
+
+  describe("Fresh User Baseline & resetAllProgress", () => {
+    it("fresh user has 0 XP, 0 streak, no missions or logs, but has full structure", async () => {
+      isConfiguredMock = false;
+      const { result } = renderHook(() => useAgencyState());
+      await act(async () => {});
+
+      act(() => {
+        result.current.guestBypass();
+      });
+
+      // DEMO data is clean/zeroed
+      expect(result.current.totalXp).toBe(0);
+      expect(result.current.streak).toBe(0);
+      expect(result.current.missions).toHaveLength(0);
+      expect(result.current.lectureLogs).toHaveLength(0);
+      expect(result.current.researchPapers).toHaveLength(0);
+      expect(result.current.sideProjects).toHaveLength(0);
+      expect(result.current.cfLogs).toHaveLength(0);
+      expect(result.current.weeklyReviews).toHaveLength(0);
+
+      // STRUCTURE is fully intact
+      expect(result.current.categories).toHaveLength(11);
+      expect(result.current.schedule).toHaveLength(13);
+      expect(result.current.courses).toHaveLength(6);
+      expect(result.current.timeBlocks.length).toBeGreaterThan(20);
+      expect(result.current.academicEvents.length).toBeGreaterThan(10);
+      expect(result.current.recurringRules.length).toBeGreaterThan(5);
+
+      // Cybersecurity roadmap: all 28 topics start with not_started and 0 minutes
+      expect(result.current.cyberTopics).toHaveLength(28);
+      result.current.cyberTopics.forEach((t) => {
+        expect(t.status).toBe("not_started");
+        expect(t.time_spent_minutes).toBe(0);
+      });
+    });
+
+    it("resetAllProgress deletes all progress and logs while preserving STRUCTURE", async () => {
+      isConfiguredMock = false;
+      // Simulate existing user progress in localStorage
+      localStorage.setItem("op_me_missions", JSON.stringify([{ id: "m-user-1", title: "User Task" }]));
+      localStorage.setItem("op_me_xp", "850");
+      localStorage.setItem("op_me_streak", "12");
+      localStorage.setItem("op_me_cf_logs", JSON.stringify([{ id: "cf-user-1", problem_name: "4A" }]));
+      localStorage.setItem("op_me_cf_handle", "user_operative");
+      localStorage.setItem("op_me_lecture_logs", JSON.stringify([{ id: "ll-1", topic: "Virtual Memory" }]));
+      localStorage.setItem("op_me_papers", JSON.stringify([{ id: "paper-1", title: "Attention" }]));
+      localStorage.setItem("op_me_side_projects", JSON.stringify([{ id: "proj-1", name: "Custom Project" }]));
+      localStorage.setItem("op_me_theme_preference", "light");
+      localStorage.setItem("op_me_animations_enabled", "false");
+
+      const { result } = renderHook(() => useAgencyState());
+      await act(async () => {});
+
+      act(() => {
+        result.current.guestBypass();
+      });
+
+      // Verify progress was loaded
+      expect(result.current.totalXp).toBe(850);
+      expect(result.current.streak).toBe(12);
+      expect(result.current.missions).toHaveLength(1);
+
+      // Execute Reset All Progress
+      let resetOutput: Awaited<ReturnType<typeof result.current.resetAllProgress>> | undefined;
+      await act(async () => {
+        resetOutput = await result.current.resetAllProgress();
+      });
+
+      expect(resetOutput?.success).toBe(true);
+
+      // State is completely clean
+      expect(result.current.totalXp).toBe(0);
+      expect(result.current.streak).toBe(0);
+      expect(result.current.missions).toHaveLength(0);
+      expect(result.current.cfLogs).toHaveLength(0);
+      expect(result.current.lectureLogs).toHaveLength(0);
+      expect(result.current.researchPapers).toHaveLength(0);
+      expect(result.current.sideProjects).toHaveLength(0);
+      expect(result.current.weeklyReviews).toHaveLength(0);
+
+      // LocalStorage keys cleared
+      expect(localStorage.getItem("op_me_xp")).toBe("0");
+      expect(localStorage.getItem("op_me_streak")).toBe("0");
+      expect(localStorage.getItem("op_me_cf_handle")).toBeNull();
+
+      // STRUCTURE kept intact
+      expect(result.current.categories).toHaveLength(11);
+      expect(result.current.schedule).toHaveLength(13);
+      expect(result.current.courses).toHaveLength(6);
+      expect(result.current.cyberTopics).toHaveLength(28);
+
+      // Preferences preserved
+      expect(localStorage.getItem("op_me_theme_preference")).toBe("light");
+      expect(localStorage.getItem("op_me_animations_enabled")).toBe("false");
+    });
+
+    it("reports an error if any cloud delete fails during resetAllProgress", async () => {
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: {
+            user: { id: "test-user-id", email: "test@example.com" },
+          },
+        },
+      });
+
+      mockFrom.mockImplementation((tableName: string) => {
+        const mock = createChainableMock();
+        if (tableName === "cf_log") {
+          mock.eq = vi.fn().mockResolvedValue({
+            data: null,
+            error: { message: "RLS policy denied delete on cf_log" },
+          });
+        }
+        return mock;
+      });
+
+      const { result } = renderHook(() => useAgencyState());
+      await act(async () => {});
+
+      let resetOutput: Awaited<ReturnType<typeof result.current.resetAllProgress>> | undefined;
+      await act(async () => {
+        resetOutput = await result.current.resetAllProgress();
+      });
+
+      expect(resetOutput?.success).toBe(false);
+      expect(resetOutput?.error).toContain("Failed to reset cloud tables");
+      expect(resetOutput?.error).toContain("RLS policy denied delete on cf_log");
     });
   });
 });

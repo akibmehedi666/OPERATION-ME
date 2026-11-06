@@ -1,13 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { seedTestState } from './e2e-seed';
 
 test.describe('Weekly Planner & Academic Calendar E2E Flows', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate and login
+    // Navigate and ensure authenticated session
+    await seedTestState(page, { isAuthenticated: true });
     await page.goto('/');
-    const guestBtn = page.getByRole('button', { name: /Direct Access/i });
-    if (await guestBtn.isVisible()) {
-      await guestBtn.click();
-    }
     await expect(page.getByText('Agent Akib')).toBeVisible({ timeout: 10000 });
   });
 

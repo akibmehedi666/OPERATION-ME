@@ -124,4 +124,91 @@ describe("Settings & Theme Toggle Component Verification", () => {
 
     expect(screen.getByText("250")).toBeInTheDocument();
   });
+
+  it("Settings > Data tab provides export and requires typing RESET to confirm progress reset", async () => {
+    const mockReset = vi.fn().mockResolvedValue({ success: true });
+
+    render(
+      <AgentHeader
+        agentName="Agent Akib"
+        totalXp={0}
+        streak={0}
+        currentTheme="dark"
+        defaultTheme="dark"
+        onToggleTheme={vi.fn()}
+        onUpdateDefaultTheme={vi.fn()}
+        onQuickAdd={vi.fn()}
+        onLogout={vi.fn()}
+        onResetAllProgress={mockReset}
+      />
+    );
+
+    // Open settings modal
+    const settingsBtn = screen.getByTitle(/settings/i);
+    fireEvent.click(settingsBtn);
+
+    // Switch to Data tab
+    const dataTabBtn = screen.getByRole("button", { name: "Data" });
+    fireEvent.click(dataTabBtn);
+
+    expect(screen.getByText("Reset All Progress")).toBeInTheDocument();
+    expect(screen.getByText("Export all data first before resetting")).toBeInTheDocument();
+
+    const resetBtn = screen.getByRole("button", { name: /Reset all progress/i });
+    expect(resetBtn).toBeDisabled();
+
+    // Type incorrect confirmation
+    const confirmInput = screen.getByPlaceholderText("RESET");
+    fireEvent.change(confirmInput, { target: { value: "NO" } });
+    expect(resetBtn).toBeDisabled();
+
+    // Type correct confirmation
+    fireEvent.change(confirmInput, { target: { value: "RESET" } });
+    expect(resetBtn).not.toBeDisabled();
+
+    // Click reset
+    fireEvent.click(resetBtn);
+    expect(mockReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("Settings > Data tab displays error alert if resetAllProgress fails", async () => {
+    const mockFailedReset = vi.fn().mockResolvedValue({
+      success: false,
+      error: "Failed to reset cloud tables: [cf_log]: RLS Policy Denied",
+    });
+
+    render(
+      <AgentHeader
+        agentName="Agent Akib"
+        totalXp={0}
+        streak={0}
+        currentTheme="dark"
+        defaultTheme="dark"
+        onToggleTheme={vi.fn()}
+        onUpdateDefaultTheme={vi.fn()}
+        onQuickAdd={vi.fn()}
+        onLogout={vi.fn()}
+        onResetAllProgress={mockFailedReset}
+      />
+    );
+
+    // Open settings modal
+    const settingsBtn = screen.getByTitle(/settings/i);
+    fireEvent.click(settingsBtn);
+
+    // Switch to Data tab
+    const dataTabBtn = screen.getByRole("button", { name: "Data" });
+    fireEvent.click(dataTabBtn);
+
+    const confirmInput = screen.getByPlaceholderText("RESET");
+    fireEvent.change(confirmInput, { target: { value: "RESET" } });
+
+    const resetBtn = screen.getByRole("button", { name: /Reset all progress/i });
+    fireEvent.click(resetBtn);
+
+    expect(mockFailedReset).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Failed to reset cloud tables: [cf_log]: RLS Policy Denied"
+    );
+  });
 });

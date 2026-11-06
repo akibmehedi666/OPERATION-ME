@@ -136,3 +136,4 @@ describe("Planner & Academic Calendar Components", () => {
     expect(screen.getByText(/Test Installment Payment/i)).toBeDefined();
   });
 });
+
