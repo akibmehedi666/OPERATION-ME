@@ -16,7 +16,6 @@ import {
   Sparkles,
   ExternalLink,
   CheckCircle2,
-  Circle,
   ShieldAlert,
   X,
   BookOpen,

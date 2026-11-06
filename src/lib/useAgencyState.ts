@@ -38,6 +38,7 @@ import { autoScheduleMissions } from "@/lib/plannerScheduler";
 import { generateDailyAutoMissions } from "@/lib/recurringGenerator";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { 
   ThemePreference, 
   getStoredThemePreference, 
@@ -183,7 +184,7 @@ export function useAgencyState() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+    } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
         if (session?.user) {
           setIsAuthenticated(true);
@@ -410,7 +411,7 @@ export function useAgencyState() {
         .eq("user_id", userId);
 
       if (xpData && xpData.length > 0) {
-        const sum = xpData.reduce((acc: number, row: any) => acc + (row.amount || 0), 0);
+        const sum = xpData.reduce((acc: number, row: { amount?: number | null }) => acc + (row.amount || 0), 0);
         setTotalXp(sum);
       } else {
         setTotalXp(0);
