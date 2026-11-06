@@ -6,9 +6,14 @@
 .pnp.js
 .yarn/install-state.gz
 
-# testing
+# testing & coverage
 /coverage
-/test-results/
+/test-results
+test-results/
+/test-screenshots
+test-screenshots/
+/playwright-report
+playwright-report/
 playwright-report.json
 
 # next.js
@@ -18,17 +23,26 @@ playwright-report.json
 # production
 /build
 
-# misc
+# misc & system
 .DS_Store
+Thumbs.db
 *.pem
+operation-me-backup*.json
+operation-me-backup-*.json
 
-# debug
+# logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env.local
 .env*.local
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
 
 # vercel
 .vercel
