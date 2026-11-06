@@ -23,6 +23,24 @@ import { useTheme } from "@/lib/themeContext";
 import { PlannerView } from "@/components/planner/PlannerView";
 import { UpcomingDatesCard } from "@/components/dashboard/UpcomingDatesCard";
 import { DashboardBanner } from "@/components/dashboard/DashboardBanner";
+import { CourseHQView } from "@/components/courses/CourseHQView";
+import { CodeforcesView } from "@/components/cf/CodeforcesView";
+import { CodeforcesLogModal } from "@/components/cf/CodeforcesLogModal";
+import {
+  fetchCodeforcesSubmissions,
+  parseSubmissionsToProblems,
+  deduplicateAndFormatNewLogs,
+} from "@/lib/codeforcesApi";
+import { CyberRoadmapView } from "@/components/cyber/CyberRoadmapView";
+import { ResearchPapersView } from "@/components/papers/ResearchPapersView";
+import { PaperSummaryModal } from "@/components/papers/PaperSummaryModal";
+import { SideProjectsView } from "@/components/projects/SideProjectsView";
+import { ProgressReviewView } from "@/components/review/ProgressReviewView";
+import { InsightsCard } from "@/components/dashboard/InsightsCard";
+import { NotificationToast } from "@/components/ui/NotificationToast";
+import { getDueNotifications } from "@/lib/notificationScheduler";
+import { checkLocalDataToMigrate } from "@/lib/cloudMigration";
+import { CloudMigrationBanner } from "@/components/dashboard/CloudMigrationBanner";
 
 // Dashboard stagger variants: cards fade + slide up 12px with 60ms stagger on load
 const dashboardContainerVariants: Variants = {
@@ -56,10 +74,22 @@ export default function Home() {
     schedule,
     timeBlocks,
     academicEvents,
+    recurringRules,
+    courses,
+    lectureLogs,
+    cyberTopics,
+    researchPapers,
+    sideProjects,
+    cfLogs,
+    weeklyReviews,
+    notificationSettings,
     totalXp,
     streak,
     isSupabaseConnected,
+    currentUser,
+    refreshData,
     login,
+    resetPassword,
     guestBypass,
     logout,
     addMission,
@@ -77,7 +107,42 @@ export default function Home() {
     scheduleMissionToBlock,
     confirmAutoScheduledMission,
     runAutoScheduler,
+    toggleRecurringRule,
+    updateRecurringRule,
+    addRecurringRule,
+    deleteRecurringRule,
+    runAutoMissionsGenerator,
+    addLectureLog,
+    updateLectureLog,
+    deleteLectureLog,
+    toggleLectureStudied,
+    addCourseResource,
+    deleteCourseResource,
+    addCfLog,
+    updateCfLog,
+    deleteCfLog,
+    importCfLogs,
+    updateCyberTopicStatus,
+    addCyberTopic,
+    addResearchPaper,
+    updateResearchPaper,
+    deleteResearchPaper,
+    addSideProject,
+    updateSideProject,
+    deleteSideProject,
+    saveWeeklyReview,
+    updateNotificationSettings,
+    resetAllProgress,
   } = useAgencyState();
+
+  const [initTimedOut, setInitTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setInitTimedOut(true);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const {
     defaultTheme,
@@ -86,15 +151,104 @@ export default function Home() {
     toggleActiveTheme,
   } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "missions" | "planner" | "history">("dashboard");
+  const [activeTab, setActiveTab] = useState<
+    | "dashboard"
+    | "missions"
+    | "planner"
+    | "courses"
+    | "codeforces"
+    | "cyber"
+    | "papers"
+    | "projects"
+    | "review"
+    | "history"
+  >("dashboard");
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("course-os");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCpMissionLogOpen, setIsCpMissionLogOpen] = useState(false);
+  const [isPaperMissionModalOpen, setIsPaperMissionModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
+  const [migrationDismissed, setMigrationDismissed] = useState(false);
+
+  const localSummary = React.useMemo(() => {
+    if (!isSupabaseConnected || !currentUser || currentUser.id === "agent-akib-local" || migrationDismissed) {
+      return {
+        hasData: false,
+        missionCount: 0,
+        courseCount: 0,
+        timeBlockCount: 0,
+        projectCount: 0,
+        paperCount: 0,
+        cfCount: 0,
+        lectureLogCount: 0,
+        totalItems: 0,
+      };
+    }
+    return checkLocalDataToMigrate(currentUser.id);
+  }, [isSupabaseConnected, currentUser, migrationDismissed]);
+
+  // Real-time notification alerts evaluated from schedule, deadlines, and quiet hours
+  const dueNotifications = React.useMemo(() => {
+    if (typeof window === "undefined") return [];
+    return getDueNotifications(new Date(), {
+      schedule,
+      events: academicEvents,
+      missions,
+      settings: notificationSettings,
+    });
+  }, [schedule, academicEvents, missions, notificationSettings]);
 
   // Track initial mount so that page-load stagger does not replay on subsequent re-renders
   const isFirstMount = React.useRef(true);
   useEffect(() => {
     isFirstMount.current = false;
   }, []);
+
+  // Dynamic document title reflecting the active view / tab
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const tabTitles: Record<typeof activeTab, string> = {
+      dashboard: "Dashboard | Operation ME",
+      missions: "Missions | Operation ME",
+      planner: "Planner | Operation ME",
+      courses: "Course HQ | Operation ME",
+      codeforces: "Codeforces | Operation ME",
+      cyber: "Cybersecurity | Operation ME",
+      papers: "Research Papers | Operation ME",
+      projects: "Side Projects | Operation ME",
+      review: "Progress Review | Operation ME",
+      history: "History | Operation ME",
+    };
+    document.title = tabTitles[activeTab] || "Operation ME";
+  }, [activeTab]);
+
+  // Codeforces auto-sync on app open (throttled: at most once per hour)
+  useEffect(() => {
+    if (typeof window === "undefined" || !isAuthenticated || loading) return;
+    const cfHandle = localStorage.getItem("op_me_cf_handle");
+    if (!cfHandle || !cfHandle.trim()) return;
+
+    const storedLastSync = localStorage.getItem("op_me_cf_last_synced");
+    const lastTime = storedLastSync ? Number(storedLastSync) : 0;
+    const ONE_HOUR = 60 * 60 * 1000;
+
+    if (!lastTime || Date.now() - lastTime > ONE_HOUR) {
+      (async () => {
+        try {
+          const subs = await fetchCodeforcesSubmissions(cfHandle.trim());
+          const parsed = parseSubmissionsToProblems(subs);
+          const { newLogs, totalSolvedCount } = deduplicateAndFormatNewLogs(parsed, cfLogs, cfHandle.trim());
+          if (newLogs.length > 0) {
+            await importCfLogs(newLogs);
+          }
+          localStorage.setItem("op_me_cf_last_synced", Date.now().toString());
+          localStorage.setItem("op_me_cf_api_solved_total", totalSolvedCount.toString());
+        } catch (err) {
+          console.warn("Background Codeforces auto-sync skipped:", err);
+        }
+      })();
+    }
+  }, [isAuthenticated, loading, cfLogs, importCfLogs]);
 
   // Mission accomplishment animation state
   const [accomplishingMissionId, setAccomplishingMissionId] = useState<string | null>(null);
@@ -178,6 +332,28 @@ export default function Home() {
       isFirstToday: result.isFirstToday,
       isRankUp: result.isRankUp,
     });
+
+    // 7. If CP mission, trigger quick Codeforces log modal
+    const isCpMission =
+      mission.category_id === "cat-10" ||
+      mission.recurring_rule_id === "rule-cp-daily" ||
+      mission.title.toLowerCase().includes("codeforces");
+    if (isCpMission) {
+      setTimeout(() => {
+        setIsCpMissionLogOpen(true);
+      }, 700);
+    }
+
+    // 8. If Research Paper mission, trigger quick Paper summary modal
+    const isPaperMission =
+      mission.category_id === "cat-9" ||
+      mission.recurring_rule_id === "rule-paper-weekly" ||
+      mission.title.toLowerCase().includes("paper");
+    if (isPaperMission) {
+      setTimeout(() => {
+        setIsPaperMissionModalOpen(true);
+      }, 700);
+    }
   };
 
   // Edit debrief note on an already completed mission
@@ -219,25 +395,29 @@ export default function Home() {
   };
 
   const handleSaveMission = (data: Partial<Mission>) => {
-    if (editingMission) {
+    if (editingMission && editingMission.id && editingMission.id.trim() !== "") {
       editMission(data);
     } else {
       addMission(data);
     }
   };
 
-  if (loading) {
+  if (loading && !initTimedOut) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-spy-bg font-mono text-spy-muted text-xs">
-        INITIALIZING SECURE SESSION...
+      <div className="min-h-screen flex flex-col items-center justify-center bg-spy-bg font-mono text-spy-muted text-xs gap-3 p-4 select-none">
+        <div className="flex items-center gap-2 text-spy-green">
+          <span className="w-2 h-2 rounded-full bg-spy-green animate-ping" />
+          <span className="tracking-widest font-bold">INITIALIZING SECURE SESSION...</span>
+        </div>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || (loading && initTimedOut)) {
     return (
       <LoginPage
         onLogin={login}
+        onResetPassword={resetPassword}
         onGuestBypass={guestBypass}
         isSupabaseConnected={isSupabaseConnected}
       />
@@ -291,11 +471,22 @@ export default function Home() {
             onUpdateDefaultTheme={setDefaultTheme}
             onQuickAdd={handleOpenAdd}
             onLogout={logout}
+            recurringRules={recurringRules}
+            categories={categories}
+            notificationSettings={notificationSettings}
+            isSupabaseConnected={isSupabaseConnected}
+            onToggleRecurringRule={toggleRecurringRule}
+            onUpdateRecurringRule={updateRecurringRule}
+            onAddRecurringRule={addRecurringRule}
+            onDeleteRecurringRule={deleteRecurringRule}
+            onRunAutoMissionsGenerator={runAutoMissionsGenerator}
+            onUpdateNotificationSettings={updateNotificationSettings}
+            onResetAllProgress={resetAllProgress}
           />
 
           {/* Navigation Tabs (Smooth layoutId sliding indicator) */}
           <div className="flex items-center gap-1 sm:gap-2 mb-6 border-b border-spy-border pb-1 relative overflow-x-auto no-scrollbar">
-            {(["dashboard", "missions", "planner", "history"] as const).map((tab) => {
+            {(["dashboard", "missions", "planner", "courses", "codeforces", "cyber", "papers", "projects", "review", "history"] as const).map((tab) => {
               const isActive = activeTab === tab;
               const label =
                 tab === "dashboard"
@@ -304,10 +495,32 @@ export default function Home() {
                   ? "Missions"
                   : tab === "planner"
                   ? "Planner"
+                  : tab === "courses"
+                  ? "Courses"
+                  : tab === "codeforces"
+                  ? "Codeforces"
+                  : tab === "cyber"
+                  ? "Cyber"
+                  : tab === "papers"
+                  ? "Research"
+                  : tab === "projects"
+                  ? "Projects"
+                  : tab === "review"
+                  ? "Review"
                   : "History";
               const count =
                 tab === "missions"
                   ? missions.length
+                  : tab === "courses"
+                  ? courses.length
+                  : tab === "codeforces"
+                  ? cfLogs.length
+                  : tab === "cyber"
+                  ? `${cyberTopics.filter((t) => t.status === "done").length}/${cyberTopics.length}`
+                  : tab === "papers"
+                  ? `${researchPapers.filter((p) => p.status === "done").length}/${researchPapers.length}`
+                  : tab === "projects"
+                  ? `${sideProjects.filter((p) => p.status === "active").length}`
                   : tab === "history"
                   ? missions.filter((m) => m.status === "completed").length
                   : null;
@@ -364,12 +577,36 @@ export default function Home() {
                   animate="visible"
                   className="space-y-6"
                 >
+                  {/* One-time local data migration prompt when cloud connected */}
+                  {localSummary.hasData && currentUser && (
+                    <CloudMigrationBanner
+                      summary={localSummary}
+                      userId={currentUser.id}
+                      onMigrationComplete={async () => {
+                        await refreshData();
+                      }}
+                      onDismiss={() => setMigrationDismissed(true)}
+                    />
+                  )}
+
                   {/* Strategic Directive Alert Banner (7-day alert before exams/payments) */}
                   <DashboardBanner events={academicEvents} onOpenPlanner={() => setActiveTab("planner")} />
 
                   {/* B. Row of 3 small stat cards */}
                   <motion.div variants={dashboardCardVariants}>
                     <StatCardsRow missions={missions} streak={streak} />
+                  </motion.div>
+
+                  {/* Tactical Intelligence Insights Card */}
+                  <motion.div variants={dashboardCardVariants}>
+                    <InsightsCard
+                      missions={missions}
+                      lectureLogs={lectureLogs}
+                      sideProjects={sideProjects}
+                      streak={streak}
+                      cfLogs={cfLogs}
+                      onNavigate={(tab) => setActiveTab(tab as typeof activeTab)}
+                    />
                   </motion.div>
 
                   {/* C. Two Columns: Left (Hero + Today's Plan) & Right (Today's Briefing + Upcoming Dates) */}
@@ -393,14 +630,18 @@ export default function Home() {
                         ) : (
                           <div className="clean-card p-8 text-center">
                             <h3 className="text-sm font-medium text-spy-text mb-1">
-                              No active mission
+                              {missions.length === 0
+                                ? "No missions yet. Your first missions will be generated automatically"
+                                : "No active mission"}
                             </h3>
                             <p className="text-xs text-spy-muted mb-4 font-sans">
-                              All primary directives accomplished. Assign a queued target or create a new mission.
+                              {missions.length === 0
+                                ? "Your class routine, time-blocks, and recurring directives are armed. Deploy your first target below or let auto-generator schedule them."
+                                : "All primary directives accomplished. Assign a queued target or create a new mission."}
                             </p>
                             <Button variant="primary" size="sm" onClick={handleOpenAdd}>
                               <Plus className="w-3.5 h-3.5" />
-                              <span>New Mission</span>
+                              <span>{missions.length === 0 ? "Dispatch First Mission" : "New Mission"}</span>
                             </Button>
                           </div>
                         )}
@@ -518,6 +759,162 @@ export default function Home() {
                   onConfirmAutoSchedule={confirmAutoScheduledMission}
                   onRunAutoSchedule={runAutoScheduler}
                   onCompleteMission={handleInitiateAccomplish}
+                  onOpenCourseHQ={(courseId) => {
+                    setSelectedCourseId(courseId);
+                    setActiveTab("courses");
+                  }}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === "courses" && (
+              <motion.div
+                key="courses"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                {/* ================= COURSES TAB ================= */}
+                <CourseHQView
+                  courses={courses}
+                  selectedCourseId={selectedCourseId}
+                  missions={missions}
+                  categories={categories}
+                  lectureLogs={lectureLogs}
+                  timeBlocks={timeBlocks}
+                  academicEvents={academicEvents}
+                  onSelectCourse={setSelectedCourseId}
+                  onAddLectureLog={addLectureLog}
+                  onUpdateLectureLog={updateLectureLog}
+                  onDeleteLectureLog={deleteLectureLog}
+                  onToggleLectureStudied={toggleLectureStudied}
+                  onAddCourseResource={addCourseResource}
+                  onDeleteCourseResource={deleteCourseResource}
+                  onCompleteMission={handleInitiateAccomplish}
+                  onAddMissionForCourse={(course) => {
+                    setEditingMission({
+                      id: "",
+                      title: "",
+                      codename: "",
+                      category_id: course.category_id || null,
+                      course_id: course.id,
+                      priority: "medium",
+                      status: "active",
+                      xp: 50,
+                      created_at: new Date().toISOString(),
+                    });
+                    setIsModalOpen(true);
+                  }}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === "codeforces" && (
+              <motion.div
+                key="codeforces"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                {/* ================= CODEFORCES TRACKER TAB ================= */}
+                <CodeforcesView
+                  logs={cfLogs}
+                  onAddLog={addCfLog}
+                  onUpdateLog={updateCfLog}
+                  onDeleteLog={deleteCfLog}
+                  onImportLogs={importCfLogs}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === "cyber" && (
+              <motion.div
+                key="cyber"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                {/* ================= CYBERSECURITY ROADMAP TAB ================= */}
+                <CyberRoadmapView
+                  topics={cyberTopics}
+                  onUpdateTopicStatus={updateCyberTopicStatus}
+                  onAddTopic={addCyberTopic}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === "papers" && (
+              <motion.div
+                key="papers"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                {/* ================= RESEARCH PAPERS TAB ================= */}
+                <ResearchPapersView
+                  papers={researchPapers}
+                  onAddPaper={addResearchPaper}
+                  onUpdatePaper={updateResearchPaper}
+                  onDeletePaper={deleteResearchPaper}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === "projects" && (
+              <motion.div
+                key="projects"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                {/* ================= SIDE PROJECTS TAB ================= */}
+                <SideProjectsView
+                  projects={sideProjects}
+                  onAddProject={addSideProject}
+                  onUpdateProject={updateSideProject}
+                  onDeleteProject={deleteSideProject}
+                  onAddStepMission={(proj) => {
+                    setEditingMission({
+                      id: "",
+                      title: `Side project: ${proj.name} - ${proj.next_step || "Continue next step"}`,
+                      codename: `PROJ-${proj.name.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, "X")}`,
+                      category_id: "cat-8",
+                      priority: "high",
+                      status: "active",
+                      xp: 60,
+                      created_at: new Date().toISOString(),
+                    });
+                    setIsModalOpen(true);
+                  }}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === "review" && (
+              <motion.div
+                key="review"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                {/* ================= PROGRESS & WEEKLY REVIEW TAB ================= */}
+                <ProgressReviewView
+                  missions={missions}
+                  categories={categories}
+                  totalXp={totalXp}
+                  streak={streak}
+                  lectureLogs={lectureLogs}
+                  cfLogs={cfLogs}
+                  researchPapers={researchPapers}
+                  sideProjects={sideProjects}
+                  weeklyReviews={weeklyReviews}
+                  onSaveWeeklyReview={saveWeeklyReview}
                 />
               </motion.div>
             )}
@@ -586,6 +983,25 @@ export default function Home() {
           newRank={promotionData.newRank}
           onClose={() => setPromotionData({ isOpen: false, newRank: "" })}
         />
+
+        {/* Codeforces quick-log prompt after CP mission accomplishment */}
+        <CodeforcesLogModal
+          isOpen={isCpMissionLogOpen}
+          onClose={() => setIsCpMissionLogOpen(false)}
+          onSave={addCfLog}
+          isTriggeredByMission={true}
+        />
+
+        {/* Research Paper quick-log prompt after paper mission accomplishment */}
+        <PaperSummaryModal
+          isOpen={isPaperMissionModalOpen}
+          onClose={() => setIsPaperMissionModalOpen(false)}
+          onSave={addResearchPaper}
+          isTriggeredByMission={true}
+        />
+
+        {/* Global In-App Notifications Toast */}
+        <NotificationToast alerts={dueNotifications} />
       </div>
   );
 }

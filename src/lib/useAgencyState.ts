@@ -1,22 +1,41 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   Mission, 
   Category, 
   ClassScheduleItem, 
   Priority,
   TimeBlock,
-  AcademicEvent
+  AcademicEvent,
+  RecurringRule,
+  Course,
+  CourseResource,
+  LectureLog,
+  CodeforcesLog,
+  CyberTopic,
+  ResearchPaper,
+  SideProject,
+  WeeklyReview,
+  NotificationSettings,
 } from "@/types/database";
 import { 
   DEFAULT_CATEGORIES, 
   DEFAULT_SCHEDULE, 
-  INITIAL_STARTER_MISSIONS,
   DEFAULT_TIME_BLOCKS,
-  DEFAULT_ACADEMIC_EVENTS
+  DEFAULT_ACADEMIC_EVENTS,
+  DEFAULT_RECURRING_RULES,
+  DEFAULT_COURSES,
+  DEFAULT_LECTURE_LOGS,
+  DEFAULT_CYBER_TOPICS,
+  DEFAULT_PAPERS,
+  DEFAULT_SIDE_PROJECTS,
+  DEFAULT_CF_LOGS,
+  DEFAULT_NOTIFICATION_SETTINGS,
+  mergeCyberTopicsWithExisting,
 } from "@/lib/seeds";
 import { autoScheduleMissions } from "@/lib/plannerScheduler";
+import { generateDailyAutoMissions } from "@/lib/recurringGenerator";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { 
@@ -25,6 +44,7 @@ import {
   saveThemePreference 
 } from "@/lib/theme";
 import { getRankFromXp } from "@/lib/rank";
+import { deduplicateExistingLogs } from "@/lib/codeforcesApi";
 
 const PRIORITY_WEIGHTS: Record<Priority, number> = {
   urgent: 4,
@@ -32,6 +52,18 @@ const PRIORITY_WEIGHTS: Record<Priority, number> = {
   medium: 2,
   low: 1,
 };
+
+export const RESET_PROGRESS_TABLES = [
+  "missions",
+  "cf_log",
+  "lecture_logs",
+  "papers",
+  "side_projects",
+  "cyber_topics",
+  "weekly_reviews",
+  "xp_events",
+  "streaks",
+] as const;
 
 export function useAgencyState() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -41,36 +73,87 @@ export function useAgencyState() {
   const [schedule, setSchedule] = useState<ClassScheduleItem[]>(DEFAULT_SCHEDULE);
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>(DEFAULT_TIME_BLOCKS);
   const [academicEvents, setAcademicEvents] = useState<AcademicEvent[]>(DEFAULT_ACADEMIC_EVENTS);
-  const [totalXp, setTotalXp] = useState<number>(350); // Initial baseline for Agent Akib
-  const [streak, setStreak] = useState<number>(4);
+  const [recurringRules, setRecurringRules] = useState<RecurringRule[]>(DEFAULT_RECURRING_RULES);
+  const [courses, setCourses] = useState<Course[]>(DEFAULT_COURSES);
+  const [lectureLogs, setLectureLogs] = useState<LectureLog[]>(DEFAULT_LECTURE_LOGS);
+  const [cyberTopics, setCyberTopics] = useState<CyberTopic[]>(DEFAULT_CYBER_TOPICS);
+  const [researchPapers, setResearchPapers] = useState<ResearchPaper[]>(DEFAULT_PAPERS);
+  const [sideProjects, setSideProjects] = useState<SideProject[]>(DEFAULT_SIDE_PROJECTS);
+  const [cfLogs, setCfLogs] = useState<CodeforcesLog[]>(DEFAULT_CF_LOGS);
+  const [weeklyReviews, setWeeklyReviews] = useState<WeeklyReview[]>([]);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
+  const [totalXp, setTotalXp] = useState<number>(0); // Baseline 0 XP for fresh agent
+  const [streak, setStreak] = useState<number>(0); // Baseline 0 day streak for fresh agent
   const [loading, setLoading] = useState<boolean>(true);
 
   const supabase = createClient();
   const hasSupabase = isSupabaseConfigured() && supabase !== null;
 
-  // Initialize data on mount
-  useEffect(() => {
-    async function init() {
-      setLoading(true);
+  const initHandledRef = useRef(false);
 
-      // Check if user authenticated in Supabase
+  // Safety fallback: ensure loading NEVER exceeds 3.0s under any circumstances
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          console.warn("[Auth] Session initialization exceeded 3s threshold. Forcing loading to false.");
+          return false;
+        }
+        return false;
+      });
+    }, 3000);
+    return () => clearTimeout(fallbackTimer);
+  }, []);
+
+  // Initialize data and resolve session once on mount
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function init() {
+      if (initHandledRef.current) return;
+      initHandledRef.current = true;
+
+      // Check if user authenticated in Supabase (with timeout guard so network latency never blocks initial render)
       if (hasSupabase && supabase) {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("operation_me_auth");
+        }
+
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const sessionPromise = supabase.auth.getSession();
+          const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+            setTimeout(() => resolve({ data: { session: null } }), 1800)
+          );
+
+          const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+
+          if (isCancelled) return;
+
           if (session?.user) {
             setIsAuthenticated(true);
             setCurrentUser({ id: session.user.id, email: session.user.email || "" });
-            await fetchSupabaseData(session.user.id);
-            setLoading(false);
+            setLoading(false); // End loading screen immediately so UI renders!
+            // Load user data asynchronously
+            fetchSupabaseData(session.user.id).catch((err) => {
+              console.error("Background data fetch error:", err);
+            });
             return;
           }
         } catch (e) {
           console.error("Supabase session error:", e);
         }
+
+        if (isCancelled) return;
+
+        // In cloud mode, no session found -> show login page immediately
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        setLoading(false);
+        return;
       }
 
-      // Check local storage session fallback
-      if (typeof window !== "undefined") {
+      // Check local storage session fallback strictly in local mode (when Supabase is NOT configured)
+      if (!hasSupabase && typeof window !== "undefined") {
         const localAuth = localStorage.getItem("operation_me_auth");
         if (localAuth === "true") {
           setIsAuthenticated(true);
@@ -81,12 +164,47 @@ export function useAgencyState() {
         }
       }
 
-      setLoading(false);
+      if (!isCancelled) {
+        setLoading(false);
+      }
     }
 
     init();
+
+    return () => {
+      isCancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auth state listener: automatically handle token refreshes and session changes
+  useEffect(() => {
+    if (!hasSupabase || !supabase) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
+        if (session?.user) {
+          setIsAuthenticated(true);
+          setCurrentUser({ id: session.user.id, email: session.user.email || "" });
+          setLoading(false);
+        } else if (event === "INITIAL_SESSION") {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setLoading(false);
+        }
+      } else if (event === "SIGNED_OUT") {
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [hasSupabase, supabase]);
 
   // Load from LocalStorage
   const loadLocalData = () => {
@@ -97,15 +215,23 @@ export function useAgencyState() {
       if (storedMissions) {
         setMissions(JSON.parse(storedMissions));
       } else {
-        setMissions(INITIAL_STARTER_MISSIONS);
-        localStorage.setItem("op_me_missions", JSON.stringify(INITIAL_STARTER_MISSIONS));
+        setMissions([]);
+        localStorage.setItem("op_me_missions", JSON.stringify([]));
       }
 
       const storedXp = localStorage.getItem("op_me_xp");
-      if (storedXp) setTotalXp(Number(storedXp));
+      if (storedXp) {
+        setTotalXp(Number(storedXp));
+      } else {
+        setTotalXp(0);
+      }
 
       const storedStreak = localStorage.getItem("op_me_streak");
-      if (storedStreak) setStreak(Number(storedStreak));
+      if (storedStreak) {
+        setStreak(Number(storedStreak));
+      } else {
+        setStreak(0);
+      }
 
       const storedCats = localStorage.getItem("op_me_categories");
       if (storedCats) setCategories(JSON.parse(storedCats));
@@ -128,9 +254,109 @@ export function useAgencyState() {
         setAcademicEvents(DEFAULT_ACADEMIC_EVENTS);
         localStorage.setItem("op_me_academic_events", JSON.stringify(DEFAULT_ACADEMIC_EVENTS));
       }
+
+      // Phase 2 Datastores
+      let loadedRules = DEFAULT_RECURRING_RULES;
+      const storedRules = localStorage.getItem("op_me_recurring_rules");
+      if (storedRules) {
+        loadedRules = JSON.parse(storedRules);
+        setRecurringRules(loadedRules);
+      } else {
+        setRecurringRules(DEFAULT_RECURRING_RULES);
+        localStorage.setItem("op_me_recurring_rules", JSON.stringify(DEFAULT_RECURRING_RULES));
+      }
+
+      let loadedCourses = DEFAULT_COURSES;
+      const storedCourses = localStorage.getItem("op_me_courses");
+      if (storedCourses) {
+        loadedCourses = JSON.parse(storedCourses);
+        setCourses(loadedCourses);
+      } else {
+        setCourses(DEFAULT_COURSES);
+        localStorage.setItem("op_me_courses", JSON.stringify(DEFAULT_COURSES));
+      }
+
+      let loadedLogs = DEFAULT_LECTURE_LOGS;
+      const storedLogs = localStorage.getItem("op_me_lecture_logs");
+      if (storedLogs) {
+        loadedLogs = JSON.parse(storedLogs);
+        setLectureLogs(loadedLogs);
+      } else {
+        setLectureLogs(DEFAULT_LECTURE_LOGS);
+        localStorage.setItem("op_me_lecture_logs", JSON.stringify(DEFAULT_LECTURE_LOGS));
+      }
+
+      let loadedTopics = DEFAULT_CYBER_TOPICS;
+      const storedTopics = localStorage.getItem("op_me_cyber_topics");
+      if (storedTopics) {
+        try {
+          const parsed = JSON.parse(storedTopics);
+          loadedTopics = mergeCyberTopicsWithExisting(DEFAULT_CYBER_TOPICS, parsed);
+        } catch {
+          loadedTopics = DEFAULT_CYBER_TOPICS;
+        }
+        setCyberTopics(loadedTopics);
+        localStorage.setItem("op_me_cyber_topics", JSON.stringify(loadedTopics));
+      } else {
+        setCyberTopics(DEFAULT_CYBER_TOPICS);
+        localStorage.setItem("op_me_cyber_topics", JSON.stringify(DEFAULT_CYBER_TOPICS));
+      }
+
+      let loadedPapers = DEFAULT_PAPERS;
+      const storedPapers = localStorage.getItem("op_me_papers");
+      if (storedPapers) {
+        loadedPapers = JSON.parse(storedPapers);
+        setResearchPapers(loadedPapers);
+      } else {
+        setResearchPapers(DEFAULT_PAPERS);
+        localStorage.setItem("op_me_papers", JSON.stringify(DEFAULT_PAPERS));
+      }
+
+      let loadedProjects = DEFAULT_SIDE_PROJECTS;
+      const storedProjects = localStorage.getItem("op_me_side_projects");
+      if (storedProjects) {
+        loadedProjects = JSON.parse(storedProjects);
+        setSideProjects(loadedProjects);
+      } else {
+        setSideProjects(DEFAULT_SIDE_PROJECTS);
+        localStorage.setItem("op_me_side_projects", JSON.stringify(DEFAULT_SIDE_PROJECTS));
+      }
+
+      let loadedCf = DEFAULT_CF_LOGS;
+      const storedCf = localStorage.getItem("op_me_cf_logs");
+      if (storedCf) {
+        loadedCf = JSON.parse(storedCf);
+        setCfLogs(loadedCf);
+      } else {
+        setCfLogs(DEFAULT_CF_LOGS);
+        localStorage.setItem("op_me_cf_logs", JSON.stringify(DEFAULT_CF_LOGS));
+      }
+
+      const storedReviews = localStorage.getItem("op_me_weekly_reviews");
+      if (storedReviews) {
+        setWeeklyReviews(JSON.parse(storedReviews));
+      }
+
+      const storedNotifs = localStorage.getItem("op_me_notifications");
+      if (storedNotifs) {
+        setNotificationSettings(JSON.parse(storedNotifs));
+      }
+
+      // Automatically execute idempotent auto-missions generator on app open
+      if (process.env.NODE_ENV !== "test") {
+        setTimeout(() => {
+          runAutoMissionsGenerator(
+            storedMissions ? JSON.parse(storedMissions) : [],
+            loadedRules,
+            storedTimeBlocks ? JSON.parse(storedTimeBlocks) : DEFAULT_TIME_BLOCKS,
+            storedEvents ? JSON.parse(storedEvents) : DEFAULT_ACADEMIC_EVENTS,
+            loadedTopics
+          );
+        }, 50);
+      }
     } catch (e) {
       console.error("LocalStorage load error:", e);
-      setMissions(INITIAL_STARTER_MISSIONS);
+      setMissions([]);
     }
   };
 
@@ -174,8 +400,7 @@ export function useAgencyState() {
       if (missionData && missionData.length > 0) {
         setMissions(missionData);
       } else {
-        // Seed initial missions for this user if table empty
-        setMissions(INITIAL_STARTER_MISSIONS);
+        setMissions([]);
       }
 
       // 4. Fetch XP events
@@ -185,8 +410,10 @@ export function useAgencyState() {
         .eq("user_id", userId);
 
       if (xpData && xpData.length > 0) {
-        const sum = xpData.reduce((acc, row) => acc + (row.amount || 0), 0);
-        setTotalXp(sum + 100);
+        const sum = xpData.reduce((acc: number, row: any) => acc + (row.amount || 0), 0);
+        setTotalXp(sum);
+      } else {
+        setTotalXp(0);
       }
 
       // 5. Fetch streak
@@ -197,7 +424,9 @@ export function useAgencyState() {
         .maybeSingle();
 
       if (streakData) {
-        setStreak(streakData.current_streak || 1);
+        setStreak(streakData.current_streak || 0);
+      } else {
+        setStreak(0);
       }
 
       // 6. Fetch time_blocks
@@ -222,6 +451,92 @@ export function useAgencyState() {
         setAcademicEvents(aeData);
       } else {
         setAcademicEvents(DEFAULT_ACADEMIC_EVENTS);
+      }
+
+      // 8. Fetch recurring_rules
+      const { data: rrData } = await supabase
+        .from("recurring_rules")
+        .select("*")
+        .or(`user_id.eq.${userId},user_id.is.null`);
+      if (rrData && rrData.length > 0) {
+        setRecurringRules(rrData);
+      } else {
+        setRecurringRules(DEFAULT_RECURRING_RULES);
+      }
+
+      // 9. Fetch courses
+      const { data: courseData } = await supabase
+        .from("courses")
+        .select("*")
+        .or(`user_id.eq.${userId},user_id.is.null`);
+      if (courseData && courseData.length > 0) {
+        setCourses(courseData);
+      } else {
+        setCourses(DEFAULT_COURSES);
+      }
+
+      // 10. Fetch lecture_logs
+      const { data: logData } = await supabase
+        .from("lecture_logs")
+        .select("*")
+        .eq("user_id", userId);
+      if (logData && logData.length > 0) {
+        setLectureLogs(logData);
+      } else {
+        setLectureLogs(DEFAULT_LECTURE_LOGS);
+      }
+
+      // 11. Fetch cyber_topics
+      const { data: cyberData } = await supabase
+        .from("cyber_topics")
+        .select("*")
+        .or(`user_id.eq.${userId},user_id.is.null`);
+      if (cyberData && cyberData.length > 0) {
+        setCyberTopics(mergeCyberTopicsWithExisting(DEFAULT_CYBER_TOPICS, cyberData));
+      } else {
+        setCyberTopics(DEFAULT_CYBER_TOPICS);
+      }
+
+      // 12. Fetch papers
+      const { data: paperData } = await supabase
+        .from("papers")
+        .select("*")
+        .eq("user_id", userId);
+      if (paperData && paperData.length > 0) {
+        setResearchPapers(paperData);
+      } else {
+        setResearchPapers(DEFAULT_PAPERS);
+      }
+
+      // 13. Fetch side_projects
+      const { data: projData } = await supabase
+        .from("side_projects")
+        .select("*")
+        .eq("user_id", userId);
+      if (projData && projData.length > 0) {
+        setSideProjects(projData);
+      } else {
+        setSideProjects(DEFAULT_SIDE_PROJECTS);
+      }
+
+      // 14. Fetch cf_log
+      const { data: cfData } = await supabase
+        .from("cf_log")
+        .select("*")
+        .eq("user_id", userId);
+      if (cfData && cfData.length > 0) {
+        setCfLogs(cfData);
+      } else {
+        setCfLogs(DEFAULT_CF_LOGS);
+      }
+
+      // 15. Fetch weekly_reviews
+      const { data: wrData } = await supabase
+        .from("weekly_reviews")
+        .select("*")
+        .eq("user_id", userId);
+      if (wrData && wrData.length > 0) {
+        setWeeklyReviews(wrData);
       }
     } catch (err) {
       console.error("Error fetching Supabase data:", err);
@@ -251,42 +566,29 @@ export function useAgencyState() {
     }
   };
 
-  // Auth: Email login or signup
-  const login = async (email: string, pass: string, isSignUp = false) => {
+  // Auth: Email login
+  const login = async (email: string, pass: string) => {
     if (hasSupabase && supabase) {
       try {
-        if (isSignUp) {
-          const { data, error } = await supabase.auth.signUp({
-            email,
-            password: pass,
-          });
-          if (error) return { success: false, error: error.message };
-          if (data.user) {
-            setIsAuthenticated(true);
-            setCurrentUser({ id: data.user.id, email: data.user.email || "" });
-            await fetchSupabaseData(data.user.id);
-            return { success: true };
-          }
-        } else {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password: pass,
-          });
-          if (error) return { success: false, error: error.message };
-          if (data.user) {
-            setIsAuthenticated(true);
-            setCurrentUser({ id: data.user.id, email: data.user.email || "" });
-            await fetchSupabaseData(data.user.id);
-            return { success: true };
-          }
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password: pass,
+        });
+        if (error) return { success: false, error: error.message };
+        if (data.user) {
+          setIsAuthenticated(true);
+          setCurrentUser({ id: data.user.id, email: data.user.email || "" });
+          await fetchSupabaseData(data.user.id);
+          return { success: true };
         }
+        return { success: false, error: "Authentication failed. No user returned." };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Authentication handshake failed";
         return { success: false, error: message };
       }
     }
 
-    // Local authentication fallback
+    // Local authentication fallback ONLY when Supabase is NOT configured
     setIsAuthenticated(true);
     setCurrentUser({ id: "agent-akib-local", email: email || "akib@agency.internal" });
     if (typeof window !== "undefined") {
@@ -296,8 +598,27 @@ export function useAgencyState() {
     return { success: true };
   };
 
-  // Guest Direct Bypass
+  // Password Reset via Supabase
+  const resetPassword = async (email: string) => {
+    if (hasSupabase && supabase) {
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+        if (error) return { success: false, error: error.message };
+        return { success: true, message: "Password reset link sent to your email." };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Password reset request failed";
+        return { success: false, error: message };
+      }
+    }
+    return { success: true, message: "Local mode: password reset simulated for " + email };
+  };
+
+  // Guest Direct Bypass - strictly available in local mode only
   const guestBypass = () => {
+    if (hasSupabase) {
+      console.warn("Direct access guest bypass is disabled in Supabase cloud mode.");
+      return;
+    }
     setIsAuthenticated(true);
     setCurrentUser({ id: "agent-akib-direct", email: "agent.akib@hq.internal" });
     if (typeof window !== "undefined") {
@@ -309,7 +630,11 @@ export function useAgencyState() {
   // Logout
   const logout = async () => {
     if (hasSupabase && supabase) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.error("Error signing out of Supabase:", e);
+      }
     }
     if (typeof window !== "undefined") {
       localStorage.removeItem("operation_me_auth");
@@ -791,8 +1116,527 @@ export function useAgencyState() {
     return result.scheduledCount;
   };
 
+  const persistRecurringRules = (rules: RecurringRule[]) => {
+    setRecurringRules(rules);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_recurring_rules", JSON.stringify(rules));
+    }
+  };
+
+  const persistCourses = (updated: Course[]) => {
+    setCourses(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_courses", JSON.stringify(updated));
+    }
+  };
+
+  const persistLectureLogs = (updated: LectureLog[]) => {
+    setLectureLogs(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_lecture_logs", JSON.stringify(updated));
+    }
+  };
+
+  const persistCyberTopics = (updated: CyberTopic[]) => {
+    setCyberTopics(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_cyber_topics", JSON.stringify(updated));
+    }
+  };
+
+  const persistResearchPapers = (updated: ResearchPaper[]) => {
+    setResearchPapers(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_papers", JSON.stringify(updated));
+    }
+  };
+
+  const persistSideProjects = (updated: SideProject[]) => {
+    setSideProjects(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_side_projects", JSON.stringify(updated));
+    }
+  };
+
+  const persistCfLogs = (updated: CodeforcesLog[]) => {
+    setCfLogs(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_cf_logs", JSON.stringify(updated));
+    }
+  };
+
+  const persistWeeklyReviews = (updated: WeeklyReview[]) => {
+    setWeeklyReviews(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_weekly_reviews", JSON.stringify(updated));
+    }
+  };
+
+  const persistNotificationSettings = (settings: NotificationSettings) => {
+    setNotificationSettings(settings);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_notifications", JSON.stringify(settings));
+    }
+  };
+
+  // 1. Auto-missions
+  const toggleRecurringRule = (ruleId: string, isActive: boolean) => {
+    const updated = recurringRules.map((r) =>
+      r.id === ruleId ? { ...r, is_active: isActive } : r
+    );
+    persistRecurringRules(updated);
+  };
+
+  const updateRecurringRule = (rule: RecurringRule) => {
+    const updated = recurringRules.map((r) => (r.id === rule.id ? rule : r));
+    persistRecurringRules(updated);
+  };
+
+  const addRecurringRule = (newRuleData: Omit<RecurringRule, "id">) => {
+    const newRule: RecurringRule = {
+      ...newRuleData,
+      id: `rr-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    persistRecurringRules([...recurringRules, newRule]);
+  };
+
+  const deleteRecurringRule = (ruleId: string) => {
+    persistRecurringRules(recurringRules.filter((r) => r.id !== ruleId));
+  };
+
+  const runAutoMissionsGenerator = (
+    currentMissions?: Mission[],
+    currentRules?: RecurringRule[],
+    blocks?: TimeBlock[],
+    events?: AcademicEvent[],
+    topics?: CyberTopic[]
+  ) => {
+    const targetMissions = currentMissions || missions;
+    const targetRules = currentRules || recurringRules;
+    const targetBlocks = blocks || timeBlocks;
+    const targetEvents = events || academicEvents;
+    const targetTopics = topics || cyberTopics;
+
+    const nextTopic =
+      targetTopics.find((t) => t.status === "learning") ||
+      targetTopics.find((t) => t.status === "not_started");
+
+    const result = generateDailyAutoMissions({
+      date: new Date(),
+      rules: targetRules,
+      existingMissions: targetMissions,
+      defaultBlocks: targetBlocks,
+      academicEvents: targetEvents,
+      nextCyberTopicTitle: nextTopic?.title,
+      nextCyberTopic: nextTopic,
+      activeMissionCap: 5,
+    });
+
+    if (result.newMissions.length > 0) {
+      const combined = [...result.newMissions, ...targetMissions];
+      persistMissions(combined);
+    }
+
+    persistRecurringRules(result.updatedRules);
+
+    return {
+      createdCount: result.newMissions.length,
+      message:
+        result.newMissions.length > 0
+          ? `Generated ${result.newMissions.length} auto-mission${result.newMissions.length > 1 ? "s" : ""} for today.`
+          : "All auto-missions for today are up-to-date (0 duplicates created).",
+    };
+  };
+
+  // 2. Course HQ Actions
+  const addLectureLog = (logData: Omit<LectureLog, "id">) => {
+    const newLog: LectureLog = {
+      ...logData,
+      id: `ll-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    persistLectureLogs([newLog, ...lectureLogs]);
+  };
+
+  const updateLectureLog = (log: LectureLog) => {
+    const updated = lectureLogs.map((l) => (l.id === log.id ? log : l));
+    persistLectureLogs(updated);
+  };
+
+  const deleteLectureLog = (logId: string) => {
+    persistLectureLogs(lectureLogs.filter((l) => l.id !== logId));
+  };
+
+  const toggleLectureStudied = (logId: string, studied: boolean) => {
+    const updated = lectureLogs.map((l) =>
+      l.id === logId ? { ...l, studied } : l
+    );
+    persistLectureLogs(updated);
+  };
+
+  const addCourseResource = (courseId: string, resource: Omit<CourseResource, "id">) => {
+    const updated = courses.map((c) => {
+      if (c.id === courseId) {
+        const newRes: CourseResource = {
+          ...resource,
+          id: `res-${Date.now()}`,
+        };
+        return {
+          ...c,
+          resources: [...(c.resources || []), newRes],
+        };
+      }
+      return c;
+    });
+    persistCourses(updated);
+  };
+
+  const deleteCourseResource = (courseId: string, resourceId: string) => {
+    const updated = courses.map((c) => {
+      if (c.id === courseId) {
+        return {
+          ...c,
+          resources: (c.resources || []).filter((r) => r.id !== resourceId),
+        };
+      }
+      return c;
+    });
+    persistCourses(updated);
+  };
+
+  // 3. Codeforces Actions
+  const addCfLog = async (logData: Omit<CodeforcesLog, "id">) => {
+    const newLog: CodeforcesLog = {
+      ...logData,
+      id: `cf-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    persistCfLogs([newLog, ...cfLogs]);
+    persistXp(totalXp + (logData.xp || 25));
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        await supabase.from("cf_log").insert({
+          ...newLog,
+          user_id: currentUser.id,
+        });
+      } catch (err) {
+        console.error("Supabase addCfLog error:", err);
+      }
+    }
+  };
+
+  const updateCfLog = async (log: CodeforcesLog) => {
+    const updated = cfLogs.map((c) => (c.id === log.id ? log : c));
+    persistCfLogs(updated);
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        await supabase.from("cf_log").update(log).eq("id", log.id);
+      } catch (err) {
+        console.error("Supabase updateCfLog error:", err);
+      }
+    }
+  };
+
+  const deleteCfLog = async (logId: string) => {
+    persistCfLogs(cfLogs.filter((c) => c.id !== logId));
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        await supabase.from("cf_log").delete().eq("id", logId);
+      } catch (err) {
+        console.error("Supabase deleteCfLog error:", err);
+      }
+    }
+  };
+
+  const importCfLogs = async (newLogs: CodeforcesLog[], cleanedExistingLogs?: CodeforcesLog[]) => {
+    const base = cleanedExistingLogs ? deduplicateExistingLogs(cleanedExistingLogs) : deduplicateExistingLogs(cfLogs);
+    const updated = deduplicateExistingLogs([...newLogs, ...base]);
+    persistCfLogs(updated);
+
+    if (newLogs.length === 0) return;
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        const toInsert = newLogs.map((c) => ({
+          id: c.id,
+          user_id: currentUser.id,
+          handle: c.handle || null,
+          problem_name: c.problem_name,
+          problem_url: c.problem_url || null,
+          rating: c.rating || null,
+          verdict: c.verdict || "OK",
+          tags: c.tags || [],
+          status: c.status || "solved",
+          time_taken_minutes: c.time_taken_minutes || null,
+          date: c.date || new Date().toISOString().slice(0, 10),
+          notes: c.notes || null,
+          solved_at: c.solved_at || new Date().toISOString(),
+          xp: 0,
+          created_at: c.created_at || new Date().toISOString(),
+        }));
+
+        for (let i = 0; i < toInsert.length; i += 100) {
+          const batch = toInsert.slice(i, i + 100);
+          const { error } = await supabase.from("cf_log").insert(batch);
+          if (error) {
+            console.error("Supabase batch insert error on importCfLogs:", error);
+          }
+        }
+      } catch (err) {
+        console.error("Supabase importCfLogs error:", err);
+      }
+    }
+
+    // If any problem was solved today, count towards today's daily CP mission
+    const todayStr = new Date().toISOString().split("T")[0];
+    const hasTodaySolved = newLogs.some((l) => l.status === "solved" && l.date === todayStr);
+    if (hasTodaySolved) {
+      const todayMission = missions.find(
+        (m) =>
+          (m.category_id === "cat-10" || m.title.toLowerCase().includes("codeforces")) &&
+          m.status === "active"
+      );
+      if (todayMission) {
+        completeMission(todayMission, "Auto-verified via Codeforces sync");
+      }
+    }
+  };
+
+  // 4. Cybersecurity Roadmap Actions
+  const updateCyberTopicStatus = (
+    topicId: string,
+    status: CyberTopic["status"],
+    notes?: string,
+    timeSpent?: number,
+    takeaway?: string,
+    handsOnCompleted?: boolean
+  ) => {
+    const updated = cyberTopics.map((t) => {
+      if (t.id === topicId) {
+        return {
+          ...t,
+          status,
+          notes: notes !== undefined ? notes : t.notes,
+          time_spent_minutes:
+            timeSpent !== undefined
+              ? (t.time_spent_minutes || 0) + timeSpent
+              : t.time_spent_minutes,
+          takeaway: takeaway !== undefined ? takeaway : t.takeaway,
+          hands_on_completed:
+            handsOnCompleted !== undefined ? handsOnCompleted : t.hands_on_completed,
+          completed_at: status === "done" ? (t.completed_at || new Date().toISOString()) : (status === "not_started" ? null : t.completed_at),
+        };
+      }
+      return t;
+    });
+    persistCyberTopics(updated);
+  };
+
+  const addCyberTopic = (topicData: Omit<CyberTopic, "id">) => {
+    const newTopic: CyberTopic = {
+      ...topicData,
+      id: `ct-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    persistCyberTopics([...cyberTopics, newTopic]);
+  };
+
+  // 5. Research Papers Actions
+  const addResearchPaper = (paperData: Omit<ResearchPaper, "id">) => {
+    const newPaper: ResearchPaper = {
+      ...paperData,
+      id: `paper-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    persistResearchPapers([newPaper, ...researchPapers]);
+  };
+
+  const updateResearchPaper = (paper: ResearchPaper) => {
+    const updated = researchPapers.map((p) => (p.id === paper.id ? paper : p));
+    persistResearchPapers(updated);
+  };
+
+  const deleteResearchPaper = (paperId: string) => {
+    persistResearchPapers(researchPapers.filter((p) => p.id !== paperId));
+  };
+
+  // 6. Side Projects Actions
+  const addSideProject = (projData: Omit<SideProject, "id">) => {
+    const newProj: SideProject = {
+      ...projData,
+      id: `proj-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    persistSideProjects([newProj, ...sideProjects]);
+  };
+
+  const updateSideProject = (proj: SideProject) => {
+    const updated = sideProjects.map((p) => (p.id === proj.id ? proj : p));
+    persistSideProjects(updated);
+  };
+
+  const deleteSideProject = (projId: string) => {
+    persistSideProjects(sideProjects.filter((p) => p.id !== projId));
+  };
+
+  // 7. Weekly Reviews
+  const saveWeeklyReview = (review: Omit<WeeklyReview, "id" | "created_at"> & { id?: string; created_at?: string }) => {
+    const fullReview: WeeklyReview = {
+      ...review,
+      id: review.id || `wr-${Date.now()}`,
+      created_at: review.created_at || new Date().toISOString(),
+    };
+    const existingIndex = weeklyReviews.findIndex(
+      (r) => r.week_start_date === fullReview.week_start_date
+    );
+    let updated: WeeklyReview[];
+    if (existingIndex >= 0) {
+      updated = [...weeklyReviews];
+      updated[existingIndex] = fullReview;
+    } else {
+      updated = [fullReview, ...weeklyReviews];
+    }
+    persistWeeklyReviews(updated);
+  };
+
+  // 8. Notifications
+  const updateNotificationSettings = (settings: NotificationSettings) => {
+    persistNotificationSettings(settings);
+  };
+
   const updateDefaultTheme = (pref: ThemePreference) => {
     saveThemePreference(pref);
+  };
+
+  /**
+   * Reset All Progress:
+   * Permanently clears all operational/DEMO data:
+   * - Missions (active, completed, locked)
+   * - Total XP (resets to 0)
+   * - Streak (resets to 0)
+   * - Codeforces problem logs (cleared to []) & handle (cleared)
+   * - Lecture logs (cleared to [])
+   * - Research papers (cleared to [])
+   * - Side projects (cleared to [])
+   * - Weekly reviews (cleared to [])
+   * - Cybersecurity progress (all 28 topics reset to "not_started" with 0 min and no notes)
+   * - Course resources (cleared to [])
+   *
+   * PRESERVES all structural baseline data:
+   * - Timetable & routine (class_schedule)
+   * - Course catalog (code, section, faculty, room, credits)
+   * - Time blocks grid (SAT to FRI)
+   * - Academic calendar (exam, holiday, payment, deadline events)
+   * - Recurring auto-mission rules (rr-class-review, rr-tuition-prep, etc.)
+   * - Full cybersecurity 28 syllabus topics structure
+   * - Theme and animation preferences
+   * - User auth state
+   *
+   * In Supabase mode, deletes only rows belonging to currentUser.id.
+   */
+  const resetAllProgress = async () => {
+    // 1. Reset React memory state
+    setMissions([]);
+    setTotalXp(0);
+    setStreak(0);
+    setCfLogs([]);
+    setLectureLogs([]);
+    setResearchPapers([]);
+    setSideProjects([]);
+    setWeeklyReviews([]);
+
+    const cleanCyberTopics = DEFAULT_CYBER_TOPICS.map((t) => ({
+      ...t,
+      status: "not_started" as const,
+      time_spent_minutes: 0,
+      notes: undefined,
+    }));
+    setCyberTopics(cleanCyberTopics);
+
+    const cleanCourses = courses.map((c) => ({
+      ...c,
+      resources: [],
+    }));
+    setCourses(cleanCourses);
+
+    // 2. Clear from LocalStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_missions", JSON.stringify([]));
+      localStorage.setItem("op_me_xp", "0");
+      localStorage.setItem("op_me_streak", "0");
+      localStorage.setItem("op_me_cf_logs", JSON.stringify([]));
+      localStorage.removeItem("op_me_cf_handle");
+      localStorage.removeItem("op_me_cf_last_synced");
+      localStorage.removeItem("op_me_cf_api_solved_total");
+      localStorage.setItem("op_me_lecture_logs", JSON.stringify([]));
+      localStorage.setItem("op_me_papers", JSON.stringify([]));
+      localStorage.setItem("op_me_side_projects", JSON.stringify([]));
+      localStorage.setItem("op_me_weekly_reviews", JSON.stringify([]));
+      localStorage.setItem("op_me_cyber_topics", JSON.stringify(cleanCyberTopics));
+      localStorage.setItem("op_me_courses", JSON.stringify(cleanCourses));
+      localStorage.setItem("op_me_last_reset", new Date().toISOString());
+    }
+
+    // 3. Clear cloud rows for current user only
+    if (hasSupabase && supabase && currentUser?.id) {
+      const uid = currentUser.id;
+      const deleteErrors: string[] = [];
+
+      await Promise.all(
+        RESET_PROGRESS_TABLES.map(async (table) => {
+          try {
+            const { error } = await supabase.from(table).delete().eq("user_id", uid);
+            if (error) {
+              deleteErrors.push(`[${table}]: ${error.message || "Delete failed"}`);
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Execution failed";
+            deleteErrors.push(`[${table}]: ${msg}`);
+          }
+        })
+      );
+
+      if (deleteErrors.length > 0) {
+        const errorSummary = `Failed to reset cloud tables: ${deleteErrors.join("; ")}`;
+        console.error("Error clearing Supabase progress:", errorSummary);
+        return {
+          success: false,
+          error: errorSummary,
+          deleted: [],
+          kept: [],
+        };
+      }
+    }
+
+    return {
+      success: true,
+      deleted: [
+        "Missions (active & completed)",
+        "Total XP (reset to 0)",
+        "Daily streak (reset to 0)",
+        "Codeforces problem logs & handle",
+        "Lecture study logs",
+        "Research papers archive",
+        "Side projects log",
+        "Weekly performance reviews",
+        "Cybersecurity progress & notes (reset to Not Started)",
+        "Course resource links & attachments",
+      ],
+      kept: [
+        "Weekly class schedule & tuition routine",
+        "Course catalog (OS, OS Lab, Economics, DIP, Statistics, FYDP)",
+        "Weekly 7-day time-blocks (9 AM to 10 PM)",
+        "Academic calendar & key milestone dates",
+        "Recurring auto-mission configuration rules",
+        "Full 28-topic cybersecurity syllabus structure",
+        "Theme and animation preferences",
+        "Account authentication clearance",
+      ],
+    };
   };
 
   return {
@@ -803,13 +1647,28 @@ export function useAgencyState() {
     schedule,
     timeBlocks,
     academicEvents,
+    recurringRules,
+    courses,
+    lectureLogs,
+    cyberTopics,
+    researchPapers,
+    sideProjects,
+    cfLogs,
+    weeklyReviews,
+    notificationSettings,
     totalXp,
     streak,
     loading,
     defaultTheme: getStoredThemePreference(),
     updateDefaultTheme,
     isSupabaseConnected: hasSupabase,
+    refreshData: async () => {
+      if (hasSupabase && supabase && currentUser) {
+        await fetchSupabaseData(currentUser.id);
+      }
+    },
     login,
+    resetPassword,
     guestBypass,
     logout,
     addMission,
@@ -828,6 +1687,32 @@ export function useAgencyState() {
     confirmAutoScheduledMission,
     unscheduleMission,
     runAutoScheduler,
+    toggleRecurringRule,
+    updateRecurringRule,
+    addRecurringRule,
+    deleteRecurringRule,
+    runAutoMissionsGenerator,
+    addLectureLog,
+    updateLectureLog,
+    deleteLectureLog,
+    toggleLectureStudied,
+    addCourseResource,
+    deleteCourseResource,
+    addCfLog,
+    updateCfLog,
+    deleteCfLog,
+    importCfLogs,
+    updateCyberTopicStatus,
+    addCyberTopic,
+    addResearchPaper,
+    updateResearchPaper,
+    deleteResearchPaper,
+    addSideProject,
+    updateSideProject,
+    deleteSideProject,
+    saveWeeklyReview,
+    updateNotificationSettings,
+    resetAllProgress,
   };
 }
 

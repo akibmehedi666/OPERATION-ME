@@ -67,3 +67,4 @@ export const DashboardBanner: React.FC<DashboardBannerProps> = ({ events, onOpen
     </div>
   );
 };
+
