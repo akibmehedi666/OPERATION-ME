@@ -7,36 +7,44 @@ import {
   Eye, 
   EyeOff, 
   UserCheck, 
-  AlertCircle 
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { soundFX } from "@/lib/sound";
+import { validateSupabaseConfig } from "@/lib/supabase/config";
+import { LogoIcon } from "@/components/ui/LogoIcon";
 
 interface LoginPageProps {
-  onLogin: (email: string, pass: string, isSignUp?: boolean) => Promise<{ success: boolean; error?: string }>;
+  onLogin: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  onResetPassword?: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   onGuestBypass: () => void;
   isSupabaseConnected: boolean;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
+  onResetPassword,
   onGuestBypass,
   isSupabaseConnected,
 }) => {
-  const [email, setEmail] = useState("akib@agency.internal");
-  const [password, setPassword] = useState("classified-pass-2026");
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [resetNotice, setResetNotice] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
+    setResetNotice("");
     setLoading(true);
     soundFX.playBlip();
 
-    const res = await onLogin(email, password, isSignUp);
+    const res = await onLogin(email, password);
 
     if (res.success) {
       soundFX.playTargetAcquired();
@@ -44,6 +52,39 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       setLoading(false);
       setErrorMsg(res.error || "Authentication failed. Invalid credentials.");
       soundFX.playWarning();
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email || !email.trim()) {
+      setErrorMsg("Please enter your email address to reset password.");
+      soundFX.playWarning();
+      return;
+    }
+    setErrorMsg("");
+    setResetNotice("");
+    setResetLoading(true);
+    soundFX.playBlip();
+
+    try {
+      if (onResetPassword) {
+        const res = await onResetPassword(email.trim());
+        if (res.success) {
+          setResetNotice(res.message || "Password recovery email dispatched. Check your inbox.");
+          soundFX.playTargetAcquired();
+        } else {
+          setErrorMsg(res.error || "Failed to dispatch password recovery email.");
+          soundFX.playWarning();
+        }
+      } else {
+        setResetNotice("Password reset request submitted. Check your inbox.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Password reset request failed.";
+      setErrorMsg(msg);
+      soundFX.playWarning();
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -57,29 +98,54 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       >
         {/* Title */}
         <div className="mb-6 pb-4 border-b border-spy-border">
-          <div className="text-xs font-mono font-medium text-spy-green uppercase tracking-wider mb-1">
-            OPERATION: ME
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-[5px] bg-[#dcf3e4] text-[#14663a] border border-[#b9e7c8] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border flex items-center justify-center shrink-0">
+              <LogoIcon className="w-4 h-4 text-[#14663a] dark:text-spy-green" />
+            </div>
+            <div>
+              <div className="text-sm font-mono font-bold tracking-widest text-[#14663a] dark:text-spy-green uppercase">
+                OPERATION: ME
+              </div>
+              <div className="text-[10px] font-mono text-spy-muted uppercase tracking-wider">
+                Tactical Mission Control
+              </div>
+            </div>
           </div>
-          <h1 className="text-xl font-medium text-spy-text tracking-tight">
+          <h1 className="text-xl font-medium text-spy-text tracking-tight mt-2">
             Agent Authorization
           </h1>
           <p className="text-xs text-spy-muted mt-1">
-            Access portal for Agent Akib
+            Classified Authorization Portal
           </p>
         </div>
 
+        {/* Themed Error Message */}
         {errorMsg && (
-          <div className="mb-4 bg-spy-danger-surface border border-spy-red/30 p-3 rounded-[4px] text-xs text-spy-red flex items-start gap-2">
+          <div 
+            role="alert"
+            className="mb-4 bg-spy-danger-surface border border-spy-red/30 p-3 rounded-[4px] text-xs text-spy-red flex items-start gap-2"
+          >
             <AlertCircle className="w-4 h-4 text-spy-red shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
         )}
 
+        {/* Themed Reset Password Notice */}
+        {resetNotice && (
+          <div 
+            role="status"
+            className="mb-4 bg-spy-green/10 border border-spy-green/30 p-3 rounded-[4px] text-xs text-spy-green flex items-start gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4 text-spy-green shrink-0 mt-0.5" />
+            <span>{resetNotice}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
-          {/* Agent Identifier */}
+          {/* Email field with normal placeholder */}
           <div>
             <label htmlFor="agent-email" className="block text-spy-muted mb-1 font-medium">
-              Email / Agent ID
+              Email Address
             </label>
             <div className="relative">
               <input
@@ -87,25 +153,41 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="agent.akib@agency.internal"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errorMsg) setErrorMsg("");
+                }}
+                placeholder="you@example.com"
                 className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-sm text-spy-text focus:outline-none focus:border-spy-borderLight rounded-[3px]"
               />
             </div>
           </div>
 
-          {/* Clearance Passcode */}
+          {/* Passcode field with Show/Hide toggle & Forgot password link */}
           <div>
-            <label htmlFor="agent-password" className="block text-spy-muted mb-1 font-medium">
-              Passcode
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="agent-password" className="block text-spy-muted font-medium">
+                Passcode
+              </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                className="text-[11px] text-spy-muted hover:text-spy-green transition-colors underline focus:outline-none"
+              >
+                {resetLoading ? "Sending link..." : "Forgot password?"}
+              </button>
+            </div>
             <div className="relative">
               <input
                 id="agent-password"
                 type={showPassword ? "text" : "password"}
                 required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errorMsg) setErrorMsg("");
+                }}
                 placeholder="••••••••••••"
                 className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-sm text-spy-text focus:outline-none focus:border-spy-borderLight rounded-[3px] pr-10"
               />
@@ -121,49 +203,69 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </div>
           </div>
 
-          {/* Submit Button */}
+          {/* Submit Button with Loading State */}
           <Button
             type="submit"
             variant="primary"
             size="md"
             isLoading={loading}
+            disabled={loading}
             className="w-full mt-2"
           >
             <Lock className="w-4 h-4" />
-            <span>{isSignUp ? "Register Account" : "Authenticate"}</span>
+            <span>{loading ? "Authenticating..." : "Authenticate"}</span>
           </Button>
-
-          {/* Toggle Sign in / Sign up */}
-          <div className="text-center pt-1">
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-xs text-spy-muted hover:text-spy-text transition-colors underline"
-            >
-              {isSignUp
-                ? "Existing agent? Sign in"
-                : "Need an account? Sign up"}
-            </button>
-          </div>
         </form>
 
-        {/* Demo / Offline Bypass Option */}
-        <div className="mt-6 pt-5 border-t border-spy-border">
-          <button
-            type="button"
-            onClick={onGuestBypass}
-            className="w-full py-2 bg-spy-surface2 hover:bg-spy-surface border border-spy-border text-xs text-spy-text hover:text-spy-green transition-colors rounded-[3px] flex items-center justify-center gap-2"
-          >
-            <UserCheck className="w-4 h-4 text-spy-green" />
-            <span>Direct Access as Agent Akib</span>
-          </button>
+        {/* Status / Local Mode Direct Access Section */}
+        {(() => {
+          const configStatus = validateSupabaseConfig();
+          if (configStatus.status === "secret_key_blocked") {
+            return (
+              <div className="mt-5 text-left text-[11px] font-mono text-spy-red bg-spy-danger-surface border border-spy-red/40 p-2.5 rounded-[3px] flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-spy-red shrink-0 mt-0.5" />
+                <span>{configStatus.message}</span>
+              </div>
+            );
+          }
+          if (configStatus.status === "malformed_url" || configStatus.status === "invalid_key") {
+            return (
+              <div className="mt-5 text-left text-[11px] font-mono text-spy-amber bg-spy-amberMuted border border-spy-amber/40 p-2.5 rounded-[3px] flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-spy-amber shrink-0 mt-0.5" />
+                <span>{configStatus.message}</span>
+              </div>
+            );
+          }
+          // Cloud Mode: Direct access is completely removed
+          if (isSupabaseConnected) {
+            return (
+              <div className="mt-6 pt-4 border-t border-spy-border">
+                <div className="text-center text-[11px] font-mono text-spy-green bg-spy-green/10 border border-spy-green/30 py-1.5 px-3 rounded-[3px] flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-spy-green" />
+                  <span>Cloud Mode (Supabase Session Required)</span>
+                </div>
+              </div>
+            );
+          }
+          // Local Mode ONLY: Direct access option with local mode label
+          return (
+            <div className="mt-6 pt-5 border-t border-spy-border">
+              <button
+                type="button"
+                onClick={onGuestBypass}
+                className="w-full py-2 bg-spy-surface2 hover:bg-spy-surface border border-spy-border text-xs text-spy-text hover:text-spy-green transition-colors rounded-[3px] flex items-center justify-center gap-2"
+              >
+                <UserCheck className="w-4 h-4 text-spy-green" />
+                <span>Direct Access (Local Mode)</span>
+              </button>
 
-          {isSupabaseConnected && (
-            <div className="mt-3 text-center text-[11px] font-mono text-spy-muted">
-              Supabase Connection Active
+              <div className="mt-3 text-center text-[11px] font-mono text-spy-amber bg-spy-amberMuted border border-spy-amber/30 py-1.5 px-3 rounded-[3px] flex items-center justify-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-spy-amber" />
+                <span>Local mode: data stays on this device</span>
+              </div>
             </div>
-          )}
-        </div>
+          );
+        })()}
       </motion.div>
     </div>
   );
