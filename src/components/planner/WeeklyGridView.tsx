@@ -38,7 +38,17 @@ interface WeeklyGridViewProps {
   onAssignMissionToBlock: (block: TimeBlock, dateStr: string) => void;
   onConfirmAutoSchedule: (missionId: string) => void;
   onCompleteMission: (mission: Mission) => void;
+  onOpenCourseHQ?: (courseId: string) => void;
 }
+
+const categoryToCourseMap: Record<string, string> = {
+  "cat-1": "course-os",
+  "cat-2": "course-os-lab",
+  "cat-3": "course-econ",
+  "cat-4": "course-dip",
+  "cat-5": "course-stat",
+  "cat-6": "course-fydp",
+};
 
 const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]; // 9 AM to 10 PM
 const TOTAL_MINUTES = 13 * 60; // 780 minutes
@@ -53,6 +63,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
   onAssignMissionToBlock,
   onConfirmAutoSchedule,
   onCompleteMission,
+  onOpenCourseHQ,
 }) => {
   const [selectedMobileDayIndex, setSelectedMobileDayIndex] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -102,47 +113,48 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
     return {
       top: `${top}%`,
       height: `${height}%`,
+      durationMinutes: durationMin,
     };
   };
 
-  // Block color tokens for both Light (paper) and Dark themes
+  // Block color tokens for both Light and Dark themes
   const getBlockThemeClasses = (type: TimeBlockType) => {
     switch (type) {
       case "class":
         return {
-          card: "bg-[#e4eefc] border-[#b9d5f7] text-[#1d4f9f] dark:bg-[#13253b] dark:border-[#1e3a5f] dark:text-[#93c5fd]",
-          badge: "bg-[#d0e3fa] text-[#1d4f9f] border-[#b0d0f7] dark:bg-[#1a3352] dark:text-[#bfdbfe]",
-          accent: "#1d4f9f",
+          card: "bg-[#eef5fc] border-[#bfdbfe] text-[#1e40af] dark:bg-[#0c1929] dark:border-[#1d3557] dark:text-[#93c5fd]",
+          badge: "bg-[#dbeafe] text-[#1e40af] border-[#bfdbfe] dark:bg-[#13273e] dark:text-[#bfdbfe]",
+          accent: "#3b82f6",
         };
       case "tuition":
         return {
-          card: "bg-[#fdeadb] border-[#f9c39b] text-[#a8500f] dark:bg-[#382313] dark:border-[#5a371c] dark:text-[#fdba74]",
-          badge: "bg-[#fbd3b7] text-[#a8500f] border-[#f6b788] dark:bg-[#4a2e19] dark:text-[#fed7aa]",
-          accent: "#a8500f",
+          card: "bg-[#fef4ea] border-[#fed7aa] text-[#9a3412] dark:bg-[#201207] dark:border-[#43230e] dark:text-[#fdba74]",
+          badge: "bg-[#ffedd5] text-[#9a3412] border-[#fed7aa] dark:bg-[#321c0e] dark:text-[#fed7aa]",
+          accent: "#f97316",
         };
       case "project":
         return {
-          card: "bg-[#dcf3e4] border-[#aae0be] text-[#14663a] dark:bg-[#102b1c] dark:border-[#1d4d33] dark:text-[#86efac]",
-          badge: "bg-[#c5eacc] text-[#14663a] border-[#9fdab4] dark:bg-[#163d27] dark:text-[#bbf7d0]",
-          accent: "#14663a",
+          card: "bg-[#edf9f0] border-[#bbf7d0] text-[#15803d] dark:bg-[#0a1e12] dark:border-[#163e26] dark:text-[#86efac]",
+          badge: "bg-[#dcfce7] text-[#15803d] border-[#bbf7d0] dark:bg-[#0f2e1c] dark:text-[#bbf7d0]",
+          accent: "#22c55e",
         };
       case "study":
         return {
-          card: "bg-[#f0e6fa] border-[#dabef5] text-[#6b2fa0] dark:bg-[#2b173e] dark:border-[#482667] dark:text-[#d8b4fe]",
-          badge: "bg-[#e3d0f7] text-[#6b2fa0] border-[#cda7f0] dark:bg-[#3d1f59] dark:text-[#e9d5ff]",
-          accent: "#6b2fa0",
+          card: "bg-[#f6f0fd] border-[#e9d5ff] text-[#6b21a8] dark:bg-[#1a0c26] dark:border-[#381a52] dark:text-[#d8b4fe]",
+          badge: "bg-[#f3e8ff] text-[#6b21a8] border-[#e9d5ff] dark:bg-[#28133b] dark:text-[#e9d5ff]",
+          accent: "#a855f7",
         };
       case "cp":
         return {
-          card: "bg-[#dff3f1] border-[#a9e2dd] text-[#0f6b66] dark:bg-[#102e2c] dark:border-[#1c4e4a] dark:text-[#5eead4]",
-          badge: "bg-[#c9ebe7] text-[#0f6b66] border-[#95dcd6] dark:bg-[#164340] dark:text-[#99f6e4]",
-          accent: "#0f6b66",
+          card: "bg-[#eefaf8] border-[#99f6e4] text-[#0f766e] dark:bg-[#091c1b] dark:border-[#133b39] dark:text-[#5eead4]",
+          badge: "bg-[#ccfbf1] text-[#0f766e] border-[#99f6e4] dark:bg-[#0e2c2b] dark:text-[#99f6e4]",
+          accent: "#14b8a6",
         };
       case "break":
       default:
         return {
-          card: "bg-[#eae7df] border-[#cfc9b8] text-[#5c5850] dark:bg-[#1c1f1e] dark:border-[#2c312e] dark:text-[#9ca3af]",
-          badge: "bg-[#ded8cb] text-[#5c5850] border-[#c4bdaf] dark:bg-[#282d2a] dark:text-[#d1d5db]",
+          card: "bg-[#f4f2ee] border-[#d6d3d1] text-[#44403c] dark:bg-[#131615] dark:border-[#272f2b] dark:text-[#a8a29e]",
+          badge: "bg-[#e7e5e4] text-[#44403c] border-[#d6d3d1] dark:bg-[#1c211f] dark:text-[#d6d3d1]",
           accent: "#78716c",
         };
     }
@@ -163,7 +175,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
       case "class_override":
         return {
           icon: <Laptop className="w-2.5 h-2.5 text-[#1d4f9f]" />,
-          pill: "bg-[#e4eefc] text-[#1d4f9f] border-[#c6ddf9] dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/40",
+          pill: "bg-[#e4eefc] text-[#1d4f9f] border-[#c6ddf9] dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/40",
         };
       default:
         return {
@@ -171,6 +183,21 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
           pill: "bg-spy-surface2 text-spy-muted border-spy-border",
         };
     }
+  };
+
+  // Helper to format short label for override/academic chips
+  const formatShortBadge = (text?: string): { short: string; full: string } => {
+    if (!text) return { short: "", full: "" };
+    const t = text.trim();
+    if (/online\s+saturday/i.test(t)) return { short: "Online Sat", full: t };
+    if (/online\s+wednesday/i.test(t)) return { short: "Online Wed", full: t };
+    if (/last\s+day.*withdrawal/i.test(t)) return { short: "Last Day Drop", full: t };
+    if (/last\s+day.*grade/i.test(t)) return { short: "Grades Due", full: t };
+    if (/installment/i.test(t)) return { short: "Payment Due", full: t };
+    if (/suspension|suspended/i.test(t)) return { short: "Suspended", full: t };
+    if (/final\s+exam/i.test(t)) return { short: "Final Exam", full: t };
+    if (/mid\s*term/i.test(t)) return { short: "Midterm", full: t };
+    return { short: t.length > 16 ? `${t.slice(0, 14)}…` : t, full: t };
   };
 
   return (
@@ -205,7 +232,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
       <div className="clean-card p-3 sm:p-5 overflow-x-auto">
         <div className="min-w-[850px] relative">
           {/* Header Row: Days of Week */}
-          <div className="grid grid-cols-[60px_repeat(7,1fr)] gap-2 pb-3 border-b border-spy-border mb-2 text-center select-none">
+          <div className="grid grid-cols-[60px_repeat(7,1fr)] gap-2 pb-3 border-b border-spy-border mb-4 text-center select-none">
             {/* Corner time label */}
             <div className="text-[10px] font-mono text-spy-dim flex items-end justify-center pb-1">
               TIME
@@ -214,30 +241,39 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
             {resolvedDays.map(({ dateStr, weekday, events, badge, isHoliday, isExam }, idx) => {
               const dayDate = days[idx];
               const isToday = dateStr === todayKey;
+              const badgeInfo = formatShortBadge(badge);
+
+              // Filter out events that duplicate the primary badge
+              const nonDuplicateEvents = events.filter((ev) => {
+                if (!badge) return true;
+                const bNorm = badge.toLowerCase();
+                const eNorm = ev.title.toLowerCase();
+                return !bNorm.includes(eNorm) && !eNorm.includes(bNorm);
+              });
 
               return (
                 <div
                   key={dateStr}
-                  className={`p-2 rounded-[4px] border transition-colors flex flex-col items-center justify-between min-h-[64px] ${
+                  className={`p-2 rounded-[6px] border transition-colors flex flex-col items-center justify-start min-h-[92px] sm:min-h-[96px] gap-1.5 ${
                     isToday
-                      ? "bg-[#dcf3e4]/30 border-[#14663a]/40 dark:bg-spy-surface2 dark:border-spy-green/40 shadow-xs"
+                      ? "bg-[#1f7a4d]/[0.06] border-[#1f7a4d]/30 dark:bg-emerald-950/20 dark:border-emerald-800/40 shadow-none"
                       : isExam
-                      ? "bg-[#fce8e0]/20 border-spy-red/30 dark:bg-spy-red/10 dark:border-spy-red/30"
-                      : "bg-spy-surface2 border-spy-border"
+                      ? "bg-[#fce8e0]/20 border-spy-red/30 dark:bg-spy-red/10 dark:border-spy-red/30 shadow-none"
+                      : "bg-spy-surface2 border-spy-border shadow-none"
                   }`}
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <span
                       className={`text-xs font-mono font-bold uppercase tracking-wider ${
-                        isToday ? "text-[#14663a] dark:text-spy-green" : "text-spy-text"
+                        isToday ? "text-[#14663a] dark:text-[#4ade80]" : "text-spy-text"
                       }`}
                     >
                       {weekday}
                     </span>
                     <span
-                      className={`text-xs font-mono px-1 py-0.2 rounded-[2px] ${
+                      className={`text-xs font-mono px-1.5 py-0.2 rounded-[3px] ${
                         isToday
-                          ? "bg-[#14663a] text-white dark:bg-spy-green dark:text-black font-bold"
+                          ? "bg-[#14663a] text-white dark:bg-emerald-500/20 dark:text-emerald-300 dark:border dark:border-emerald-500/30 font-bold"
                           : "text-spy-muted"
                       }`}
                     >
@@ -245,35 +281,36 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Override or Holiday Badge */}
+                  {/* Single Non-duplicate Override / Holiday Badge */}
                   {badge && (
                     <div
-                      className={`text-[9px] font-mono px-1.5 py-0.2 rounded-[2px] border mt-1 truncate max-w-full font-bold ${
+                      className={`text-[9px] font-mono px-2 py-0.5 rounded-[3px] border font-bold leading-tight max-w-full text-center ${
                         isHoliday
-                          ? "bg-gray-200 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300"
+                          ? "bg-gray-200 text-gray-700 border-gray-300 dark:bg-gray-800/80 dark:text-gray-300 dark:border-gray-700"
                           : isExam
-                          ? "bg-[#fce8e0] text-[#b23a12] border-[#facfb7] dark:bg-spy-red/20 dark:text-spy-red"
-                          : "bg-[#e4eefc] text-[#1d4f9f] border-[#c6ddf9] dark:bg-blue-950/40 dark:text-blue-300"
+                          ? "bg-[#fce8e0] text-[#b23a12] border-[#facfb7] dark:bg-spy-red/20 dark:text-spy-red dark:border-spy-red/30"
+                          : "bg-[#e4eefc] text-[#1d4f9f] border-[#c6ddf9] dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/50"
                       }`}
-                      title={badge}
+                      title={badgeInfo.full}
                     >
-                      {badge}
+                      {badgeInfo.short}
                     </div>
                   )}
 
-                  {/* Day Events Dots / Mini Badges */}
-                  {events.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1 flex-wrap justify-center">
-                      {events.slice(0, 2).map((ev) => {
+                  {/* Non-duplicate Other Academic Events */}
+                  {nonDuplicateEvents.length > 0 && !badge && (
+                    <div className="flex items-center gap-1 flex-wrap justify-center">
+                      {nonDuplicateEvents.slice(0, 1).map((ev) => {
                         const style = getEventBadge(ev.type);
+                        const evInfo = formatShortBadge(ev.title);
                         return (
                           <span
                             key={ev.id}
-                            className={`inline-flex items-center gap-0.5 text-[8px] font-mono px-1 rounded-[2px] border ${style.pill}`}
-                            title={ev.title}
+                            className={`inline-flex items-center gap-1 text-[8.5px] font-mono px-1.5 py-0.5 rounded-[3px] border font-semibold ${style.pill}`}
+                            title={evInfo.full}
                           >
                             {style.icon}
-                            <span className="truncate max-w-[50px]">{ev.title}</span>
+                            <span>{evInfo.short}</span>
                           </span>
                         );
                       })}
@@ -312,22 +349,22 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
               return (
                 <div
                   key={dateStr}
-                  className={`relative h-full rounded-[4px] border transition-colors ${
+                  className={`relative h-full rounded-[6px] border transition-colors ${
                     isToday
-                      ? "bg-[#f4f1ea]/40 border-[#14663a]/30 dark:bg-spy-surface2/30 dark:border-spy-green/30"
-                      : "bg-spy-surface border-spy-border/50"
+                      ? "bg-[#1f7a4d]/[0.03] border-spy-border border-t-2 border-t-[#1f7a4d] dark:bg-[rgba(34,197,94,0.05)] dark:border-spy-border dark:border-t-2 dark:border-t-spy-green shadow-none"
+                      : "bg-spy-surface border-spy-border shadow-none"
                   }`}
                   onDragOver={(e) => e.preventDefault()}
                   onDoubleClick={() => onAddBlock(weekday, dateStr)}
                 >
-                  {/* Subtle 1-Hour Horizontal Grid Guide Lines */}
+                  {/* Faint 1-Hour Horizontal Grid Guide Lines Behind Blocks */}
                   {HOURS.map((_, hIdx) => {
                     const topPercent = (hIdx / (HOURS.length - 1)) * 100;
                     return (
                       <div
                         key={hIdx}
                         style={{ top: `${topPercent}%` }}
-                        className="absolute inset-x-0 border-b border-spy-border/30 pointer-events-none"
+                        className="absolute inset-x-0 border-b border-black/[0.06] dark:border-white/[0.06] pointer-events-none z-0"
                       />
                     );
                   })}
@@ -338,11 +375,11 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                       style={{ top: `${nowPercent}%` }}
                       className="absolute inset-x-0 z-30 pointer-events-none flex items-center"
                     >
-                      <span className="w-2.5 h-2.5 -ml-1.5 rounded-full bg-spy-red border-2 border-spy-surface animate-pulse" />
-                      <div className="h-[2px] w-full bg-spy-red shadow-xs" />
-                      <span className="text-[8px] font-mono text-white bg-spy-red px-1 rounded-[1px] absolute right-1 -top-3">
+                      <span className="w-2 h-2 -ml-1 rounded-full bg-spy-red animate-pulse shrink-0" />
+                      <span className="text-[7.5px] font-mono font-bold text-white bg-spy-red px-1 rounded-[2px] leading-tight shrink-0 ml-0.5 shadow-sm">
                         NOW
                       </span>
+                      <div className="h-[1.5px] w-full bg-spy-red shadow-xs" />
                     </div>
                   )}
 
@@ -352,42 +389,52 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                     const theme = getBlockThemeClasses(block.type);
                     const fill = calculateBlockFill(block, dateStr, missions);
                     const isFlexible = block.type === "study" || block.type === "project" || block.type === "cp";
+                    const isShortBlock = style.durationMinutes < 60;
 
                     return (
                       <div
                         key={block.id}
                         style={{ top: style.top, height: style.height }}
                         onClick={() => {
-                          if (isFlexible) {
+                          if (block.type === "class" && onOpenCourseHQ) {
+                            const courseId = categoryToCourseMap[block.default_category || ""] || "course-os";
+                            onOpenCourseHQ(courseId);
+                          } else if (isFlexible) {
                             onEditBlock(block, dateStr);
                           }
                         }}
-                        className={`absolute inset-x-1 rounded-[4px] border p-1.5 overflow-hidden transition-all shadow-xs flex flex-col justify-between group ${
+                        className={`absolute inset-x-1 rounded-[6px] border p-2 pl-3 overflow-hidden transition-all shadow-xs flex flex-col justify-between group z-10 ${
                           theme.card
                         } ${isFlexible ? "cursor-pointer hover:ring-1 hover:ring-spy-green/50" : ""}`}
                         title={`${block.label} (${formatTimeRange12(block.start_time, block.end_time)})`}
                       >
+                        {/* 3px Left Accent Bar in Category Color */}
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[5px]"
+                          style={{ backgroundColor: theme.accent }}
+                        />
+
                         {/* Top: Time Range & Type/Online Tag */}
                         <div>
-                          <div className="flex items-center justify-between gap-1 text-[9px] font-mono leading-tight mb-0.5">
-                            <span className="font-bold truncate">
+                          <div className="flex items-center justify-between gap-1 text-[11px] font-mono leading-tight mb-1 opacity-75">
+                            <span className="truncate">
                               {formatTime12(block.start_time)} - {formatTime12(block.end_time)}
                             </span>
                             {block.isOnline && (
-                              <span className="px-1 rounded-[2px] bg-blue-600 text-white text-[8px] font-bold">
+                              <span className="px-1 rounded-[2px] bg-blue-600 text-white text-[8px] font-bold shrink-0">
                                 ONLINE
                               </span>
                             )}
                           </div>
 
                           {/* Block Label */}
-                          <div className="font-sans font-semibold text-xs leading-snug truncate">
+                          <div className="font-sans font-semibold text-[12px] sm:text-[13px] leading-tight truncate">
                             {block.label}
                           </div>
 
                           {/* Overbooked Warning */}
                           {fill.isOverbooked && (
-                            <div className="flex items-center gap-1 text-[9px] font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-1 py-0.2 rounded-[2px] mt-0.5 w-fit">
+                            <div className="flex items-center gap-1 text-[9px] font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-1 py-0.2 rounded-[2px] mt-1 w-fit">
                               <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                               <span>Overbooked (+{fill.overbookedMinutes}m)</span>
                             </div>
@@ -458,21 +505,23 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                           </div>
                         )}
 
-                        {/* Bottom: Fill Indicator & Quick Add Mission button */}
+                        {/* Bottom: Fill Indicator & Ghost-style Quick Assign button */}
                         {isFlexible && (
-                          <div className="pt-0.5 border-t border-current/10 flex items-center justify-between text-[9px] font-mono">
-                            <span className="opacity-80 truncate">{fill.displayText}</span>
+                          <div className="mt-auto pt-1 border-t border-current/10 flex items-center justify-between text-[10px] font-mono gap-1">
+                            <span className="opacity-70 truncate text-[9px]">
+                              {fill.plannedMissions.length > 0 ? `${fill.totalPlannedMinutes}m` : `${style.durationMinutes}m free`}
+                            </span>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onAssignMissionToBlock(block, dateStr);
                               }}
-                              className="px-1 rounded-[2px] border border-current/30 hover:bg-current/10 flex items-center gap-0.5 transition-colors"
+                              className="p-1 sm:px-1.5 sm:py-0.5 rounded-[3px] bg-transparent hover:bg-current/10 text-current opacity-70 hover:opacity-100 transition-colors flex items-center gap-0.5 shrink-0"
                               title="Assign mission to block"
                             >
-                              <Plus className="w-2.5 h-2.5" />
-                              <span>Assign</span>
+                              <Plus className="w-3 h-3" />
+                              {!isShortBlock && <span>Assign</span>}
                             </button>
                           </div>
                         )}
@@ -507,11 +556,11 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
-          <span className="text-spy-muted">CP / SQL practice</span>
+          <span className="text-spy-muted">Competitive programming</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
-          <span className="text-spy-muted">Break / rest</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-stone-500" />
+          <span className="text-spy-muted">Break / personal</span>
         </div>
       </div>
     </div>

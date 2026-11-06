@@ -45,6 +45,7 @@ interface PlannerViewProps {
   onConfirmAutoSchedule: (missionId: string) => void;
   onRunAutoSchedule: (weekStartDate: Date) => number;
   onCompleteMission: (mission: Mission) => void;
+  onOpenCourseHQ?: (courseId: string) => void;
 }
 
 export const PlannerView: React.FC<PlannerViewProps> = ({
@@ -62,6 +63,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   onConfirmAutoSchedule,
   onRunAutoSchedule,
   onCompleteMission,
+  onOpenCourseHQ,
 }) => {
   const [viewMode, setViewMode] = useState<"grid" | "calendar">("grid");
   // Default to Nov 5, 2026 week
@@ -320,6 +322,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           }
           onConfirmAutoSchedule={onConfirmAutoSchedule}
           onCompleteMission={onCompleteMission}
+          onOpenCourseHQ={onOpenCourseHQ}
         />
       ) : (
         <AcademicCalendarView
