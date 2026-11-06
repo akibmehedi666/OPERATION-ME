@@ -18,6 +18,7 @@ import {
   CodeforcesLog,
   WeeklyReview,
 } from "@/types/database";
+import { getCanonicalProblemKey, normalizeProblemTitle } from "@/lib/codeforcesApi";
 
 export interface LocalDataSummary {
   hasData: boolean;
@@ -428,44 +429,69 @@ export async function migrateLocalDataToSupabase(
     if (localCf.length > 0) {
       const { data: cloudCf } = await supabase
         .from("cf_log")
-        .select("id, problem_name")
+        .select("id, problem_name, problem_url, problem_key")
         .eq("user_id", userId);
 
-      const existingIds = new Set((cloudCf || []).map((c) => c.id));
+      const existingKeys = new Set(
+        (cloudCf || []).map((c: Partial<CodeforcesLog>) => c.problem_key || getCanonicalProblemKey(c))
+      );
+      const existingNames = new Set(
+        (cloudCf || []).map((c: Partial<CodeforcesLog>) => normalizeProblemTitle(c.problem_name || ""))
+      );
+
+      const seenKeysInBatch = new Set<string>();
+
       const toInsert = localCf
         .filter((c) => {
           if (DEMO_CF_IDS.has(c.id)) {
             skippedCount++;
             return false;
           }
-          if (existingIds.has(c.id)) {
+          const key = c.problem_key || getCanonicalProblemKey(c);
+          const normName = normalizeProblemTitle(c.problem_name || "");
+          if (existingKeys.has(key) || (normName && existingNames.has(normName)) || seenKeysInBatch.has(key)) {
             skippedCount++;
             return false;
           }
+          seenKeysInBatch.add(key);
           return true;
         })
-        .map((c) => ({
-          id: c.id,
-          user_id: userId,
-          handle: c.handle || null,
-          problem_name: c.problem_name,
-          problem_url: c.problem_url || null,
-          rating: c.rating || null,
-          verdict: c.verdict || "OK",
-          tags: c.tags || [],
-          status: c.status || "solved",
-          time_taken_minutes: c.time_taken_minutes || null,
-          date: c.date || new Date().toISOString().slice(0, 10),
-          notes: c.notes || null,
-          solved_at: c.solved_at || new Date().toISOString(),
-          xp: c.xp || 25,
-        }));
+        .map((c) => {
+          const problemKey = c.problem_key || getCanonicalProblemKey(c);
+          return {
+            id: c.id || problemKey,
+            problem_key: problemKey,
+            user_id: userId,
+            handle: c.handle || null,
+            problem_name: c.problem_name,
+            problem_url: c.problem_url || null,
+            rating: c.rating || null,
+            verdict: c.verdict || "OK",
+            tags: c.tags || [],
+            status: c.status || "solved",
+            time_taken_minutes: c.time_taken_minutes || null,
+            date: c.date || new Date().toISOString().slice(0, 10),
+            notes: c.notes || null,
+            solved_at: c.solved_at || new Date().toISOString(),
+            xp: c.notes ? (c.xp ?? 0) : 0,
+          };
+        });
 
       if (toInsert.length > 0) {
-        const { error } = await supabase.from("cf_log").insert(toInsert);
+        const { error } = await supabase
+          .from("cf_log")
+          .upsert(toInsert, { onConflict: "user_id,problem_key" });
         if (!error) {
           importedCount += toInsert.length;
           details.cfLogs = toInsert.length;
+        } else {
+          const { error: idError } = await supabase
+            .from("cf_log")
+            .upsert(toInsert, { onConflict: "id" });
+          if (!idError) {
+            importedCount += toInsert.length;
+            details.cfLogs = toInsert.length;
+          }
         }
       }
     }

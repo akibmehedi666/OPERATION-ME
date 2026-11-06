@@ -203,15 +203,78 @@ export async function fetchCodeforcesSubmissions(
 }
 
 /**
+ * Normalizes a Codeforces handle or profile URL to just the clean handle string:
+ * e.g. "https://codeforces.com/profile/akibmehedi" -> "akibmehedi"
+ * e.g. "codeforces.com/profile/akibmehedi/" -> "akibmehedi"
+ * e.g. "  akibmehedi  " -> "akibmehedi"
+ */
+export function normalizeCodeforcesHandle(input?: string): string {
+  if (!input || typeof input !== "string") return "";
+  let clean = input.trim();
+  const urlMatch = clean.match(/(?:https?:\/\/)?(?:www\.)?codeforces\.com\/profile\/([a-zA-Z0-9_.-]+)/i);
+  if (urlMatch) {
+    clean = urlMatch[1];
+  }
+  return clean.replace(/\/+$/, "").trim();
+}
+
+/**
  * Extract contestId-index key from Codeforces problem URLs
  */
 export function extractProblemKeyFromUrl(url?: string): string | null {
   if (!url) return null;
   const m = url.match(/(?:contest|problemset\/problem|gym)\/(\d+)\/(?:problem\/)?([A-Za-z0-9]+)/i);
   if (m) {
-    return `${m[1]}-${m[2].toUpperCase()}`;
+    return `cf-${m[1]}-${m[2].toUpperCase()}`;
   }
   return null;
+}
+
+/**
+ * Extract contestId-index key from problem title string (e.g. "1234A - Name" or "Name (1234A)")
+ */
+export function extractProblemKeyFromName(name?: string): string | null {
+  if (!name) return null;
+  const m = name.match(/^(?:[a-z0-9]+\s*[-–.]\s*)?(\d+)\s*([A-Za-z0-9]+)\b/i);
+  if (m) {
+    return `cf-${m[1]}-${m[2].toUpperCase()}`;
+  }
+  const trailing = name.match(/\((\d+)\s*([A-Za-z0-9]+)\)$/i);
+  if (trailing) {
+    return `cf-${trailing[1]}-${trailing[2].toUpperCase()}`;
+  }
+  return null;
+}
+
+/**
+ * Derives a canonical deterministic problem_key for any log:
+ * Prefers contestId-index (e.g. "cf-1234-A"), otherwise falls back to normalized title.
+ */
+export function getCanonicalProblemKey(log: Partial<CodeforcesLog>): string {
+  if (log.problem_key && log.problem_key.trim()) {
+    return log.problem_key.trim();
+  }
+  const fromUrl = extractProblemKeyFromUrl(log.problem_url);
+  if (fromUrl) return fromUrl;
+  const fromName = extractProblemKeyFromName(log.problem_name);
+  if (fromName) return fromName;
+  const normTitle = normalizeProblemTitle(log.problem_name || "");
+  return normTitle ? `cf-title-${normTitle}` : `cf-item-${log.id || "unknown"}`;
+}
+
+/**
+ * Normalizes a problem title for deduplication:
+ * Strips contest prefixes ("A - ", "1. "), trailing indices (" (770A)"),
+ * and non-alphanumeric characters, returning lowercase string.
+ */
+export function normalizeProblemTitle(name: string): string {
+  if (!name) return "";
+  return name
+    .toLowerCase()
+    .replace(/^(?:[a-z0-9]+\s*[-–.]\s*)/i, "")
+    .replace(/\s*\([a-z0-9]+\)$/i, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
 }
 
 /**
@@ -234,10 +297,10 @@ export function parseSubmissionsToProblems(
     const name = (sub.problem.name || "").trim();
     if (!name && !index) continue;
 
-    // Deduplicate strictly by contestId + problem index
+    // Deduplicate strictly by contestId + problem index (e.g. "cf-1234-A")
     const key = contestId && index
-      ? `${contestId}-${index}`
-      : `prob-${index || name.toLowerCase()}`;
+      ? `cf-${contestId}-${index}`
+      : `cf-prob-${index || normalizeProblemTitle(name)}`;
 
     const isGym = Boolean((contestId && contestId >= 100000) || sub.author?.participantType === "GYM");
 
@@ -287,61 +350,100 @@ export function parseSubmissionsToProblems(
 }
 
 /**
- * Normalizes a problem title for deduplication:
- * Strips contest prefixes ("A - ", "1. "), trailing indices (" (770A)"),
- * and non-alphanumeric characters, returning lowercase string.
+ * Analyzes an array of logs and identifies duplicate rows:
+ * - Groups by canonical problem_key
+ * - Keeps the single best row (solved verdict preferred, earliest date, highest metadata)
+ * - Returns duplicate IDs that should be purged from Supabase, plus the cleaned log list
  */
-export function normalizeProblemTitle(name: string): string {
-  if (!name) return "";
-  return name
-    .toLowerCase()
-    .replace(/^(?:[a-z0-9]+\s*[-–.]\s*)/i, "")
-    .replace(/\s*\([a-z0-9]+\)$/i, "")
-    .replace(/[^a-z0-9]/g, "")
-    .trim();
+export function findDuplicateLogIds(logs: CodeforcesLog[]): {
+  duplicateIdsToDelete: string[];
+  cleanedLogs: CodeforcesLog[];
+} {
+  const groups = new Map<string, CodeforcesLog[]>();
+
+  for (const log of logs) {
+    const key = getCanonicalProblemKey(log);
+    const list = groups.get(key) || [];
+    list.push(log);
+    groups.set(key, list);
+  }
+
+  const duplicateIdsToDelete: string[] = [];
+  const cleanedLogs: CodeforcesLog[] = [];
+
+  for (const [key, group] of Array.from(groups.entries())) {
+    if (group.length === 1) {
+      const single = group[0];
+      cleanedLogs.push({
+        ...single,
+        problem_key: single.problem_key || key,
+      });
+      continue;
+    }
+
+    // Multiple logs for the same problem. Pick the best row to retain:
+    const solvedRow = group.find((l: CodeforcesLog) => l.status === "solved" || l.verdict === "OK");
+    const primary = solvedRow || group[0];
+
+    // Combine metadata across duplicates
+    const allTags = Array.from(new Set(group.flatMap((l: CodeforcesLog) => l.tags || [])));
+    const rating = group.find((l: CodeforcesLog) => l.rating && l.rating > 0)?.rating || primary.rating;
+    const notes = group.find((l: CodeforcesLog) => l.notes && l.notes.trim())?.notes || primary.notes;
+
+    const dates = group.map((l: CodeforcesLog) => l.date).filter(Boolean) as string[];
+    dates.sort();
+    const earliestDate = dates[0] || primary.date;
+
+    const solvedAts = group.map((l: CodeforcesLog) => l.solved_at).filter(Boolean) as string[];
+    solvedAts.sort();
+    const earliestSolvedAt = solvedAts[0] || primary.solved_at;
+
+    const isSolved = group.some((l: CodeforcesLog) => l.status === "solved" || l.verdict === "OK");
+
+    const bestRow: CodeforcesLog = {
+      ...primary,
+      id: primary.id,
+      problem_key: primary.problem_key || key,
+      status: isSolved ? "solved" : primary.status,
+      verdict: isSolved ? "OK" : primary.verdict,
+      tags: allTags,
+      rating,
+      notes,
+      date: earliestDate,
+      solved_at: isSolved ? earliestSolvedAt : primary.solved_at,
+      xp: primary.notes ? (primary.xp ?? 0) : 0, // Imported history has xp = 0
+    };
+
+    cleanedLogs.push(bestRow);
+
+    // Any other IDs in this group are redundant duplicates
+    for (const l of group) {
+      if (l.id !== bestRow.id && l.id) {
+        duplicateIdsToDelete.push(l.id);
+      }
+    }
+  }
+
+  return { duplicateIdsToDelete, cleanedLogs };
 }
 
 /**
  * Deduplicates existing logs array:
- * - Checks contestId+index from URL or problem_name prefix
+ * - Checks canonical problem key
  * - Merges entries with identical normalized name + rating + date
  * - Preserves manual entries, notes, and XP
  */
 export function deduplicateExistingLogs(logs: CodeforcesLog[]): CodeforcesLog[] {
-  const seenContestKeys = new Set<string>();
-  const seenNameDateRating = new Set<string>();
-  const result: CodeforcesLog[] = [];
-
-  for (const log of logs) {
-    const keyFromUrl = extractProblemKeyFromUrl(log.problem_url);
-    const prefixMatch = log.problem_name?.match(/(?:^|\b)(\d+)\s*([A-Za-z0-9]+)\b/);
-    const detectedKey = keyFromUrl || (prefixMatch ? `${prefixMatch[1]}-${prefixMatch[2].toUpperCase()}` : null);
-
-    const normName = normalizeProblemTitle(log.problem_name || "");
-    const dateStr = log.date || (log.created_at ? log.created_at.slice(0, 10) : "");
-    const identityKey = normName && dateStr ? `${normName}|${log.rating || 0}|${dateStr}` : null;
-
-    if (detectedKey && seenContestKeys.has(detectedKey)) {
-      continue;
-    }
-    if (identityKey && seenNameDateRating.has(identityKey)) {
-      continue;
-    }
-
-    if (detectedKey) seenContestKeys.add(detectedKey);
-    if (identityKey) seenNameDateRating.add(identityKey);
-    result.push(log);
-  }
-
-  return result;
+  return findDuplicateLogIds(logs).cleanedLogs;
 }
 
 /**
- * Deduplicate against existing logs:
- * - Deduplicates by contestId + problem index
- * - Merges entries with identical problem name + date + rating from different contests
+ * Deduplicate incoming parsed problems against existing logs:
+ * - Deduplicates by canonical problem key (contestId + problem index)
+ * - Merges entries with identical problem name + date + rating
  * - Preserves all manual entries and notes
  * - Imported problems start with xp: 0
+ * - Deterministic IDs match the canonical problem_key
  */
 export function deduplicateAndFormatNewLogs(
   parsedProblems: Map<string, ParsedCodeforcesProblem>,
@@ -358,15 +460,8 @@ export function deduplicateAndFormatNewLogs(
   const existingNameDateRating = new Set<string>();
 
   for (const log of existingLogs) {
-    const keyFromUrl = extractProblemKeyFromUrl(log.problem_url);
-    if (keyFromUrl) {
-      existingKeys.add(keyFromUrl);
-    }
-
-    const prefixMatch = log.problem_name.match(/(?:^|\b)(\d+)\s*([A-Za-z0-9]+)\b/);
-    if (prefixMatch) {
-      existingKeys.add(`${prefixMatch[1]}-${prefixMatch[2].toUpperCase()}`);
-    }
+    const key = getCanonicalProblemKey(log);
+    existingKeys.add(key);
 
     const normName = normalizeProblemTitle(log.problem_name || "");
     const dateStr = log.date || (log.created_at ? log.created_at.slice(0, 10) : "");
@@ -413,7 +508,8 @@ export function deduplicateAndFormatNewLogs(
       : undefined;
 
     const newLog: CodeforcesLog = {
-      id: `cf-sync-${prob.contestId || "p"}-${prob.index || "x"}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: prob.key,
+      problem_key: prob.key,
       handle: handle.trim(),
       problem_name: prob.name,
       problem_url: prob.problemUrl,
@@ -440,6 +536,27 @@ export function deduplicateAndFormatNewLogs(
     totalSolvedCount,
     unratedSolvedCount,
   };
+}
+
+/**
+ * Computes unique problems with verdict OK / solved status:
+ * Deduplicates by canonical problem key.
+ * If at least one entry has verdict === 'OK' or status === 'solved', it counts as 1.
+ * Tried/attempted/upsolve without OK do NOT count as solved.
+ */
+export function computeUniqueSolvedCount(logs: CodeforcesLog[]): number {
+  const problemMap = new Map<string, boolean>();
+  for (const log of logs) {
+    const key = getCanonicalProblemKey(log);
+    const isSolved = log.status === "solved" || log.verdict === "OK";
+    const current = problemMap.get(key) || false;
+    problemMap.set(key, current || isSolved);
+  }
+  let solved = 0;
+  for (const isSolved of Array.from(problemMap.values())) {
+    if (isSolved) solved++;
+  }
+  return solved;
 }
 
 /**

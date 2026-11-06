@@ -30,6 +30,7 @@ import {
   fetchCodeforcesSubmissions,
   parseSubmissionsToProblems,
   deduplicateAndFormatNewLogs,
+  computeUniqueSolvedCount,
 } from "@/lib/codeforcesApi";
 import { CyberRoadmapView } from "@/components/cyber/CyberRoadmapView";
 import { ResearchPapersView } from "@/components/papers/ResearchPapersView";
@@ -122,6 +123,9 @@ export default function Home() {
     updateCfLog,
     deleteCfLog,
     importCfLogs,
+    deduplicateCfLogs,
+    cfHandle,
+    updateCfHandle,
     updateCyberTopicStatus,
     addCyberTopic,
     addResearchPaper,
@@ -514,7 +518,7 @@ export default function Home() {
                   : tab === "courses"
                   ? courses.length
                   : tab === "codeforces"
-                  ? cfLogs.length
+                  ? computeUniqueSolvedCount(cfLogs)
                   : tab === "cyber"
                   ? `${cyberTopics.filter((t) => t.status === "done").length}/${cyberTopics.length}`
                   : tab === "papers"
@@ -825,6 +829,9 @@ export default function Home() {
                   onUpdateLog={updateCfLog}
                   onDeleteLog={deleteCfLog}
                   onImportLogs={importCfLogs}
+                  onDeduplicateLogs={deduplicateCfLogs}
+                  handle={cfHandle}
+                  onUpdateHandle={updateCfHandle}
                 />
               </motion.div>
             )}

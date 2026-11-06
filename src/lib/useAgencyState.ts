@@ -45,7 +45,12 @@ import {
   saveThemePreference 
 } from "@/lib/theme";
 import { getRankFromXp } from "@/lib/rank";
-import { deduplicateExistingLogs } from "@/lib/codeforcesApi";
+import { 
+  deduplicateExistingLogs,
+  findDuplicateLogIds,
+  getCanonicalProblemKey,
+  normalizeCodeforcesHandle,
+} from "@/lib/codeforcesApi";
 
 const PRIORITY_WEIGHTS: Record<Priority, number> = {
   urgent: 4,
@@ -81,6 +86,12 @@ export function useAgencyState() {
   const [researchPapers, setResearchPapers] = useState<ResearchPaper[]>(DEFAULT_PAPERS);
   const [sideProjects, setSideProjects] = useState<SideProject[]>(DEFAULT_SIDE_PROJECTS);
   const [cfLogs, setCfLogs] = useState<CodeforcesLog[]>(DEFAULT_CF_LOGS);
+  const [cfHandle, setCfHandle] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("op_me_cf_handle") || "";
+    }
+    return "";
+  });
   const [weeklyReviews, setWeeklyReviews] = useState<WeeklyReview[]>([]);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const [totalXp, setTotalXp] = useState<number>(0); // Baseline 0 XP for fresh agent
@@ -520,18 +531,53 @@ export function useAgencyState() {
         setSideProjects(DEFAULT_SIDE_PROJECTS);
       }
 
-      // 14. Fetch cf_log
+      // 14. Fetch user_settings (for cf_handle)
+      try {
+        const { data: settingsData } = await supabase
+          .from("user_settings")
+          .select("cf_handle")
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (settingsData?.cf_handle) {
+          const norm = normalizeCodeforcesHandle(settingsData.cf_handle);
+          if (norm) {
+            setCfHandle(norm);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("op_me_cf_handle", norm);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch user_settings cf_handle:", err);
+      }
+
+      // 15. Fetch cf_log
       const { data: cfData } = await supabase
         .from("cf_log")
         .select("*")
         .eq("user_id", userId);
       if (cfData && cfData.length > 0) {
-        setCfLogs(cfData);
+        // Automatically deduplicate fetched logs to purge duplicate noise from display
+        const cleaned = deduplicateExistingLogs(cfData);
+        setCfLogs(cleaned);
+
+        // Fallback: if cfHandle still empty, extract from cfData
+        const found = cfData.find((c: CodeforcesLog) => c.handle && c.handle.trim());
+        if (found?.handle) {
+          const norm = normalizeCodeforcesHandle(found.handle);
+          if (norm) {
+            setCfHandle((prev) => prev || norm);
+            if (typeof window !== "undefined" && !localStorage.getItem("op_me_cf_handle")) {
+              localStorage.setItem("op_me_cf_handle", norm);
+            }
+          }
+        }
       } else {
         setCfLogs(DEFAULT_CF_LOGS);
       }
 
-      // 15. Fetch weekly_reviews
+      // 16. Fetch weekly_reviews
       const { data: wrData } = await supabase
         .from("weekly_reviews")
         .select("*")
@@ -1353,6 +1399,79 @@ export function useAgencyState() {
     }
   };
 
+  const updateCfHandle = async (newHandle: string) => {
+    const clean = normalizeCodeforcesHandle(newHandle);
+    setCfHandle(clean);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_cf_handle", clean);
+    }
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        await supabase
+          .from("user_settings")
+          .upsert(
+            {
+              user_id: currentUser.id,
+              cf_handle: clean,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" }
+          );
+      } catch (err) {
+        console.error("Failed to update cf_handle in user_settings:", err);
+      }
+    }
+  };
+
+  const deduplicateCfLogs = async (): Promise<{ removedCount: number; remainingCount: number }> => {
+    const { duplicateIdsToDelete, cleanedLogs } = findDuplicateLogIds(cfLogs);
+    const removedCount = duplicateIdsToDelete.length;
+
+    // Immediately update memory and localStorage
+    persistCfLogs(cleanedLogs);
+
+    // If connected to Supabase in cloud mode, purge duplicate records and update problem_keys
+    if (hasSupabase && supabase && currentUser?.id && duplicateIdsToDelete.length > 0) {
+      try {
+        for (let i = 0; i < duplicateIdsToDelete.length; i += 100) {
+          const batchIds = duplicateIdsToDelete.slice(i, i + 100);
+          const { error } = await supabase.from("cf_log").delete().in("id", batchIds);
+          if (error) {
+            console.error("Failed to delete duplicate cf_log entries from Supabase:", error);
+          }
+        }
+
+        // Upsert canonical problem_keys on remaining logs
+        const updates = cleanedLogs.map((l) => ({
+          id: l.id,
+          user_id: currentUser.id,
+          problem_key: l.problem_key || getCanonicalProblemKey(l),
+          problem_name: l.problem_name,
+          problem_url: l.problem_url || null,
+          rating: l.rating || null,
+          verdict: l.verdict || "OK",
+          tags: l.tags || [],
+          status: l.status || "solved",
+          time_taken_minutes: l.time_taken_minutes || null,
+          date: l.date || new Date().toISOString().slice(0, 10),
+          notes: l.notes || null,
+          solved_at: l.solved_at || null,
+          xp: l.notes ? (l.xp ?? 0) : 0,
+          handle: l.handle || cfHandle || null,
+        }));
+
+        for (let i = 0; i < updates.length; i += 100) {
+          const batch = updates.slice(i, i + 100);
+          await supabase.from("cf_log").upsert(batch, { onConflict: "id" });
+        }
+      } catch (err) {
+        console.error("Cloud cf_log deduplication error:", err);
+      }
+    }
+
+    return { removedCount, remainingCount: cleanedLogs.length };
+  };
+
   const importCfLogs = async (newLogs: CodeforcesLog[], cleanedExistingLogs?: CodeforcesLog[]) => {
     const base = cleanedExistingLogs ? deduplicateExistingLogs(cleanedExistingLogs) : deduplicateExistingLogs(cfLogs);
     const updated = deduplicateExistingLogs([...newLogs, ...base]);
@@ -1362,35 +1481,53 @@ export function useAgencyState() {
 
     if (hasSupabase && supabase && currentUser?.id) {
       try {
-        const toInsert = newLogs.map((c) => ({
-          id: c.id,
-          user_id: currentUser.id,
-          handle: c.handle || null,
-          problem_name: c.problem_name,
-          problem_url: c.problem_url || null,
-          rating: c.rating || null,
-          verdict: c.verdict || "OK",
-          tags: c.tags || [],
-          status: c.status || "solved",
-          time_taken_minutes: c.time_taken_minutes || null,
-          date: c.date || new Date().toISOString().slice(0, 10),
-          notes: c.notes || null,
-          solved_at: c.solved_at || new Date().toISOString(),
-          xp: 0,
-          created_at: c.created_at || new Date().toISOString(),
-        }));
+        const toUpsert = newLogs.map((c) => {
+          const problemKey = c.problem_key || getCanonicalProblemKey(c);
+          return {
+            id: c.id || problemKey,
+            problem_key: problemKey,
+            user_id: currentUser.id,
+            handle: c.handle || cfHandle || null,
+            problem_name: c.problem_name,
+            problem_url: c.problem_url || null,
+            rating: c.rating || null,
+            verdict: c.verdict || "OK",
+            tags: c.tags || [],
+            status: c.status || "solved",
+            time_taken_minutes: c.time_taken_minutes || null,
+            date: c.date || new Date().toISOString().slice(0, 10),
+            notes: c.notes || null,
+            solved_at: c.solved_at || new Date().toISOString(),
+            xp: 0,
+            created_at: c.created_at || new Date().toISOString(),
+          };
+        });
 
-        for (let i = 0; i < toInsert.length; i += 100) {
-          const batch = toInsert.slice(i, i + 100);
-          const { error } = await supabase.from("cf_log").insert(batch);
+        for (let i = 0; i < toUpsert.length; i += 100) {
+          const batch = toUpsert.slice(i, i + 100);
+          // 1. Try upsert with UNIQUE (user_id, problem_key)
+          const { error } = await supabase
+            .from("cf_log")
+            .upsert(batch, { onConflict: "user_id,problem_key" });
+
+          // 2. If unique constraint on problem_key isn't created in Supabase yet, fallback to primary key id
           if (error) {
-            console.error("Supabase batch insert error on importCfLogs:", error);
+            console.warn("Upsert by (user_id,problem_key) fallback to id:", error.message);
+            const { error: idError } = await supabase
+              .from("cf_log")
+              .upsert(batch, { onConflict: "id" });
+            if (idError) {
+              console.error("Supabase upsert retry error on importCfLogs:", idError);
+            }
           }
         }
       } catch (err) {
         console.error("Supabase importCfLogs error:", err);
       }
     }
+
+    // Automatically perform database cleanup to delete any residual duplicates
+    await deduplicateCfLogs();
 
     // If any problem was solved today, count towards today's daily CP mission
     const todayStr = new Date().toISOString().split("T")[0];
@@ -1416,9 +1553,10 @@ export function useAgencyState() {
     takeaway?: string,
     handsOnCompleted?: boolean
   ) => {
+    let updatedTopic: CyberTopic | null = null;
     const updated = cyberTopics.map((t) => {
       if (t.id === topicId) {
-        return {
+        updatedTopic = {
           ...t,
           status,
           notes: notes !== undefined ? notes : t.notes,
@@ -1431,10 +1569,42 @@ export function useAgencyState() {
             handsOnCompleted !== undefined ? handsOnCompleted : t.hands_on_completed,
           completed_at: status === "done" ? (t.completed_at || new Date().toISOString()) : (status === "not_started" ? null : t.completed_at),
         };
+        return updatedTopic;
       }
       return t;
     });
     persistCyberTopics(updated);
+
+    // In cloud mode, immediately persist topic update to Supabase
+    if (hasSupabase && supabase && currentUser?.id && updatedTopic) {
+      const t: CyberTopic = updatedTopic;
+      supabase
+        .from("cyber_topics")
+        .upsert(
+          {
+            id: t.id,
+            user_id: currentUser.id,
+            section: t.section,
+            title: t.title,
+            status: t.status,
+            goal: t.goal || null,
+            learning_links: t.learning_links || [],
+            hands_on_task: t.hands_on_task || null,
+            hands_on_url: t.hands_on_url || null,
+            hands_on_platform: t.hands_on_platform || null,
+            hands_on_completed: t.hands_on_completed || false,
+            takeaway: t.takeaway || null,
+            notes: t.notes || null,
+            time_spent_minutes: t.time_spent_minutes || 0,
+            order_index: t.order_index || 0,
+            completed_at: t.completed_at || null,
+          },
+          { onConflict: "id" }
+        )
+        .then(({ error }: { error: unknown }) => {
+          if (error) console.error("Error persisting cyber topic to Supabase:", error);
+        });
+    }
   };
 
   const addCyberTopic = (topicData: Omit<CyberTopic, "id">) => {
@@ -1703,6 +1873,9 @@ export function useAgencyState() {
     updateCfLog,
     deleteCfLog,
     importCfLogs,
+    deduplicateCfLogs,
+    cfHandle,
+    updateCfHandle,
     updateCyberTopicStatus,
     addCyberTopic,
     addResearchPaper,

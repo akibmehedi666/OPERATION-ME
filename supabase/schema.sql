@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS public.lecture_logs (
 CREATE TABLE IF NOT EXISTS public.cf_log (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    problem_key TEXT,
     handle TEXT,
     problem_name TEXT NOT NULL,
     problem_url TEXT,
@@ -171,9 +172,14 @@ CREATE TABLE IF NOT EXISTS public.cf_log (
     date DATE DEFAULT CURRENT_DATE,
     notes TEXT,
     solved_at TIMESTAMPTZ DEFAULT now(),
-    xp INTEGER DEFAULT 25,
-    created_at TIMESTAMPTZ DEFAULT now()
+    xp INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT uq_cf_log_user_problem UNIQUE (user_id, problem_key)
 );
+
+-- Idempotent column and constraint additions for existing Supabase databases
+ALTER TABLE public.cf_log ADD COLUMN IF NOT EXISTS problem_key TEXT;
+ALTER TABLE public.cf_log ALTER COLUMN xp SET DEFAULT 0;
 
 -- ====================================================================
 -- 10. RESEARCH PAPERS TABLE
@@ -298,6 +304,8 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
     notification_settings JSONB DEFAULT '{}'::jsonb,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS cf_handle TEXT;
 
 -- ====================================================================
 -- ROW LEVEL SECURITY (RLS) CONFIGURATION

@@ -158,6 +158,7 @@ export interface LectureLog {
 export interface CodeforcesLog {
   id: string;
   user_id?: string;
+  problem_key?: string;
   handle?: string;
   problem_name: string;
   problem_url?: string;
@@ -291,5 +292,16 @@ export interface AgentProfile {
   rankProgress: number; // 0 to 100
   streak: number;
   longestStreak: number;
+}
+
+export interface UserSetting {
+  id?: string;
+  user_id: string;
+  default_theme?: 'dark' | 'light' | 'system';
+  animations_enabled?: boolean;
+  sound_enabled?: boolean;
+  cf_handle?: string;
+  notification_settings?: NotificationSettings;
+  updated_at?: string;
 }
 

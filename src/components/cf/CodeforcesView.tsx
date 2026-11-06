@@ -17,6 +17,7 @@ import {
   TrendingUp,
   BarChart2,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import { CodeforcesLog } from "@/types/database";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +28,8 @@ import {
   parseSubmissionsToProblems,
   deduplicateAndFormatNewLogs,
   deduplicateExistingLogs,
+  computeUniqueSolvedCount,
+  normalizeCodeforcesHandle,
   normalizeCodeforcesAvatarUrl,
   formatLastSyncedTime,
   CodeforcesUserProfile,
@@ -38,6 +41,9 @@ interface CodeforcesViewProps {
   onUpdateLog: (log: CodeforcesLog) => void;
   onDeleteLog: (id: string) => void;
   onImportLogs?: (newLogs: CodeforcesLog[], cleanedExistingLogs?: CodeforcesLog[]) => Promise<void> | void;
+  onDeduplicateLogs?: () => Promise<{ removedCount: number; remainingCount: number }>;
+  handle?: string;
+  onUpdateHandle?: (newHandle: string) => Promise<void> | void;
 }
 
 export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
@@ -46,6 +52,9 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
   onUpdateLog,
   onDeleteLog,
   onImportLogs,
+  onDeduplicateLogs,
+  handle: handleProp,
+  onUpdateHandle,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("all");
@@ -56,14 +65,26 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
 
   // Profile handle & API sync state
   const [handle, setHandle] = useState<string>(() => {
+    if (handleProp && handleProp.trim()) return normalizeCodeforcesHandle(handleProp);
     if (typeof window !== "undefined") {
-      return localStorage.getItem("op_me_cf_handle") || "";
+      return normalizeCodeforcesHandle(localStorage.getItem("op_me_cf_handle") || "");
     }
     return "";
   });
+
+  useEffect(() => {
+    if (handleProp && handleProp.trim()) {
+      const norm = normalizeCodeforcesHandle(handleProp);
+      if (norm && norm !== handle) {
+        setHandle(norm);
+      }
+    }
+  }, [handleProp, handle]);
+
   const [profile, setProfile] = useState<CodeforcesUserProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{
     type: "success" | "error";
@@ -82,9 +103,9 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
     return 0;
   });
 
-  // Solved count in the app
+  // Solved count in the app - count only unique problems with verdict OK / solved status
   const solvedCount = useMemo(() => {
-    return logs.filter((l) => l.status === "solved").length;
+    return computeUniqueSolvedCount(logs);
   }, [logs]);
 
   // Expected website profile count (akibmehedi profile shows 92 on the website)
@@ -120,9 +141,40 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
   }, [handle]);
 
   const handleSaveHandle = (newHandle: string) => {
-    setHandle(newHandle);
+    const clean = normalizeCodeforcesHandle(newHandle);
+    setHandle(clean);
     if (typeof window !== "undefined") {
-      localStorage.setItem("op_me_cf_handle", newHandle);
+      localStorage.setItem("op_me_cf_handle", clean);
+    }
+    if (onUpdateHandle) {
+      onUpdateHandle(clean);
+    }
+  };
+
+  // Clean duplicates action handler
+  const handleCleanDuplicates = async () => {
+    if (!onDeduplicateLogs) return;
+    setIsDeduplicating(true);
+    try {
+      const res = await onDeduplicateLogs();
+      if (res.removedCount > 0) {
+        setSyncMessage({
+          type: "success",
+          text: `Cleaned ${res.removedCount} duplicate entries. ${res.remainingCount} unique problems active.`,
+        });
+      } else {
+        setSyncMessage({
+          type: "success",
+          text: `No duplicates found. All ${res.remainingCount} problems are already unique.`,
+        });
+      }
+    } catch (err: unknown) {
+      setSyncMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Deduplication failed.",
+      });
+    } finally {
+      setIsDeduplicating(false);
     }
   };
 
@@ -174,18 +226,24 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
         }
       }
 
-      // 5. Update last synced & total solved numbers
+      // 6. Automatically run deduplication to ensure Supabase and state are strictly deduplicated
+      if (onDeduplicateLogs) {
+        await onDeduplicateLogs();
+      }
+
+      // 7. Update last synced & total solved numbers
       const nowTs = Date.now();
       localStorage.setItem("op_me_cf_last_synced", nowTs.toString());
       localStorage.setItem("op_me_cf_api_solved_total", totalSolvedCount.toString());
       setLastSynced(nowTs);
       setApiSolvedTotal(totalSolvedCount);
 
-      // 6. Set summary message
+      // 8. Set summary message: "Imported N (new M, skipped K)"
+      const skippedCount = totalUniqueProblems - newCount;
       if (!options?.silent) {
         setSyncMessage({
           type: "success",
-          text: `Fetched ${submissions.length} submissions: imported ${totalUniqueProblems} problems (${newCount} new, ${unratedSolvedCount} unrated). Codeforces API total: ${totalSolvedCount}.`,
+          text: `Fetched ${submissions.length} submissions: Imported ${totalUniqueProblems} unique problems (${newCount} new, ${skippedCount} skipped/duplicates). Codeforces API total: ${totalSolvedCount} (unrated: ${unratedSolvedCount}).`,
         });
       }
     } catch (err: unknown) {
@@ -469,12 +527,24 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
               variant="stealth"
               size="sm"
               onClick={() => handleSync()}
-              disabled={isSyncing || isLoadingProfile}
+              disabled={isSyncing || isLoadingProfile || isDeduplicating}
               title="Refresh profile and import solved problems from Codeforces API"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing || isLoadingProfile ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync"}</span>
             </Button>
+            {onDeduplicateLogs && (
+              <Button
+                variant="stealth"
+                size="sm"
+                onClick={handleCleanDuplicates}
+                disabled={isDeduplicating || isSyncing}
+                title="Remove duplicate submissions and keep only unique problems"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${isDeduplicating ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">{isDeduplicating ? "Cleaning..." : "Remove Duplicates"}</span>
+              </Button>
+            )}
           </div>
           {lastSynced > 0 && (
             <span className="text-[10px] font-mono text-spy-dim">
@@ -767,7 +837,7 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
                 {/* Right Actions & XP */}
                 <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-spy-border">
                   <span className="text-xs font-mono font-bold text-spy-amber">
-                    +{log.xp || 30} XP
+                    {log.xp !== undefined && log.xp !== null && log.xp > 0 ? `+${log.xp} XP` : "0 XP"}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
