@@ -345,6 +345,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           timeBlocks={timeBlocks}
           academicEvents={academicEvents}
           missions={missions}
+          categories={categories}
           onEditBlock={(block, dateStr) =>
             setBlockModal({
               isOpen: true,

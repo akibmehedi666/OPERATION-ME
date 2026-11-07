@@ -6,13 +6,14 @@ import {
   AcademicEvent, 
   Mission, 
   TimeBlockType,
-  DayOfWeek 
+  DayOfWeek,
+  Category
 } from "@/types/database";
 import { 
   resolveDaySchedule, 
   getDaysOfWeek, 
   formatDateKey,
-  getLocalTimeString 
+  getLocalTimeString
 } from "@/lib/scheduleResolver";
 import { 
   calculateBlockFill 
@@ -28,7 +29,8 @@ import {
   Laptop,
   CheckCircle2,
   Target,
-  Flag
+  Flag,
+  Clock
 } from "lucide-react";
 
 interface WeeklyGridViewProps {
@@ -36,6 +38,7 @@ interface WeeklyGridViewProps {
   timeBlocks: TimeBlock[];
   academicEvents: AcademicEvent[];
   missions: Mission[];
+  categories?: Category[];
   onEditBlock: (block: TimeBlock, dateStr: string) => void;
   onAddBlock: (weekday: DayOfWeek, dateStr: string) => void;
   onAssignMissionToBlock: (block: TimeBlock, dateStr: string) => void;
@@ -63,14 +66,99 @@ function addMinutes(timeStr: string, minutes: number): string {
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
 
-const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]; // 9 AM to 10 PM
-const TOTAL_MINUTES = 13 * 60; // 780 minutes
+function formatHourLabel(hour: number): string {
+  if (hour === 24 || hour === 0) return "12 AM";
+  if (hour === 12) return "12 PM";
+  if (hour > 12) return `${hour - 12} PM`;
+  return `${hour} AM`;
+}
+
+interface PositionedMission {
+  mission: Mission;
+  startStr: string;
+  endStr: string;
+  startMin: number;
+  endMin: number;
+  colIndex: number;
+  totalCols: number;
+}
+
+/**
+ * Computes side-by-side layout coordinates for overlapping scheduled missions on the same day.
+ */
+function layoutOverlappingMissions(
+  dayMissions: Array<{ mission: Mission; startStr: string; endStr: string }>
+): PositionedMission[] {
+  if (dayMissions.length === 0) return [];
+
+  const items = dayMissions.map((item) => {
+    const [sh, sm] = item.startStr.split(":").map(Number);
+    const [eh, em] = item.endStr.split(":").map(Number);
+    const startMin = (sh || 0) * 60 + (sm || 0);
+    const endMin = Math.max(startMin + 20, (eh || 0) * 60 + (em || 0));
+    return { ...item, startMin, endMin, colIndex: 0, totalCols: 1 };
+  });
+
+  // Sort by start minute ascending, then duration descending
+  items.sort((a, b) => a.startMin - b.startMin || (b.endMin - b.startMin) - (a.endMin - a.startMin));
+
+  // Cluster overlapping items
+  const clusters: Array<typeof items> = [];
+  let currentCluster: typeof items = [];
+  let clusterEnd = -1;
+
+  for (const item of items) {
+    if (currentCluster.length === 0) {
+      currentCluster.push(item);
+      clusterEnd = item.endMin;
+    } else if (item.startMin < clusterEnd) {
+      currentCluster.push(item);
+      clusterEnd = Math.max(clusterEnd, item.endMin);
+    } else {
+      clusters.push(currentCluster);
+      currentCluster = [item];
+      clusterEnd = item.endMin;
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  // Assign greedy lanes/columns within each cluster
+  for (const cluster of clusters) {
+    const lanes: number[] = [];
+
+    for (const item of cluster) {
+      let placed = false;
+      for (let i = 0; i < lanes.length; i++) {
+        if (lanes[i] <= item.startMin) {
+          lanes[i] = item.endMin;
+          item.colIndex = i;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        item.colIndex = lanes.length;
+        lanes.push(item.endMin);
+      }
+    }
+
+    const totalLanes = Math.max(1, lanes.length);
+    for (const item of cluster) {
+      item.totalCols = totalLanes;
+    }
+  }
+
+  return items;
+}
 
 export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
   weekStartDate,
   timeBlocks,
   academicEvents,
   missions,
+  categories = [],
   onEditBlock,
   onAddBlock,
   onAssignMissionToBlock,
@@ -82,6 +170,34 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
 }) => {
   const [selectedMobileDayIndex, setSelectedMobileDayIndex] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [activeTooltip, setActiveTooltip] = useState<{
+    id: string;
+    title: string;
+    time: string;
+    category?: string;
+    categoryColor?: string;
+    status?: string;
+    xp?: number;
+    notes?: string | null;
+  } | null>(null);
+
+  // Full day preference persisted to localStorage
+  const [isFullDay, setIsFullDay] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("op_me_planner_full_day") === "true";
+    }
+    return false;
+  });
+
+  const handleToggleFullDay = () => {
+    setIsFullDay((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("op_me_planner_full_day", String(next));
+      }
+      return next;
+    });
+  };
 
   // Update current time clock
   useEffect(() => {
@@ -100,35 +216,157 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
     }
   }, [days, todayKey]);
 
-  // Calculate current time line position in grid (9 AM = 540m, 10 PM = 1320m)
-  const currentTotalMin = currentTime.getHours() * 60 + currentTime.getMinutes();
-  const currentMinutesOffset = currentTotalMin - 9 * 60;
-  const isTimeInGrid = currentMinutesOffset >= 0 && currentMinutesOffset <= TOTAL_MINUTES;
-  const nowPercent = (currentMinutesOffset / TOTAL_MINUTES) * 100;
-
   // Resolve schedule for each of the 7 days
-  const resolvedDays = days.map((dayDate) => {
-    return resolveDaySchedule(dayDate, timeBlocks, academicEvents, missions);
-  });
+  const resolvedDays = useMemo(() => {
+    return days.map((dayDate) => {
+      return resolveDaySchedule(dayDate, timeBlocks, academicEvents, missions);
+    });
+  }, [days, timeBlocks, academicEvents, missions]);
 
-  // Calculate top & height percentage for a time range
+  // --------------------------------------------------------------------------
+  // DYNAMIC TIME RANGE CALCULATION:
+  // Base: 9 AM (540m) to 10 PM (1320m)
+  // Dynamic: start = min(9 AM, earliest start in week, rounded down to hour)
+  //          end = max(10 PM, latest end in week, rounded up to hour, +1h padding)
+  // Clamped strictly between 6 AM (6) and 12 AM (24).
+  // Full Day toggle forces: 6 AM (6) to 12 AM (24).
+  // --------------------------------------------------------------------------
+  const timeRange = useMemo(() => {
+    const DEFAULT_START = 9;  // 9 AM
+    const DEFAULT_END = 22;   // 10 PM
+    const MIN_HOUR = 6;       // 6 AM
+    const MAX_HOUR = 24;      // 12 AM (Midnight)
+
+    if (isFullDay) {
+      return {
+        startHour: MIN_HOUR,
+        endHour: MAX_HOUR,
+        hasTasksBefore9AM: false,
+        hasTasksAfter10PM: false,
+        outOfRangeCount: 0,
+        outBefore: 0,
+        outAfter: 0,
+      };
+    }
+
+    const weekDateStrs = new Set(days.map((d) => formatDateKey(d)));
+    let earliestMin = DEFAULT_START * 60; // 540
+    let latestMin = DEFAULT_END * 60;     // 1320
+    let outBefore = 0;
+    let outAfter = 0;
+
+    // Scan Day Blocks
+    for (const day of resolvedDays) {
+      for (const b of day.blocks) {
+        if (!b.start_time || !b.end_time) continue;
+        const [sh, sm] = b.start_time.split(":").map(Number);
+        const [eh, em] = b.end_time.split(":").map(Number);
+        const sMin = (sh || 0) * 60 + (sm || 0);
+        const eMin = (eh || 0) * 60 + (em || 0);
+
+        if (sMin < 9 * 60) outBefore++;
+        if (eMin > 22 * 60) outAfter++;
+
+        earliestMin = Math.min(earliestMin, sMin);
+        latestMin = Math.max(latestMin, eMin);
+      }
+    }
+
+    // Scan Missions (Scheduled & Deadline)
+    for (const m of missions) {
+      if (m.scheduled_start && m.scheduled_end) {
+        const dateKey = formatDateKey(m.scheduled_start);
+        if (weekDateStrs.has(dateKey)) {
+          const ds = new Date(m.scheduled_start);
+          const de = new Date(m.scheduled_end);
+          const sMin = ds.getHours() * 60 + ds.getMinutes();
+          const eMin = de.getHours() * 60 + de.getMinutes();
+
+          if (sMin < 9 * 60) outBefore++;
+          if (eMin > 22 * 60 || sMin >= 22 * 60) outAfter++;
+
+          earliestMin = Math.min(earliestMin, sMin);
+          latestMin = Math.max(latestMin, eMin);
+        }
+      } else if (m.deadline && !m.scheduled_start) {
+        const deadKey = formatDateKey(m.deadline);
+        if (weekDateStrs.has(deadKey)) {
+          const dd = new Date(m.deadline);
+          const dMin = dd.getHours() * 60 + dd.getMinutes();
+
+          if (dMin < 9 * 60) outBefore++;
+          if (dMin >= 22 * 60) outAfter++;
+
+          earliestMin = Math.min(earliestMin, dMin);
+          latestMin = Math.max(latestMin, dMin + 20);
+        }
+      }
+    }
+
+    // Dynamic start: min(9 AM, earliest start in week, rounded down to hour), clamped to min 6 AM
+    const computedStart = Math.max(MIN_HOUR, Math.min(DEFAULT_START, Math.floor(earliestMin / 60)));
+    // Dynamic end: max(10 PM, latest end in week, rounded up to hour, +1h padding), clamped to max 24 (12 AM)
+    const computedEnd = Math.min(MAX_HOUR, Math.max(DEFAULT_END, Math.ceil(latestMin / 60) + 1));
+
+    return {
+      startHour: computedStart,
+      endHour: computedEnd,
+      hasTasksBefore9AM: outBefore > 0,
+      hasTasksAfter10PM: outAfter > 0,
+      outOfRangeCount: outBefore + outAfter,
+      outBefore,
+      outAfter,
+    };
+  }, [isFullDay, resolvedDays, missions, days]);
+
+  const hours = useMemo(() => {
+    const list: number[] = [];
+    for (let h = timeRange.startHour; h <= timeRange.endHour; h++) {
+      list.push(h);
+    }
+    return list;
+  }, [timeRange.startHour, timeRange.endHour]);
+
+  const totalGridMinutes = useMemo(() => {
+    return Math.max(60, (timeRange.endHour - timeRange.startHour) * 60);
+  }, [timeRange.startHour, timeRange.endHour]);
+
+  // Dynamic height: 58px per hour interval, minimum 760px
+  const gridHeight = useMemo(() => {
+    return Math.max(760, (timeRange.endHour - timeRange.startHour) * 58);
+  }, [timeRange.startHour, timeRange.endHour]);
+
+  // Current time line calculation
+  const currentTotalMin = currentTime.getHours() * 60 + currentTime.getMinutes();
+  const currentMinutesOffset = currentTotalMin - timeRange.startHour * 60;
+  const isTimeInGrid = currentMinutesOffset >= 0 && currentMinutesOffset <= totalGridMinutes;
+  const nowPercent = (currentMinutesOffset / totalGridMinutes) * 100;
+
+  // Calculate top & height percentage for a time range relative to dynamic grid
   const getBlockStyles = (startTime: string, endTime: string) => {
     const [sh, sm] = startTime.split(":").map(Number);
     const [eh, em] = endTime.split(":").map(Number);
 
-    const startMin = (sh || 9) * 60 + (sm || 0);
-    const endMin = (eh || 10) * 60 + (em || 0);
+    const startMin = (sh ?? timeRange.startHour) * 60 + (sm || 0);
+    const endMin = (eh ?? (sh ? sh + 1 : timeRange.startHour + 1)) * 60 + (em || 0);
 
-    const offsetMin = Math.max(0, startMin - 9 * 60);
-    const durationMin = Math.max(15, endMin - startMin);
+    const gridStartMin = timeRange.startHour * 60;
+    const gridEndMin = timeRange.endHour * 60;
 
-    const top = (offsetMin / TOTAL_MINUTES) * 100;
-    const height = (durationMin / TOTAL_MINUTES) * 100;
+    // Clamp within grid boundaries so blocks NEVER render outside grid container
+    const clampedStartMin = Math.max(gridStartMin, startMin);
+    const clampedEndMin = Math.min(gridEndMin, Math.max(clampedStartMin + 15, endMin));
+
+    const offsetMin = clampedStartMin - gridStartMin;
+    const durationMin = clampedEndMin - clampedStartMin;
+
+    const top = (offsetMin / totalGridMinutes) * 100;
+    const height = (durationMin / totalGridMinutes) * 100;
 
     return {
-      top: `${top}%`,
-      height: `${height}%`,
-      durationMinutes: durationMin,
+      top: `${Math.max(0, Math.min(99.5, top))}%`,
+      height: `${Math.max(2.5, Math.min(100 - top, height))}%`,
+      durationMinutes: Math.max(15, endMin - startMin),
     };
   };
 
@@ -161,41 +399,21 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
         };
       case "cp":
         return {
-          card: "bg-[#eefaf8] border-[#99f6e4] text-[#0f766e] dark:bg-[#091c1b] dark:border-[#133b39] dark:text-[#5eead4]",
-          badge: "bg-[#ccfbf1] text-[#0f766e] border-[#99f6e4] dark:bg-[#0e2c2b] dark:text-[#99f6e4]",
-          accent: "#14b8a6",
+          card: "bg-[#fff7ed] border-[#fed7aa] text-[#c2410c] dark:bg-[#2a1306] dark:border-[#5a2a0c] dark:text-[#fdba74]",
+          badge: "bg-[#ffedd5] text-[#c2410c] border-[#fed7aa] dark:bg-[#3d1a08] dark:text-[#fdba74]",
+          accent: "#f97316",
         };
       case "break":
-      default:
         return {
-          card: "bg-[#f4f2ee] border-[#d6d3d1] text-[#44403c] dark:bg-[#131615] dark:border-[#272f2b] dark:text-[#a8a29e]",
-          badge: "bg-[#e7e5e4] text-[#44403c] border-[#d6d3d1] dark:bg-[#1c211f] dark:text-[#d6d3d1]",
-          accent: "#78716c",
-        };
-    }
-  };
-
-  const getEventBadge = (type: string) => {
-    switch (type) {
-      case "exam":
-        return {
-          icon: <ShieldAlert className="w-2.5 h-2.5 text-spy-red" />,
-          pill: "bg-[#fce8e0] text-[#b23a12] border-[#facfb7] dark:bg-spy-red/20 dark:text-spy-red dark:border-spy-red/30",
-        };
-      case "payment":
-        return {
-          icon: <CreditCard className="w-2.5 h-2.5 text-spy-amber" />,
-          pill: "bg-[#fbefd5] text-[#9a5b00] border-[#f4dcaa] dark:bg-spy-amber/20 dark:text-spy-amber dark:border-spy-amber/30",
-        };
-      case "class_override":
-        return {
-          icon: <Laptop className="w-2.5 h-2.5 text-[#1d4f9f]" />,
-          pill: "bg-[#e4eefc] text-[#1d4f9f] border-[#c6ddf9] dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/40",
+          card: "bg-[#f4f4f5] border-[#e4e4e7] text-[#52525b] dark:bg-[#18181b] dark:border-[#27272a] dark:text-[#a1a1aa]",
+          badge: "bg-[#e4e4e7] text-[#52525b] border-[#d4d4d8] dark:bg-[#27272a] dark:text-[#a1a1aa]",
+          accent: "#71717a",
         };
       default:
         return {
-          icon: <CalendarIcon className="w-2.5 h-2.5 text-spy-muted" />,
-          pill: "bg-spy-surface2 text-spy-muted border-spy-border",
+          card: "bg-spy-surface2 border-spy-border text-spy-muted",
+          badge: "bg-spy-surface text-spy-dim border-spy-border",
+          accent: "#64748b",
         };
     }
   };
@@ -215,8 +433,98 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
     return { short: t.length > 16 ? `${t.slice(0, 14)}…` : t, full: t };
   };
 
+  const getEventBadge = (type: string) => {
+    switch (type) {
+      case "holiday":
+        return {
+          pill: "bg-gray-200 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
+          icon: <ShieldAlert className="w-2.5 h-2.5 text-gray-500" />,
+        };
+      case "exam":
+        return {
+          pill: "bg-spy-redMuted text-spy-red border-spy-red/30",
+          icon: <AlertTriangle className="w-2.5 h-2.5 text-spy-red" />,
+        };
+      case "payment":
+        return {
+          pill: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+          icon: <CreditCard className="w-2.5 h-2.5 text-amber-500" />,
+        };
+      case "class_override":
+        return {
+          pill: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+          icon: <Laptop className="w-2.5 h-2.5 text-blue-500" />,
+        };
+      default:
+        return {
+          pill: "bg-spy-surface2 text-spy-muted border-spy-border",
+          icon: <CalendarIcon className="w-2.5 h-2.5 text-spy-muted" />,
+        };
+    }
+  };
+
+  const getCategoryInfo = (categoryId?: string | null) => {
+    const cat = categories.find((c) => c.id === categoryId);
+    return {
+      name: cat?.name || "General",
+      color: cat?.color || "#10b981",
+    };
+  };
+
   return (
     <div className="space-y-4">
+      {/* Top Toolbar: Full Day Toggle & Dynamic Indicator */}
+      <div className="flex items-center justify-between gap-2 pb-2 border-b border-spy-border/50 flex-wrap">
+        <div className="flex items-center gap-2">
+          {/* Full Day Toggle Button */}
+          <button
+            type="button"
+            onClick={handleToggleFullDay}
+            className={`px-2.5 py-1 text-xs font-mono font-semibold rounded-[4px] border transition-all flex items-center gap-1.5 ${
+              isFullDay
+                ? "bg-[#14663a] text-white border-[#14663a] dark:bg-spy-green/20 dark:text-spy-green dark:border-spy-green shadow-xs"
+                : "bg-spy-surface2 border-spy-border text-spy-muted hover:text-spy-text hover:border-spy-borderLight"
+            }`}
+            title="Toggle full 24h operational day window (6 AM – 12 AM)"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Full Day (6 AM – 12 AM)</span>
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isFullDay ? "bg-white dark:bg-spy-green" : "bg-spy-muted/50"
+              }`}
+            />
+          </button>
+
+          {/* Range Summary pill */}
+          <span className="text-[11px] font-mono text-spy-dim hidden sm:inline">
+            Visible: {formatHourLabel(timeRange.startHour)} – {formatHourLabel(timeRange.endHour)}
+          </span>
+        </div>
+
+        {/* Out of Range Indicator (if tasks exist before 9 AM or after 10 PM and not in full day) */}
+        {!isFullDay && timeRange.outOfRangeCount > 0 && (
+          <button
+            type="button"
+            onClick={handleToggleFullDay}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-[4px] hover:bg-amber-500/20 transition-all shadow-xs"
+            title="Click to expand time grid to Full Day (6 AM – 12 AM)"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span>
+              {timeRange.outAfter > 0 && timeRange.outBefore > 0
+                ? `${timeRange.outOfRangeCount} tasks outside 9 AM–10 PM`
+                : timeRange.outAfter > 0
+                ? `${timeRange.outAfter} task${timeRange.outAfter > 1 ? "s" : ""} after 10 PM`
+                : `${timeRange.outBefore} task${timeRange.outBefore > 1 ? "s" : ""} before 9 AM`}
+            </span>
+            <span className="text-[10px] underline ml-1 font-sans font-normal opacity-85">
+              Expand range
+            </span>
+          </button>
+        )}
+      </div>
+
       {/* Mobile Day Selector Tabs */}
       <div className="flex md:hidden items-center gap-1 overflow-x-auto pb-2 border-b border-spy-border">
         {days.map((dayDate, idx) => {
@@ -243,107 +551,112 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
         })}
       </div>
 
-      {/* Main Grid Container */}
+      {/* Main Grid Container with min 120px column width and horizontal scroll */}
       <div className="clean-card p-3 sm:p-5 overflow-x-auto">
-        <div className="min-w-[850px] relative">
-          {/* Header Row: Days of Week */}
-          <div className="grid grid-cols-[60px_repeat(7,1fr)] gap-2 pb-3 border-b border-spy-border mb-4 text-center select-none">
-            {/* Corner time label */}
-            <div className="text-[10px] font-mono text-spy-dim flex items-end justify-center pb-1">
-              TIME
-            </div>
+        <div className="min-w-[960px] relative">
+          {/* Header Row: Days of Week (Sticky Day Header) */}
+          <div className="sticky top-0 z-30 bg-spy-surface/95 backdrop-blur-xs border-b border-spy-border pb-3 mb-4 select-none">
+            <div className="grid grid-cols-[56px_repeat(7,minmax(120px,1fr))] gap-2 text-center">
+              {/* Corner time label */}
+              <div className="text-[10px] font-mono text-spy-dim flex items-end justify-center pb-1">
+                TIME
+              </div>
 
-            {resolvedDays.map(({ dateStr, weekday, events, badge, isHoliday, isExam }, idx) => {
-              const dayDate = days[idx];
-              const isToday = dateStr === todayKey;
-              const badgeInfo = formatShortBadge(badge);
+              {resolvedDays.map(({ dateStr, weekday, events, badge, isHoliday, isExam }, idx) => {
+                const dayDate = days[idx];
+                const isToday = dateStr === todayKey;
+                const badgeInfo = formatShortBadge(badge);
 
-              // Filter out events that duplicate the primary badge
-              const nonDuplicateEvents = events.filter((ev) => {
-                if (!badge) return true;
-                const bNorm = badge.toLowerCase();
-                const eNorm = ev.title.toLowerCase();
-                return !bNorm.includes(eNorm) && !eNorm.includes(bNorm);
-              });
+                // Filter out events that duplicate the primary badge
+                const nonDuplicateEvents = events.filter((ev) => {
+                  if (!badge) return true;
+                  const bNorm = badge.toLowerCase();
+                  const eNorm = ev.title.toLowerCase();
+                  return !bNorm.includes(eNorm) && !eNorm.includes(bNorm);
+                });
 
-              return (
-                <div
-                  key={dateStr}
-                  className={`p-2 rounded-[6px] border transition-colors flex flex-col items-center justify-start min-h-[92px] sm:min-h-[96px] gap-1.5 ${
-                    isToday
-                      ? "bg-[#1f7a4d]/[0.06] border-[#1f7a4d]/30 dark:bg-emerald-950/20 dark:border-emerald-800/40 shadow-none"
-                      : isExam
-                      ? "bg-[#fce8e0]/20 border-spy-red/30 dark:bg-spy-red/10 dark:border-spy-red/30 shadow-none"
-                      : "bg-spy-surface2 border-spy-border shadow-none"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`text-xs font-mono font-bold uppercase tracking-wider ${
-                        isToday ? "text-[#14663a] dark:text-[#4ade80]" : "text-spy-text"
-                      }`}
-                    >
-                      {weekday}
-                    </span>
-                    <span
-                      className={`text-xs font-mono px-1.5 py-0.2 rounded-[3px] ${
-                        isToday
-                          ? "bg-[#14663a] text-white dark:bg-emerald-500/20 dark:text-emerald-300 dark:border dark:border-emerald-500/30 font-bold"
-                          : "text-spy-muted"
-                      }`}
-                    >
-                      {dayDate.getDate()}
-                    </span>
+                return (
+                  <div
+                    key={dateStr}
+                    className={`p-2 rounded-[6px] border transition-colors flex flex-col items-center justify-start min-h-[92px] sm:min-h-[96px] gap-1.5 ${
+                      isToday
+                        ? "bg-[#1f7a4d]/[0.06] border-[#1f7a4d]/30 dark:bg-emerald-950/20 dark:border-emerald-800/40 shadow-none"
+                        : isExam
+                        ? "bg-[#fce8e0]/20 border-spy-red/30 dark:bg-spy-red/10 dark:border-spy-red/30 shadow-none"
+                        : "bg-spy-surface2 border-spy-border shadow-none"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-mono font-bold uppercase tracking-wider ${
+                          isToday ? "text-[#14663a] dark:text-[#4ade80]" : "text-spy-text"
+                        }`}
+                      >
+                        {weekday}
+                      </span>
+                      <span
+                        className={`text-xs font-mono px-1.5 py-0.2 rounded-[3px] ${
+                          isToday
+                            ? "bg-[#14663a] text-white dark:bg-emerald-500/20 dark:text-emerald-300 dark:border dark:border-emerald-500/30 font-bold"
+                            : "text-spy-muted"
+                        }`}
+                      >
+                        {dayDate.getDate()}
+                      </span>
+                    </div>
+
+                    {/* Single Non-duplicate Override / Holiday Badge */}
+                    {badge && (
+                      <div
+                        className={`text-[9px] font-mono px-2 py-0.5 rounded-[3px] border font-bold leading-tight max-w-full text-center ${
+                          isHoliday
+                            ? "bg-gray-200 text-gray-700 border-gray-300 dark:bg-gray-800/80 dark:text-gray-300 dark:border-gray-700"
+                            : isExam
+                            ? "bg-[#fce8e0] text-[#b23a12] border-[#facfb7] dark:bg-spy-red/20 dark:text-spy-red dark:border-spy-red/30"
+                            : "bg-[#e4eefc] text-[#1d4f9f] border-[#c6ddf9] dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/50"
+                        }`}
+                        title={badgeInfo.full}
+                      >
+                        {badgeInfo.short}
+                      </div>
+                    )}
+
+                    {/* Non-duplicate Other Academic Events */}
+                    {nonDuplicateEvents.length > 0 && !badge && (
+                      <div className="flex items-center gap-1 flex-wrap justify-center">
+                        {nonDuplicateEvents.slice(0, 1).map((ev) => {
+                          const style = getEventBadge(ev.type);
+                          const evInfo = formatShortBadge(ev.title);
+                          return (
+                            <span
+                              key={ev.id}
+                              className={`inline-flex items-center gap-1 text-[8.5px] font-mono px-1.5 py-0.5 rounded-[3px] border font-semibold ${style.pill}`}
+                              title={evInfo.full}
+                            >
+                              {style.icon}
+                              <span>{evInfo.short}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Single Non-duplicate Override / Holiday Badge */}
-                  {badge && (
-                    <div
-                      className={`text-[9px] font-mono px-2 py-0.5 rounded-[3px] border font-bold leading-tight max-w-full text-center ${
-                        isHoliday
-                          ? "bg-gray-200 text-gray-700 border-gray-300 dark:bg-gray-800/80 dark:text-gray-300 dark:border-gray-700"
-                          : isExam
-                          ? "bg-[#fce8e0] text-[#b23a12] border-[#facfb7] dark:bg-spy-red/20 dark:text-spy-red dark:border-spy-red/30"
-                          : "bg-[#e4eefc] text-[#1d4f9f] border-[#c6ddf9] dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/50"
-                      }`}
-                      title={badgeInfo.full}
-                    >
-                      {badgeInfo.short}
-                    </div>
-                  )}
-
-                  {/* Non-duplicate Other Academic Events */}
-                  {nonDuplicateEvents.length > 0 && !badge && (
-                    <div className="flex items-center gap-1 flex-wrap justify-center">
-                      {nonDuplicateEvents.slice(0, 1).map((ev) => {
-                        const style = getEventBadge(ev.type);
-                        const evInfo = formatShortBadge(ev.title);
-                        return (
-                          <span
-                            key={ev.id}
-                            className={`inline-flex items-center gap-1 text-[8.5px] font-mono px-1.5 py-0.5 rounded-[3px] border font-semibold ${style.pill}`}
-                            title={evInfo.full}
-                          >
-                            {style.icon}
-                            <span>{evInfo.short}</span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
-          {/* Grid Area: Time Axis on Left + 7 Columns */}
-          <div className="relative grid grid-cols-[60px_repeat(7,1fr)] gap-2 h-[760px] select-none">
+          {/* Grid Area: Time Axis on Left + 7 Columns (with 24px space below before legend) */}
+          <div
+            style={{ height: `${gridHeight}px` }}
+            className="relative grid grid-cols-[56px_repeat(7,minmax(120px,1fr))] gap-2 select-none pb-6 mb-6 border-b border-spy-border/40"
+          >
             {/* Left Hour Axis */}
             <div className="relative h-full text-right pr-2">
-              {HOURS.map((hour, idx) => {
-                const percent = (idx / (HOURS.length - 1)) * 100;
-                const ampm = hour >= 12 ? "PM" : "AM";
-                const displayHour = hour > 12 ? hour - 12 : hour;
+              {hours.map((hour, idx) => {
+                const percent = (idx / (hours.length - 1)) * 100;
+                const ampm = hour === 24 || hour === 0 ? "AM" : hour >= 12 ? "PM" : "AM";
+                const displayHour = hour === 24 || hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
 
                 return (
                   <div
@@ -361,11 +674,19 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
             {resolvedDays.map(({ dateStr, weekday, blocks }) => {
               const isToday = dateStr === todayKey;
 
-              // Standalone missions with exact scheduled start/end on this date
-              const standaloneMissions = missions.filter((m) => {
-                if (!m.scheduled_start || !m.scheduled_end) return false;
-                return formatDateKey(m.scheduled_start) === dateStr && !m.scheduled_block_id;
-              });
+              // Gather scheduled missions on this date for side-by-side positioning
+              const dayScheduledMissions = missions
+                .filter((m) => {
+                  if (!m.scheduled_start || !m.scheduled_end) return false;
+                  return formatDateKey(m.scheduled_start) === dateStr;
+                })
+                .map((m) => ({
+                  mission: m,
+                  startStr: getLocalTimeString(m.scheduled_start!) || "14:00",
+                  endStr: getLocalTimeString(m.scheduled_end!) || "15:00",
+                }));
+
+              const positionedMissions = layoutOverlappingMissions(dayScheduledMissions);
 
               // Deadline-only missions on this date
               const deadlineMissions = missions.filter((m) => {
@@ -377,7 +698,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
               return (
                 <div
                   key={dateStr}
-                  className={`relative h-full rounded-[6px] border transition-colors ${
+                  className={`relative h-full rounded-[6px] border transition-colors overflow-visible ${
                     isToday
                       ? "bg-[#1f7a4d]/[0.03] border-spy-border border-t-2 border-t-[#1f7a4d] dark:bg-[rgba(34,197,94,0.05)] dark:border-spy-border dark:border-t-2 dark:border-t-spy-green shadow-none"
                       : "bg-spy-surface border-spy-border shadow-none"
@@ -385,9 +706,9 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                   onDragOver={(e) => e.preventDefault()}
                   onDoubleClick={() => onAddBlock(weekday, dateStr)}
                 >
-                  {/* Faint 1-Hour Horizontal Grid Guide Lines Behind Blocks */}
-                  {HOURS.map((_, hIdx) => {
-                    const topPercent = (hIdx / (HOURS.length - 1)) * 100;
+                  {/* Horizontal Guide Lines Behind Blocks */}
+                  {hours.map((_, hIdx) => {
+                    const topPercent = (hIdx / (hours.length - 1)) * 100;
                     return (
                       <div
                         key={hIdx}
@@ -411,7 +732,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                     </div>
                   )}
 
-                  {/* Rendered Time Blocks in this day */}
+                  {/* 1. Base Time Blocks in this day */}
                   {blocks.map((block) => {
                     const style = getBlockStyles(block.start_time, block.end_time);
                     const theme = getBlockThemeClasses(block.type);
@@ -439,7 +760,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                             onEditBlock(block, dateStr);
                           }
                         }}
-                        className={`absolute inset-x-1 rounded-[6px] border p-2 pl-3 overflow-hidden transition-all shadow-xs flex flex-col justify-between group z-10 ${
+                        className={`absolute inset-x-1 rounded-[6px] border p-2 pl-3 transition-all shadow-xs flex flex-col justify-between group z-10 ${
                           theme.card
                         } ${
                           isFlexible
@@ -458,10 +779,11 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                           style={{ backgroundColor: theme.accent }}
                         />
 
-                        {/* Top: Time Range & Type/Online Tag */}
-                        <div>
-                          <div className="flex items-center justify-between gap-1 text-[11px] font-mono leading-tight mb-1 opacity-75">
-                            <span className="truncate">
+                        {/* Top: Time Range on Line 1 (never cut), Title on Line 2 (wrap up to 2 lines) */}
+                        <div className="min-w-0 flex-1">
+                          {/* Line 1: Time Range (never cut) */}
+                          <div className="flex items-center justify-between gap-1 text-[10px] sm:text-[11px] font-mono font-bold leading-tight mb-0.5 whitespace-nowrap opacity-90 tracking-tight">
+                            <span className="shrink-0">
                               {formatTime12(block.start_time)} - {formatTime12(block.end_time)}
                             </span>
                             {block.isOnline && (
@@ -471,8 +793,11 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                             )}
                           </div>
 
-                          {/* Block Label */}
-                          <div className="font-sans font-semibold text-[12px] sm:text-[13px] leading-tight truncate">
+                          {/* Line 2: Title with ellipsis only if needed */}
+                          <div
+                            className="font-sans font-semibold text-[11px] sm:text-[12px] leading-snug line-clamp-2 text-spy-text break-words"
+                            title={block.label}
+                          >
                             {block.label}
                           </div>
 
@@ -485,80 +810,82 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                           )}
                         </div>
 
-                        {/* Middle: Mission Cards inside flexible block */}
-                        {isFlexible && (
-                          <div className="space-y-1 my-1 overflow-y-auto max-h-[160px] pr-0.5">
-                            {fill.plannedMissions.map((mission) => {
-                              const isCompleted = mission.status === "completed";
-                              const isMissed =
-                                !isCompleted && mission.deadline && new Date(mission.deadline) < currentTime;
+                        {/* Middle: Mission Chips inside flexible block without exact start/end */}
+                        {isFlexible && fill.plannedMissions.length > 0 && (
+                          <div className="space-y-1 my-1 overflow-y-auto max-h-[140px] pr-0.5">
+                            {fill.plannedMissions
+                              .filter((m) => !m.scheduled_start || !m.scheduled_end)
+                              .map((mission) => {
+                                const isCompleted = mission.status === "completed";
+                                const isMissed =
+                                  !isCompleted && mission.deadline && new Date(mission.deadline) < currentTime;
 
-                              return (
-                                <div
-                                  key={mission.id}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (onEditMission) onEditMission(mission);
-                                  }}
-                                  className={`p-1 rounded-[3px] border text-[10px] font-sans flex items-center justify-between gap-1 transition-all cursor-pointer ${
-                                    isCompleted
-                                      ? "opacity-60 bg-black/5 dark:bg-white/5 line-through border-spy-border"
-                                      : isMissed
-                                      ? "bg-spy-redMuted border-spy-red/40 text-spy-red"
-                                      : mission.is_auto_scheduled
-                                      ? "border-dashed border-spy-green/60 bg-spy-surface/80"
-                                      : "bg-spy-surface border-spy-border"
-                                  }`}
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1">
-                                      <span className="font-medium truncate text-spy-text">
-                                        {mission.title}
-                                      </span>
-                                      {mission.is_auto_scheduled && (
-                                        <span className="text-[8px] font-mono bg-spy-green/20 text-spy-green px-1 rounded-[1px] uppercase shrink-0">
-                                          Suggested
+                                return (
+                                  <div
+                                    key={mission.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (onEditMission) onEditMission(mission);
+                                    }}
+                                    className={`p-1 rounded-[3px] border text-[10px] font-sans flex items-center justify-between gap-1 transition-all cursor-pointer ${
+                                      isCompleted
+                                        ? "opacity-60 bg-black/5 dark:bg-white/5 line-through border-spy-border"
+                                        : isMissed
+                                        ? "bg-spy-redMuted border-spy-red/40 text-spy-red"
+                                        : mission.is_auto_scheduled
+                                        ? "border-dashed border-spy-green/60 bg-spy-surface/80"
+                                        : "bg-spy-surface border-spy-border"
+                                    }`}
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1">
+                                        <span className="font-medium line-clamp-2 text-spy-text break-words leading-tight">
+                                          {mission.title}
                                         </span>
+                                        {mission.is_auto_scheduled && (
+                                          <span className="text-[8px] font-mono bg-spy-green/20 text-spy-green px-1 rounded-[1px] uppercase shrink-0">
+                                            Suggested
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {mission.is_auto_scheduled ? (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onConfirmAutoSchedule(mission.id);
+                                          }}
+                                          className="px-1 py-0.2 text-[9px] font-mono font-bold bg-[#14663a] text-white dark:bg-spy-green dark:text-black rounded-[2px]"
+                                          title="Confirm suggestion"
+                                        >
+                                          Confirm
+                                        </button>
+                                      ) : !isCompleted ? (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onCompleteMission(mission);
+                                          }}
+                                          className="p-1 rounded-[2px] bg-spy-green/20 hover:bg-spy-green text-spy-green hover:text-black transition-colors"
+                                          title="Accomplish target"
+                                        >
+                                          <Check className="w-3 h-3" />
+                                        </button>
+                                      ) : (
+                                        <CheckCircle2 className="w-3 h-3 text-spy-green" />
                                       )}
                                     </div>
                                   </div>
-
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    {mission.is_auto_scheduled ? (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onConfirmAutoSchedule(mission.id);
-                                        }}
-                                        className="px-1 py-0.2 text-[9px] font-mono font-bold bg-[#14663a] text-white dark:bg-spy-green dark:text-black rounded-[2px]"
-                                        title="Confirm suggestion"
-                                      >
-                                        Confirm
-                                      </button>
-                                    ) : !isCompleted ? (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onCompleteMission(mission);
-                                        }}
-                                        className="p-1 rounded-[2px] bg-spy-green/20 hover:bg-spy-green text-spy-green hover:text-black transition-colors"
-                                        title="Accomplish target"
-                                      >
-                                        <Check className="w-3 h-3" />
-                                      </button>
-                                    ) : (
-                                      <CheckCircle2 className="w-3 h-3 text-spy-green" />
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
                           </div>
                         )}
 
-                        {/* Bottom: Fill Indicator & Ghost-style Quick Assign button */}
+                        {/* Bottom: Fill Indicator & Quick Assign button */}
                         {isFlexible && (
                           <div className="mt-auto pt-1 border-t border-current/10 flex items-center justify-between text-[10px] font-mono gap-1">
                             <span className="opacity-70 truncate text-[9px]">
@@ -582,61 +909,113 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                     );
                   })}
 
-                  {/* Render Standalone Scheduled Missions (exact start & end time) */}
-                  {standaloneMissions.map((mission) => {
-                    const startStr = getLocalTimeString(mission.scheduled_start!) || "14:00";
-                    const endStr = getLocalTimeString(mission.scheduled_end!) || addMinutes(startStr, 60);
-                    const style = getBlockStyles(startStr, endStr);
-                    const isCompleted = mission.status === "completed";
+                  {/* 2. Overlaid Scheduled Missions: Thin cards at exact time, side-by-side if overlapping, completed translucent */}
+                  {positionedMissions.map((pos) => {
+                    const style = getBlockStyles(pos.startStr, pos.endStr);
+                    const isCompleted = pos.mission.status === "completed";
+                    const isMissed = !isCompleted && pos.mission.deadline && new Date(pos.mission.deadline) < currentTime;
+                    const catInfo = getCategoryInfo(pos.mission.category_id);
+
+                    // Side-by-side positioning when totalCols > 1
+                    const colWidthPercent = 100 / pos.totalCols;
+                    const colLeftPercent = pos.colIndex * colWidthPercent;
+
+                    const widthCss = pos.totalCols > 1 ? `calc(${colWidthPercent}% - 4px)` : "calc(100% - 8px)";
+                    const leftCss = pos.totalCols > 1 ? `calc(${colLeftPercent}% + 2px)` : "4px";
+
+                    const tooltipPayload = {
+                      id: pos.mission.id,
+                      title: pos.mission.title,
+                      time: `${formatTime12(pos.startStr)} – ${formatTime12(pos.endStr)}`,
+                      category: catInfo.name,
+                      categoryColor: catInfo.color,
+                      status: isCompleted ? "Completed" : isMissed ? "Overdue" : "In Progress",
+                      xp: pos.mission.xp,
+                      notes: pos.mission.notes,
+                    };
 
                     return (
                       <div
-                        key={`mission-${mission.id}`}
-                        style={{ top: style.top, height: style.height }}
-                        onClick={() => onEditMission && onEditMission(mission)}
-                        className={`absolute inset-x-1 rounded-[6px] border border-spy-green/50 p-2 pl-3 overflow-hidden transition-all shadow-xs flex flex-col justify-between group z-20 cursor-pointer bg-spy-surface2/90 hover:border-spy-green hover:shadow-md ${
-                          isCompleted ? "opacity-60 line-through" : ""
+                        key={`sched-mission-${pos.mission.id}`}
+                        style={{
+                          top: style.top,
+                          height: style.height,
+                          left: leftCss,
+                          width: widthCss,
+                        }}
+                        onClick={() => onEditMission && onEditMission(pos.mission)}
+                        onMouseEnter={() => setActiveTooltip(tooltipPayload)}
+                        onMouseLeave={() => setActiveTooltip((curr) => (curr?.id === pos.mission.id ? null : curr))}
+                        className={`absolute rounded-[5px] border p-1.5 pl-2.5 transition-all shadow-sm flex flex-col justify-between group z-20 cursor-pointer ${
+                          isCompleted
+                            ? "bg-spy-surface/50 backdrop-blur-[1px] border-spy-border/60 text-spy-muted line-through opacity-80 hover:opacity-100"
+                            : isMissed
+                            ? "bg-spy-redMuted/90 border-spy-red/60 text-spy-red hover:border-spy-red shadow-md"
+                            : "bg-spy-surface2/95 border-spy-green/60 hover:border-spy-green text-spy-text shadow-sm hover:shadow-md"
                         }`}
-                        title={`${mission.title} (${formatTime12(startStr)} - ${formatTime12(endStr)})`}
+                        title={`${pos.mission.title} (${formatTime12(pos.startStr)} - ${formatTime12(pos.endStr)}) • Category: ${catInfo.name}`}
                       >
-                        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-spy-green rounded-l-[5px]" />
-                        <div>
-                          <div className="flex items-center justify-between gap-1 text-[10px] font-mono leading-tight mb-0.5 text-spy-green">
-                            <span className="truncate flex items-center gap-1 font-bold">
-                              <Target className="w-3 h-3" />
-                              {formatTime12(startStr)} - {formatTime12(endStr)}
+                        {/* 3px Category Accent Bar */}
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[4px]"
+                          style={{ backgroundColor: isCompleted ? "#64748b" : catInfo.color }}
+                        />
+
+                        {/* Top: Time Range on Line 1 (never cut), Title on Line 2 (wrap up to 2 lines) */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[9.5px] font-mono leading-tight mb-0.5 whitespace-nowrap opacity-90">
+                            <span className="flex items-center gap-1 font-bold shrink-0">
+                              <Target className="w-2.5 h-2.5 text-spy-green shrink-0" />
+                              {pos.totalCols > 1 ? formatTime12(pos.startStr) : `${formatTime12(pos.startStr)} - ${formatTime12(pos.endStr)}`}
                             </span>
-                            <span className="text-[9px] bg-spy-green/20 text-spy-green px-1 rounded-[2px] font-bold">
-                              +{mission.xp} XP
-                            </span>
+                            {pos.totalCols === 1 && (
+                              <span className="text-[8px] bg-spy-green/20 text-spy-green px-1 rounded-[2px] font-bold shrink-0">
+                                +{pos.mission.xp} XP
+                              </span>
+                            )}
                           </div>
-                          <div className="font-sans font-semibold text-[11px] sm:text-[12px] leading-tight text-spy-text truncate">
-                            {mission.title}
+
+                          {/* Line 2: Full Title (wrapped to 2 lines) */}
+                          <div
+                            className={`font-sans font-semibold text-[10px] sm:text-[11px] leading-snug line-clamp-2 break-words ${
+                              isCompleted ? "text-spy-muted line-through" : "text-spy-text"
+                            }`}
+                          >
+                            {pos.mission.title}
                           </div>
                         </div>
-                        <div className="flex items-center justify-between text-[9px] font-mono pt-1 text-spy-muted">
-                          <span className="truncate opacity-75">{mission.codename}</span>
-                          {!isCompleted ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onCompleteMission(mission);
-                              }}
-                              className="p-1 rounded-[2px] bg-spy-green/20 hover:bg-spy-green text-spy-green hover:text-black transition-colors"
-                              title="Complete mission"
-                            >
-                              <Check className="w-3 h-3" />
-                            </button>
-                          ) : (
-                            <CheckCircle2 className="w-3 h-3 text-spy-green" />
-                          )}
+
+                        {/* Bottom: Action / Status */}
+                        <div className="flex items-center justify-between text-[8.5px] font-mono pt-0.5 text-spy-muted mt-auto">
+                          <span
+                            className="truncate px-1 rounded-[2px] font-medium"
+                            style={{ backgroundColor: `${catInfo.color}15`, color: catInfo.color }}
+                          >
+                            {catInfo.name}
+                          </span>
+                          <div className="flex items-center gap-1 shrink-0 ml-1">
+                            {!isCompleted ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onCompleteMission(pos.mission);
+                                }}
+                                className="p-0.5 rounded-[2px] bg-spy-green/20 hover:bg-spy-green text-spy-green hover:text-black transition-colors"
+                                title="Complete mission"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                            ) : (
+                              <CheckCircle2 className="w-3 h-3 text-spy-green" />
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
                   })}
 
-                  {/* Render Deadline Markers on Grid */}
+                  {/* 3. Deadline Markers on Grid */}
                   {deadlineMissions.map((mission) => {
                     const d = new Date(mission.deadline!);
                     const hh = d.getHours();
@@ -669,9 +1048,44 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
         </div>
       </div>
 
-      {/* Legend at the Bottom */}
-      <div className="flex items-center gap-3 sm:gap-4 flex-wrap text-xs font-mono pt-2">
-        <span className="text-spy-dim uppercase tracking-wider text-[10px]">LEGEND:</span>
+      {/* Floating Interactive Tooltip on Hover/Tap */}
+      {activeTooltip && (
+        <div className="fixed bottom-24 right-6 z-[60] p-3 rounded-[6px] border border-spy-border bg-spy-surface/95 backdrop-blur-md shadow-2xl max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <span
+              className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-[2px] font-bold border"
+              style={{
+                backgroundColor: `${activeTooltip.categoryColor}15`,
+                borderColor: `${activeTooltip.categoryColor}40`,
+                color: activeTooltip.categoryColor,
+              }}
+            >
+              {activeTooltip.category}
+            </span>
+            <span className="text-[10px] font-mono text-spy-green font-bold">
+              +{activeTooltip.xp} XP
+            </span>
+          </div>
+          <h4 className="text-xs font-sans font-bold text-spy-text leading-snug mb-1">
+            {activeTooltip.title}
+          </h4>
+          <div className="flex items-center gap-2 text-[10px] font-mono text-spy-muted mb-1">
+            <Clock className="w-3 h-3 shrink-0" />
+            <span>{activeTooltip.time}</span>
+            <span>•</span>
+            <span className="capitalize">{activeTooltip.status}</span>
+          </div>
+          {activeTooltip.notes && (
+            <p className="text-[10px] font-sans text-spy-dim border-t border-spy-border/50 pt-1 line-clamp-2">
+              {activeTooltip.notes}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Legend at the Bottom (Protected with 24px space above, never overlapped) */}
+      <div className="pt-3 border-t border-spy-border/50 flex items-center gap-3 sm:gap-4 flex-wrap text-xs font-mono">
+        <span className="text-spy-dim uppercase tracking-wider text-[10px] font-bold">LEGEND:</span>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
           <span className="text-spy-muted">University class</span>
