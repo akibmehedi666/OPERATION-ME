@@ -103,6 +103,8 @@ export interface ResolvedTimeBlock extends TimeBlock {
   isOnline?: boolean;
   isOverridden?: boolean;
   overrideReason?: string;
+  isSkipped?: boolean;
+  skipReason?: string;
   date: string; // "YYYY-MM-DD"
   scheduledMissions?: Mission[];
 }

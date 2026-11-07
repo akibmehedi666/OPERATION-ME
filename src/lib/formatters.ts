@@ -53,6 +53,29 @@ export function formatTimeRange12(startTime: string, endTime: string): string {
 }
 
 /**
+ * Formats a shortened time range e.g. "9:50-11:10 AM", "6:00-7:30 PM", "10:10-10:41 PM", "11:10 AM-1:50 PM"
+ * Drops the first AM/PM when both start and end share the same meridiem to fit neatly on one line.
+ */
+export function formatShortTimeRange(startTime: string, endTime: string): string {
+  if (!startTime || !endTime) return "";
+  const s = formatTime12(startTime);
+  const e = formatTime12(endTime);
+  if (!s || !e) return "";
+
+  const sParts = s.split(" ");
+  const eParts = e.split(" ");
+  const sTime = sParts[0];
+  const sMeridiem = sParts[1];
+  const eTime = eParts[0];
+  const eMeridiem = eParts[1];
+
+  if (sMeridiem && eMeridiem && sMeridiem === eMeridiem) {
+    return `${sTime}-${eTime} ${eMeridiem}`;
+  }
+  return `${s}-${e}`;
+}
+
+/**
  * Formats a date as "Nov 6, 2026"
  */
 export function formatDate(input: string | Date | null | undefined): string {

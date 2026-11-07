@@ -179,14 +179,6 @@ export function resolveDaySchedule(
       }));
   } else if (isOverridden && overrideWeekday) {
     // Class override: remove today's classes and substitute the referenced weekday's classes
-    const nonClassBlocks = weeklyBlocks
-      .filter((b) => b.weekday === weekday && b.type !== "class" && !b.override_date)
-      .map((b) => ({
-        ...b,
-        date: dateStr,
-        isOverridden: false,
-      }));
-
     const substitutedClasses = weeklyBlocks
       .filter((b) => b.weekday === overrideWeekday && b.type === "class" && !b.override_date)
       .map((b) => {
@@ -200,6 +192,42 @@ export function resolveDaySchedule(
           isOverridden: true,
           overrideReason: classOverrideEvent?.title || "Class Override",
           date: dateStr,
+        };
+      });
+
+    // Check non-class blocks against substituted classes:
+    // Conflicting non-class blocks are marked as skipped so they don't block fixed classes
+    const nonClassBlocks = weeklyBlocks
+      .filter((b) => b.weekday === weekday && b.type !== "class" && !b.override_date)
+      .map((b) => {
+        const [bsh, bsm] = b.start_time.split(":").map(Number);
+        const [beh, bem] = b.end_time.split(":").map(Number);
+        const bStart = (bsh || 0) * 60 + (bsm || 0);
+        const bEnd = (beh || 0) * 60 + (bem || 0);
+
+        const conflictingClass = substitutedClasses.find((c) => {
+          const [csh, csm] = c.start_time.split(":").map(Number);
+          const [ceh, cem] = c.end_time.split(":").map(Number);
+          const cStart = (csh || 0) * 60 + (csm || 0);
+          const cEnd = (ceh || 0) * 60 + (cem || 0);
+          return Math.max(bStart, cStart) < Math.min(bEnd, cEnd);
+        });
+
+        if (conflictingClass) {
+          return {
+            ...b,
+            date: dateStr,
+            isOverridden: false,
+            isSkipped: true,
+            skipReason: "Skipped (class)",
+            label: `${b.label} (skipped: class)`,
+          };
+        }
+
+        return {
+          ...b,
+          date: dateStr,
+          isOverridden: false,
         };
       });
 
