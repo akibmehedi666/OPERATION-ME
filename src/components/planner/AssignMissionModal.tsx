@@ -13,6 +13,7 @@ interface AssignMissionModalProps {
   missions: Mission[];
   categories: Category[];
   onAssign: (missionId: string, blockId: string, startTime: string, endTime: string) => void;
+  onCreateNew?: () => void;
   onClose: () => void;
 }
 
@@ -23,6 +24,7 @@ export const AssignMissionModal: React.FC<AssignMissionModalProps> = ({
   missions,
   categories,
   onAssign,
+  onCreateNew,
   onClose,
 }) => {
   const [search, setSearch] = useState("");
@@ -67,6 +69,21 @@ export const AssignMissionModal: React.FC<AssignMissionModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Action: Create New Mission */}
+        {onCreateNew && (
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onCreateNew();
+            }}
+            className="w-full mb-3 py-2 px-3 rounded-[4px] bg-[#14663a] text-white hover:bg-[#0f4d2c] dark:bg-spy-green dark:text-black dark:hover:bg-spy-green/90 font-mono font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-xs shrink-0"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>CREATE NEW MISSION FOR THIS BLOCK</span>
+          </button>
+        )}
 
         {/* Search */}
         <div className="relative mb-3 shrink-0">

@@ -17,7 +17,7 @@ import { MissionCelebration } from "@/components/missions/MissionCelebration";
 import { PromotionOverlay } from "@/components/missions/PromotionOverlay";
 import { CompletionNoteModal } from "@/components/missions/CompletionNoteModal";
 import { Button } from "@/components/ui/Button";
-import { Mission, DayOfWeek } from "@/types/database";
+import { Mission, DayOfWeek, TimeBlock } from "@/types/database";
 import { soundFX } from "@/lib/sound";
 import { useTheme } from "@/lib/themeContext";
 import { PlannerView } from "@/components/planner/PlannerView";
@@ -141,6 +141,7 @@ export default function Home() {
     saveWeeklyReview,
     updateNotificationSettings,
     resetAllProgress,
+    deduplicateMissions,
     errorToasts,
     dismissErrorToast,
     structureLoadingError,
@@ -413,6 +414,54 @@ export default function Home() {
     if (confirmed) {
       deleteMission(mission.id);
     }
+  };
+
+  const handleAssignNewMission = ({
+    block,
+    dateStr,
+    startTime,
+    endTime,
+    defaultCategoryId,
+  }: {
+    block?: TimeBlock | null;
+    dateStr: string;
+    startTime: string;
+    endTime: string;
+    defaultCategoryId?: string;
+  }) => {
+    soundFX.playBlip();
+    const scheduledStart = `${dateStr}T${startTime}:00`;
+    const scheduledEnd = `${dateStr}T${endTime}:00`;
+
+    let targetCatId = defaultCategoryId || block?.default_category || null;
+    if (targetCatId && !categories.some((c) => c.id === targetCatId)) {
+      const match = categories.find(
+        (c) =>
+          c.name.toLowerCase() === targetCatId?.toLowerCase() ||
+          (c.codename && c.codename.toLowerCase() === targetCatId?.toLowerCase()) ||
+          c.id === targetCatId
+      );
+      if (match) targetCatId = match.id;
+    }
+    if (!targetCatId && categories.length > 0) {
+      targetCatId = categories[0].id;
+    }
+
+    setEditingMission({
+      id: "",
+      title: "",
+      codename: "",
+      category_id: targetCatId,
+      priority: "medium",
+      status: "active",
+      xp: 50,
+      scheduled_block_id: block?.id || null,
+      scheduled_start: scheduledStart,
+      scheduled_end: scheduledEnd,
+      deadline: scheduledEnd,
+      created_at: new Date().toISOString(),
+    });
+    setIsModalOpen(true);
   };
 
   const handleSaveMission = async (data: Partial<Mission>) => {
@@ -767,6 +816,7 @@ export default function Home() {
                   onDelete={handleDelete}
                   onSetActive={setActiveMission}
                   onEditNote={handleOpenEditNote}
+                  onDeduplicate={deduplicateMissions}
                 />
               </motion.div>
             )}
@@ -802,6 +852,7 @@ export default function Home() {
                     setActiveTab("courses");
                   }}
                   onEditMission={handleOpenEdit}
+                  onAssignNewMission={handleAssignNewMission}
                   onUpdateTuitionSchedule={updateTuitionSchedule}
                 />
               </motion.div>

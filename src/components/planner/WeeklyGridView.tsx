@@ -47,6 +47,7 @@ interface WeeklyGridViewProps {
   onOpenCourseHQ?: (courseId: string) => void;
   onEditMission?: (mission: Mission) => void;
   onEditTuition?: (slot: { day: DayOfWeek; startTime: string; endTime: string; targetDate?: string }) => void;
+  onAddMissionAtSlot?: (dateStr: string, startTime: string, endTime: string) => void;
 }
 
 const categoryToCourseMap: Record<string, string> = {
@@ -73,34 +74,37 @@ function formatHourLabel(hour: number): string {
   return `${hour} AM`;
 }
 
-interface PositionedMission {
-  mission: Mission;
-  startStr: string;
-  endStr: string;
+interface CalendarIntervalItem {
   startMin: number;
   endMin: number;
-  colIndex: number;
-  totalCols: number;
+  isSkipped?: boolean;
 }
 
 /**
- * Computes side-by-side layout coordinates for overlapping scheduled missions on the same day.
+ * Computes side-by-side sub-column coordinates for any set of overlapping intervals
+ * using a standard greedy interval coloring algorithm.
  */
-function layoutOverlappingMissions(
-  dayMissions: Array<{ mission: Mission; startStr: string; endStr: string }>
-): PositionedMission[] {
-  if (dayMissions.length === 0) return [];
+function layoutIntervals<T extends CalendarIntervalItem>(
+  rawItems: T[]
+): Array<T & { colIndex: number; totalCols: number }> {
+  if (rawItems.length === 0) return [];
 
-  const items = dayMissions.map((item) => {
-    const [sh, sm] = item.startStr.split(":").map(Number);
-    const [eh, em] = item.endStr.split(":").map(Number);
-    const startMin = (sh || 0) * 60 + (sm || 0);
-    const endMin = Math.max(startMin + 20, (eh || 0) * 60 + (em || 0));
-    return { ...item, startMin, endMin, colIndex: 0, totalCols: 1 };
+  const items = rawItems.map((item) => ({
+    ...item,
+    startMin: item.startMin,
+    endMin: Math.max(item.startMin + 15, item.endMin),
+    colIndex: 0,
+    totalCols: 1,
+  }));
+
+  // Sort by start minute ascending, prioritizing non-skipped/classes first, then duration descending
+  items.sort((a, b) => {
+    if (a.startMin !== b.startMin) return a.startMin - b.startMin;
+    const aSkipped = a.isSkipped ? 1 : 0;
+    const bSkipped = b.isSkipped ? 1 : 0;
+    if (aSkipped !== bSkipped) return aSkipped - bSkipped;
+    return (b.endMin - b.startMin) - (a.endMin - a.startMin);
   });
-
-  // Sort by start minute ascending, then duration descending
-  items.sort((a, b) => a.startMin - b.startMin || (b.endMin - b.startMin) - (a.endMin - a.startMin));
 
   // Cluster overlapping items
   const clusters: Array<typeof items> = [];
@@ -167,6 +171,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
   onOpenCourseHQ,
   onEditMission,
   onEditTuition,
+  onAddMissionAtSlot,
 }) => {
   const [selectedMobileDayIndex, setSelectedMobileDayIndex] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -215,6 +220,16 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
       setSelectedMobileDayIndex(idx);
     }
   }, [days, todayKey]);
+
+  // Smooth scroll to selected column on mobile
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const el = document.getElementById(`planner-day-col-${selectedMobileDayIndex}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }
+    }
+  }, [selectedMobileDayIndex]);
 
   // Resolve schedule for each of the 7 days
   const resolvedDays = useMemo(() => {
@@ -554,7 +569,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
         <div className="min-w-[1020px] relative">
           {/* Header Row: Days of Week (Sticky Day Header) */}
           <div className="sticky top-0 z-30 bg-spy-surface/95 backdrop-blur-xs border-b border-spy-border pb-3 mb-4 select-none">
-            <div className="grid grid-cols-[56px_repeat(7,minmax(130px,1fr))] gap-2 text-center">
+            <div className="grid grid-cols-[64px_repeat(7,minmax(130px,1fr))] gap-2 text-center">
               {/* Corner time label */}
               <div className="text-[10px] font-mono text-spy-dim flex items-end justify-center pb-1">
                 TIME
@@ -647,15 +662,15 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
           {/* Grid Area: Time Axis on Left + 7 Columns (with 24px space below before legend) */}
           <div
             style={{ height: `${gridHeight}px` }}
-            className="relative grid grid-cols-[56px_repeat(7,minmax(130px,1fr))] gap-2 select-none pb-6 mb-6 border-b border-spy-border/40"
+            className="relative grid grid-cols-[64px_repeat(7,minmax(130px,1fr))] gap-2 select-none pb-6 mb-6 border-b border-spy-border/40"
           >
             {/* Left Hour Axis with NOW indicator pill on the left edge */}
             <div className="relative h-full text-right pr-2">
-              {/* NOW Pill on the left edge of the time axis */}
+              {/* NOW Pill on the left edge of the time axis (strictly separated from hour labels) */}
               {isTimeInGrid && (
                 <div
                   style={{ top: `${nowPercent}%` }}
-                  className="absolute left-0 -translate-y-1/2 z-20 flex items-center gap-1 pointer-events-none"
+                  className="absolute left-0.5 -translate-y-1/2 z-20 flex items-center gap-1 pointer-events-none"
                 >
                   <span className="w-2 h-2 rounded-full bg-spy-red animate-pulse shrink-0" />
                   <span className="text-[7.5px] font-mono font-bold text-white bg-spy-red px-1 py-0.2 rounded-[2px] leading-tight shadow-sm">
@@ -673,7 +688,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                   <div
                     key={hour}
                     style={{ top: `${percent}%` }}
-                    className="absolute right-2 -translate-y-1/2 text-[10px] font-mono text-spy-muted"
+                    className="absolute right-1 -translate-y-1/2 text-[10px] font-mono text-spy-muted"
                   >
                     {displayHour} {ampm}
                   </div>
@@ -682,7 +697,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
             </div>
 
             {/* 7 Columns for Days */}
-            {resolvedDays.map(({ dateStr, weekday, blocks }) => {
+            {resolvedDays.map(({ dateStr, weekday, blocks }, idx) => {
               const isToday = dateStr === todayKey;
 
               // Parse scheduled missions for this date
@@ -730,22 +745,20 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                 const [bsh, bsm] = b.start_time.split(":").map(Number);
                 const [beh, bem] = b.end_time.split(":").map(Number);
                 return {
+                  block: b,
                   id: b.id,
-                  isSkipped: !!b.isSkipped,
                   startMin: (bsh || 0) * 60 + (bsm || 0),
                   endMin: (beh || 0) * 60 + (bem || 0),
+                  isSkipped: Boolean(b.isSkipped),
                 };
               });
-
-              // Has conflicting skipped blocks (e.g. Thu Nov 12 substituted classes)
-              const hasConflictingClasses = blockIntervals.some((b) => b.isSkipped);
 
               const laneMissions: typeof normalScheduledMissions = [];
               const standaloneMissions: typeof normalScheduledMissions = [];
 
               for (const sm of normalScheduledMissions) {
                 const overlapsBlock = blockIntervals.some(
-                  (b) => !b.isSkipped && Math.max(sm.startMin, b.startMin) < Math.min(sm.endMin, b.endMin)
+                  (b) => Math.max(sm.startMin, b.startMin) < Math.min(sm.endMin, b.endMin)
                 );
                 if (overlapsBlock) {
                   laneMissions.push(sm);
@@ -754,12 +767,22 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                 }
               }
 
+              // Position active blocks side by side if any overlap
+              const positionedBlocks = layoutIntervals(blockIntervals);
+
+              // Position lane missions side by side if any overlap
+              const positionedLaneMissions = layoutIntervals(
+                laneMissions.map((item) => ({
+                  ...item,
+                  id: item.mission.id,
+                }))
+              );
+
               // Standalone missions use sub-column overlap layout (split width equally)
-              const positionedStandalone = layoutOverlappingMissions(
+              const positionedStandalone = layoutIntervals(
                 standaloneMissions.map((item) => ({
-                  mission: item.mission,
-                  startStr: item.startStr,
-                  endStr: item.endStr,
+                  ...item,
+                  id: item.mission.id,
                 }))
               );
 
@@ -773,13 +796,37 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
               return (
                 <div
                   key={dateStr}
-                  className={`relative h-full rounded-[6px] border transition-colors overflow-visible ${
+                  id={`planner-day-col-${idx}`}
+                  className={`relative h-full rounded-[6px] border transition-colors overflow-visible cursor-pointer ${
                     isToday
                       ? "bg-[#1f7a4d]/[0.03] border-spy-border border-t-2 border-t-[#1f7a4d] dark:bg-[rgba(34,197,94,0.05)] dark:border-spy-border dark:border-t-2 dark:border-t-spy-green shadow-none"
                       : "bg-spy-surface border-spy-border shadow-none"
                   }`}
                   onDragOver={(e) => e.preventDefault()}
                   onDoubleClick={() => onAddBlock(weekday, dateStr)}
+                  onClick={(e) => {
+                    // Only trigger if clicking directly on column background (empty slot)
+                    if (e.target !== e.currentTarget) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickY = e.clientY - rect.top;
+                    const percent = Math.max(0, Math.min(1, clickY / rect.height));
+                    const totalMinutes = (timeRange.endHour - timeRange.startHour) * 60;
+                    const clickedMinute = timeRange.startHour * 60 + percent * totalMinutes;
+
+                    const roundedMin = Math.round(clickedMinute / 5) * 5;
+                    const shh = Math.floor(roundedMin / 60) % 24;
+                    const smm = roundedMin % 60;
+                    const startStr = `${String(shh).padStart(2, "0")}:${String(smm).padStart(2, "0")}`;
+                    const endMinute = roundedMin + 45;
+                    const ehh = Math.floor(endMinute / 60) % 24;
+                    const emm = endMinute % 60;
+                    const endStr = `${String(ehh).padStart(2, "0")}:${String(emm).padStart(2, "0")}`;
+
+                    if (onAddMissionAtSlot) {
+                      onAddMissionAtSlot(dateStr, startStr, endStr);
+                    }
+                  }}
+                  title="Click on empty slot to create mission at this time"
                 >
                   {/* Horizontal Guide Lines Behind Blocks */}
                   {hours.map((_, hIdx) => {
@@ -803,38 +850,58 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                     </div>
                   )}
 
-                  {/* 1. Base Time Blocks */}
-                  {blocks.map((block) => {
+                  {/* 1. Base Time Blocks (side by side if overlapping) */}
+                  {positionedBlocks.map((pos) => {
+                    const block = pos.block;
                     const style = getBlockStyles(block.start_time, block.end_time);
                     const theme = getBlockThemeClasses(block.type);
                     const fill = calculateBlockFill(block, dateStr, missions);
                     const isFlexible = block.type === "study" || block.type === "project" || block.type === "cp";
                     const isTuition = block.type === "tuition";
-                    const isSkipped = !!block.isSkipped;
-
-                    const [bsh, bsm] = block.start_time.split(":").map(Number);
-                    const [beh, bem] = block.end_time.split(":").map(Number);
-                    const bStart = (bsh || 0) * 60 + (bsm || 0);
-                    const bEnd = (beh || 0) * 60 + (bem || 0);
 
                     // Does this block overlap with any lane mission?
                     const hasLaneMissionOverlap = laneMissions.some(
-                      (m) => Math.max(m.startMin, bStart) < Math.min(m.endMin, bEnd)
+                      (m) => Math.max(m.startMin, pos.startMin) < Math.min(m.endMin, pos.endMin)
                     );
 
-                    // Block width & position:
-                    // If skipped: occupies right 28% lane as dimmed info
-                    // If regular and shares slot with lane mission or skipped block: occupies left 70% lane
-                    // Otherwise: takes full width
-                    let blockLeft = "4px";
-                    let blockWidth = "calc(100% - 8px)";
+                    // Width for blocks (70% only if lane mission sits beside it, split into sub-columns if overlapping blocks)
+                    const totalAvailablePercent = hasLaneMissionOverlap ? 70 : 100;
+                    const colWidthPercent = totalAvailablePercent / pos.totalCols;
+                    const colLeftPercent = pos.colIndex * colWidthPercent;
 
-                    if (isSkipped) {
-                      blockLeft = "calc(72% + 2px)";
-                      blockWidth = "calc(28% - 4px)";
-                    } else if (hasLaneMissionOverlap || hasConflictingClasses) {
-                      blockLeft = "2px";
-                      blockWidth = "calc(70% - 4px)";
+                    const blockLeft = pos.totalCols > 1 ? `calc(${colLeftPercent}% + 2px)` : hasLaneMissionOverlap ? "2px" : "4px";
+                    const blockWidth = pos.totalCols > 1 ? `calc(${colWidthPercent}% - 4px)` : hasLaneMissionOverlap ? "calc(70% - 4px)" : "calc(100% - 8px)";
+
+                    if (block.isSkipped) {
+                      const cleanLabel = block.label.replace(/\s*\(skipped.*?\)/i, "");
+                      return (
+                        <div
+                          key={block.id}
+                          style={{
+                            top: style.top,
+                            height: style.height,
+                            left: blockLeft,
+                            width: blockWidth,
+                          }}
+                          className="absolute rounded-[6px] border border-dashed border-amber-500/50 bg-spy-surface/75 text-spy-muted opacity-70 p-1.5 pl-2 transition-all shadow-none flex flex-col justify-between group z-10 overflow-hidden cursor-default"
+                          title={`${cleanLabel} (${formatShortTimeRange(block.start_time, block.end_time)}) - Skipped for substituted classes`}
+                        >
+                          <div className="min-w-0 flex-1 overflow-hidden">
+                            <div className="flex items-center justify-between gap-1 text-[8.5px] sm:text-[9.5px] font-mono leading-tight mb-0.5 whitespace-nowrap overflow-hidden">
+                              <span className="truncate">{formatShortTimeRange(block.start_time, block.end_time)}</span>
+                              <span className="px-1 rounded-[2px] bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[7px] sm:text-[7.5px] font-bold shrink-0">
+                                SKIPPED
+                              </span>
+                            </div>
+                            <div className="font-sans font-semibold text-[9.5px] sm:text-[10.5px] leading-snug line-clamp-2 break-words text-spy-muted line-through decoration-current/40">
+                              {cleanLabel}
+                            </div>
+                          </div>
+                          <div className="text-[7.5px] sm:text-[8px] font-mono text-amber-600 dark:text-amber-400/80 truncate">
+                            Class override
+                          </div>
+                        </div>
+                      );
                     }
 
                     return (
@@ -847,7 +914,6 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                           width: blockWidth,
                         }}
                         onClick={() => {
-                          if (isSkipped) return;
                           if (block.type === "class" && onOpenCourseHQ) {
                             const courseId = categoryToCourseMap[block.default_category || ""] || "course-os";
                             onOpenCourseHQ(courseId);
@@ -863,24 +929,22 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                           }
                         }}
                         className={`absolute rounded-[6px] border p-1.5 sm:p-2 pl-2 sm:pl-3 transition-all shadow-xs flex flex-col justify-between group z-10 overflow-hidden ${
-                          isSkipped
-                            ? "opacity-50 border-dashed border-spy-border bg-spy-surface/40 text-spy-dim hover:opacity-80"
-                            : theme.card
+                          theme.card
                         } ${
-                          !isSkipped && isFlexible
+                          isFlexible
                             ? "cursor-pointer hover:ring-1 hover:ring-spy-green/50"
-                            : !isSkipped && isTuition
+                            : isTuition
                             ? "cursor-pointer hover:ring-1 hover:ring-yellow-500/50"
                             : ""
                         }`}
                         title={`${block.label} (${formatShortTimeRange(block.start_time, block.end_time)})${
-                          isSkipped ? " - Skipped for substituted class" : isTuition ? " - Click to edit tuition routine" : ""
+                          isTuition ? " - Click to edit tuition routine" : ""
                         }`}
                       >
                         {/* 3px Left Accent Bar */}
                         <div
                           className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[5px]"
-                          style={{ backgroundColor: isSkipped ? "#94a3b8" : theme.accent }}
+                          style={{ backgroundColor: theme.accent }}
                         />
 
                         {/* Top: Shortened time range on Line 1, Title on Line 2 with line clamp */}
@@ -894,24 +958,17 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                                 ONLINE
                               </span>
                             )}
-                            {isSkipped && (
-                              <span className="px-1 rounded-[2px] bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[7px] font-bold shrink-0">
-                                SKIPPED
-                              </span>
-                            )}
                           </div>
 
                           <div
-                            className={`font-sans font-semibold text-[10.5px] sm:text-[11.5px] leading-snug line-clamp-2 break-words min-w-0 overflow-hidden ${
-                              isSkipped ? "text-spy-dim line-through decoration-spy-dim/50" : "text-spy-text"
-                            }`}
+                            className="font-sans font-semibold text-[10.5px] sm:text-[11.5px] leading-snug line-clamp-2 break-words min-w-0 overflow-hidden text-spy-text"
                             title={block.label}
                           >
                             {block.label}
                           </div>
 
                           {/* Overbooked Warning */}
-                          {!isSkipped && fill.isOverbooked && (
+                          {fill.isOverbooked && (
                             <div className="flex items-center gap-1 text-[8.5px] font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-1 py-0.2 rounded-[2px] mt-1 w-fit">
                               <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                               <span>+{fill.overbookedMinutes}m</span>
@@ -920,7 +977,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                         </div>
 
                         {/* Middle: Mission Chips inside flexible block without exact start/end */}
-                        {!isSkipped && isFlexible && fill.plannedMissions.length > 0 && (
+                        {isFlexible && fill.plannedMissions.length > 0 && (
                           <div className="space-y-1 my-1 overflow-y-auto max-h-[140px] pr-0.5">
                             {fill.plannedMissions
                               .filter((m) => !m.scheduled_start || !m.scheduled_end)
@@ -994,23 +1051,45 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                         )}
 
                         {/* Bottom: Fill Indicator & Quick Assign button */}
-                        {!isSkipped && isFlexible && (
+                        {isFlexible && (
                           <div className="mt-auto pt-1 border-t border-current/10 flex items-center justify-between text-[10px] font-mono gap-1 min-w-0 overflow-hidden">
-                            <span className="opacity-70 truncate text-[8.5px] sm:text-[9px] min-w-0">
-                              {fill.plannedMissions.length > 0 ? `${fill.totalPlannedMinutes}m` : `${style.durationMinutes}m free`}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onAssignMissionToBlock(block, dateStr);
-                              }}
-                              className="p-0.5 sm:px-1.5 sm:py-0.5 rounded-[3px] bg-transparent hover:bg-current/10 text-current opacity-80 hover:opacity-100 transition-colors flex items-center gap-0.5 shrink-0"
-                              title="Assign mission to block"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span className="hidden sm:inline">Assign</span>
-                            </button>
+                            {style.durationMinutes >= 30 ? (
+                              <>
+                                <span className="opacity-70 truncate text-[8.5px] sm:text-[9px] min-w-0">
+                                  {fill.plannedMissions.length > 0
+                                    ? `${fill.totalPlannedMinutes}m`
+                                    : hasLaneMissionOverlap || pos.totalCols > 1
+                                    ? `${style.durationMinutes}m`
+                                    : `${style.durationMinutes}m free`}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAssignMissionToBlock(block, dateStr);
+                                  }}
+                                  className="p-0.5 sm:px-1.5 sm:py-0.5 rounded-[3px] bg-transparent hover:bg-current/10 text-current opacity-80 hover:opacity-100 transition-colors flex items-center gap-0.5 shrink-0"
+                                  title="Assign mission to block"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  {!hasLaneMissionOverlap && pos.totalCols === 1 && (
+                                    <span className="hidden sm:inline">Assign</span>
+                                  )}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAssignMissionToBlock(block, dateStr);
+                                }}
+                                className="mx-auto p-0.5 rounded-[3px] bg-transparent hover:bg-current/10 text-current opacity-80 hover:opacity-100 transition-colors flex items-center justify-center shrink-0"
+                                title="Assign mission to block"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1018,43 +1097,48 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                   })}
 
                   {/* 2. Narrow Lane Missions (Overlapping with blocks beside them, width 28%, colored accent bar) */}
-                  {laneMissions.map((item) => {
-                    const style = getBlockStyles(item.startStr, item.endStr);
-                    const isCompleted = item.mission.status === "completed";
-                    const isMissed = !isCompleted && item.mission.deadline && new Date(item.mission.deadline) < currentTime;
-                    const catInfo = getCategoryInfo(item.mission.category_id);
+                  {positionedLaneMissions.map((pos) => {
+                    const style = getBlockStyles(pos.startStr, pos.endStr);
+                    const isCompleted = pos.mission.status === "completed";
+                    const isMissed = !isCompleted && pos.mission.deadline && new Date(pos.mission.deadline) < currentTime;
+                    const catInfo = getCategoryInfo(pos.mission.category_id);
+
+                    const colWidthPercent = 28 / pos.totalCols;
+                    const colLeftPercent = 72 + pos.colIndex * colWidthPercent;
+                    const laneLeft = `calc(${colLeftPercent}% + 2px)`;
+                    const laneWidth = `calc(${colWidthPercent}% - 4px)`;
 
                     const tooltipPayload = {
-                      id: item.mission.id,
-                      title: item.mission.title,
-                      time: `${formatTime12(item.startStr)} – ${formatTime12(item.endStr)}`,
+                      id: pos.mission.id,
+                      title: pos.mission.title,
+                      time: `${formatTime12(pos.startStr)} – ${formatTime12(pos.endStr)}`,
                       category: catInfo.name,
                       categoryColor: catInfo.color,
                       status: isCompleted ? "Completed" : isMissed ? "Overdue" : "In Progress",
-                      xp: item.mission.xp,
-                      notes: item.mission.notes,
+                      xp: pos.mission.xp,
+                      notes: pos.mission.notes,
                     };
 
                     return (
                       <div
-                        key={`lane-mission-${item.mission.id}`}
+                        key={`lane-mission-${pos.mission.id}`}
                         style={{
                           top: style.top,
                           height: style.height,
-                          left: "calc(72% + 2px)",
-                          width: "calc(28% - 4px)",
+                          left: laneLeft,
+                          width: laneWidth,
                         }}
-                        onClick={() => onEditMission && onEditMission(item.mission)}
+                        onClick={() => onEditMission && onEditMission(pos.mission)}
                         onMouseEnter={() => setActiveTooltip(tooltipPayload)}
-                        onMouseLeave={() => setActiveTooltip((curr) => (curr?.id === item.mission.id ? null : curr))}
+                        onMouseLeave={() => setActiveTooltip((curr) => (curr?.id === pos.mission.id ? null : curr))}
                         className={`absolute rounded-[5px] border p-1 pl-2 transition-all shadow-sm flex flex-col justify-between group z-20 cursor-pointer overflow-hidden ${
                           isCompleted
-                            ? "bg-spy-surface2 border-spy-border text-spy-text hover:border-spy-green"
+                            ? "bg-spy-surface2/95 border-spy-green/50 text-spy-text hover:border-spy-green shadow-xs"
                             : isMissed
                             ? "bg-spy-redMuted/90 border-spy-red/60 text-spy-red hover:border-spy-red"
                             : "bg-spy-surface2/95 border-spy-green/60 hover:border-spy-green text-spy-text shadow-sm hover:shadow-md"
                         }`}
-                        title={`${item.mission.title} (${formatShortTimeRange(item.startStr, item.endStr)}) • Category: ${catInfo.name}`}
+                        title={`${pos.mission.title} (${formatShortTimeRange(pos.startStr, pos.endStr)}) • Category: ${catInfo.name}${pos.mission.notes ? ` • Notes: ${pos.mission.notes}` : ""}`}
                       >
                         {/* Full-height colored category accent bar */}
                         <div
@@ -1065,14 +1149,14 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                         {/* Time & Title */}
                         <div className="min-w-0 flex-1 overflow-hidden">
                           <div className="text-[8px] sm:text-[8.5px] font-mono font-bold leading-tight mb-0.5 whitespace-nowrap opacity-90 truncate">
-                            {formatShortTimeRange(item.startStr, item.endStr)}
+                            {formatShortTimeRange(pos.startStr, pos.endStr)}
                           </div>
                           <div
                             className={`font-sans font-semibold text-[8.5px] sm:text-[9.5px] leading-snug line-clamp-2 break-words overflow-hidden ${
-                              isCompleted ? "line-through decoration-spy-dim/60 text-spy-muted" : "text-spy-text"
+                              isCompleted ? "line-through decoration-current/40" : "text-spy-text"
                             }`}
                           >
-                            {item.mission.title}
+                            {pos.mission.title}
                           </div>
                         </div>
 
@@ -1082,7 +1166,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                             <CheckCircle2 className="w-2.5 h-2.5 text-spy-green" />
                           ) : (
                             <span className="text-[7.5px] text-spy-green font-bold">
-                              +{item.mission.xp}
+                              +{pos.mission.xp}
                             </span>
                           )}
                           {!isCompleted && (
@@ -1090,7 +1174,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onCompleteMission(item.mission);
+                                onCompleteMission(pos.mission);
                               }}
                               className="p-0.5 rounded-[2px] bg-spy-green/20 hover:bg-spy-green text-spy-green hover:text-black transition-colors"
                               title="Complete mission"
@@ -1142,12 +1226,12 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                         onMouseLeave={() => setActiveTooltip((curr) => (curr?.id === pos.mission.id ? null : curr))}
                         className={`absolute rounded-[5px] border p-1.5 pl-2.5 transition-all shadow-sm flex flex-col justify-between group z-20 cursor-pointer overflow-hidden ${
                           isCompleted
-                            ? "bg-spy-surface2 border-spy-border text-spy-text hover:border-spy-green"
+                            ? "bg-spy-surface2/95 border-spy-green/50 text-spy-text hover:border-spy-green shadow-xs"
                             : isMissed
                             ? "bg-spy-redMuted/90 border-spy-red/60 text-spy-red hover:border-spy-red shadow-md"
                             : "bg-spy-surface2/95 border-spy-green/60 hover:border-spy-green text-spy-text shadow-sm hover:shadow-md"
                         }`}
-                        title={`${pos.mission.title} (${formatShortTimeRange(pos.startStr, pos.endStr)}) • Category: ${catInfo.name}`}
+                        title={`${pos.mission.title} (${formatShortTimeRange(pos.startStr, pos.endStr)}) • Category: ${catInfo.name}${pos.mission.notes ? ` • Notes: ${pos.mission.notes}` : ""}`}
                       >
                         {/* 3px Category Accent Bar */}
                         <div
@@ -1158,7 +1242,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                         {/* Top: Shortened Time Range on Line 1, Title on Line 2 */}
                         <div className="min-w-0 flex-1 overflow-hidden">
                           <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[9.5px] font-mono leading-tight mb-0.5 whitespace-nowrap opacity-90 overflow-hidden">
-                            <span className="flex items-center gap-1 font-bold shrink-0 truncate">
+                            <span className="flex items-center gap-1 font-bold shrink-0 truncate whitespace-nowrap">
                               <Target className="w-2.5 h-2.5 text-spy-green shrink-0" />
                               {formatShortTimeRange(pos.startStr, pos.endStr)}
                             </span>
@@ -1172,7 +1256,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                           {/* Line 2: Full Title (wrapped to 2 lines) */}
                           <div
                             className={`font-sans font-semibold text-[10px] sm:text-[11px] leading-snug line-clamp-2 break-words overflow-hidden ${
-                              isCompleted ? "line-through decoration-spy-dim/60 text-spy-muted" : "text-spy-text"
+                              isCompleted ? "line-through decoration-current/40" : "text-spy-text"
                             }`}
                           >
                             {pos.mission.title}
@@ -1234,10 +1318,10 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                         onMouseEnter={() => setActiveTooltip(tooltipPayload)}
                         onMouseLeave={() => setActiveTooltip((curr) => (curr?.id === item.mission.id ? null : curr))}
                         className={`absolute inset-x-2 -translate-y-1/2 z-25 flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] border border-spy-green/60 bg-spy-surface2/95 shadow-sm text-spy-text font-mono text-[9px] cursor-pointer hover:border-spy-green transition-all min-w-0 overflow-hidden`}
-                        title={`Target End: ${item.mission.title} (${formatShortTimeRange(item.startStr, item.endStr)})`}
+                        title={`Target End: ${item.mission.title} (${formatShortTimeRange(item.startStr, item.endStr)}) • Category: ${catInfo.name}${item.mission.notes ? ` • Notes: ${item.mission.notes}` : ""}`}
                       >
                         <Target className="w-2.5 h-2.5 text-spy-green shrink-0" />
-                        <span className={`truncate font-semibold flex-1 ${isCompleted ? "line-through text-spy-muted" : ""}`}>
+                        <span className={`truncate font-semibold flex-1 ${isCompleted ? "line-through decoration-current/40" : ""}`}>
                           {formatTime12(item.endStr)}: {item.mission.title}
                         </span>
                         {isCompleted ? (

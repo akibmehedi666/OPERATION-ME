@@ -21,6 +21,7 @@ interface MissionModalProps {
   initialStartTime?: string;
   initialEndTime?: string;
   initialBlockId?: string;
+  initialCategoryId?: string;
 }
 
 const CODENAME_PREFIXES = [
@@ -50,6 +51,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
   initialStartTime,
   initialEndTime,
   initialBlockId,
+  initialCategoryId,
 }) => {
   const [title, setTitle] = useState("");
   const [codename, setCodename] = useState("");
@@ -76,6 +78,12 @@ export const MissionModal: React.FC<MissionModalProps> = ({
 
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
 
+  const generateCodename = () => {
+    const prefix = CODENAME_PREFIXES[Math.floor(Math.random() * CODENAME_PREFIXES.length)];
+    const num = Math.floor(10 + Math.random() * 90);
+    setCodename(`OP-${prefix}-${num}`);
+  };
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -83,18 +91,22 @@ export const MissionModal: React.FC<MissionModalProps> = ({
     setIsSaving(false);
 
     if (editingMission) {
-      setTitle(editingMission.title);
-      setCodename(editingMission.codename || "");
-      setCategoryId(editingMission.category_id || categories[0]?.id || "");
-      setPriority(editingMission.priority);
+      setTitle(editingMission.title || "");
+      if (editingMission.codename && editingMission.codename.trim() !== "") {
+        setCodename(editingMission.codename);
+      } else {
+        generateCodename();
+      }
+      setCategoryId(editingMission.category_id || initialCategoryId || categories[0]?.id || "");
+      setPriority(editingMission.priority || "medium");
       setNotes(editingMission.notes || "");
       setXp(editingMission.xp || 50);
       setStatus(
         editingMission.status === "completed"
           ? "active"
-          : (editingMission.status as "active" | "locked")
+          : (editingMission.status as "active" | "locked") || "active"
       );
-      setScheduledBlockId(editingMission.scheduled_block_id || null);
+      setScheduledBlockId(editingMission.scheduled_block_id || initialBlockId || null);
 
       if (editingMission.scheduled_start) {
         setHasSpecificTime(true);
@@ -104,42 +116,58 @@ export const MissionModal: React.FC<MissionModalProps> = ({
         const sdd = String(s.getDate()).padStart(2, "0");
         const shh = String(s.getHours()).padStart(2, "0");
         const smin = String(s.getMinutes()).padStart(2, "0");
-        setScheduledDate(`${syyyy}-${smm}-${sdd}`);
+        const targetDate = `${syyyy}-${smm}-${sdd}`;
+        setScheduledDate(targetDate);
         setStartTime(`${shh}:${smin}`);
 
+        let targetEndTime = addMinutesToTime(`${shh}:${smin}`, 60);
         if (editingMission.scheduled_end) {
           const e = new Date(editingMission.scheduled_end);
           const ehh = String(e.getHours()).padStart(2, "0");
           const emin = String(e.getMinutes()).padStart(2, "0");
-          setEndTime(`${ehh}:${emin}`);
+          targetEndTime = `${ehh}:${emin}`;
+        }
+        setEndTime(targetEndTime);
+
+        // When scheduled time exists, default deadline directly to end time
+        if (editingMission.deadline) {
+          const d = new Date(editingMission.deadline);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const dd = String(d.getDate()).padStart(2, "0");
+          const hh = String(d.getHours()).padStart(2, "0");
+          const min = String(d.getMinutes()).padStart(2, "0");
+          setDeadlineDate(`${yyyy}-${mm}-${dd}`);
+          setDeadlineTime(`${hh}:${min}`);
         } else {
-          setEndTime(addMinutesToTime(`${shh}:${smin}`, 60));
+          setDeadlineDate(targetDate);
+          setDeadlineTime(targetEndTime);
         }
       } else {
         setHasSpecificTime(false);
         setScheduledDate(initialDate || todayStr);
         setStartTime(initialStartTime || "14:00");
         setEndTime(initialEndTime || "15:00");
-      }
 
-      if (editingMission.deadline) {
-        const d = new Date(editingMission.deadline);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, "0");
-        const dd = String(d.getDate()).padStart(2, "0");
-        const hh = String(d.getHours()).padStart(2, "0");
-        const min = String(d.getMinutes()).padStart(2, "0");
-        setDeadlineDate(`${yyyy}-${mm}-${dd}`);
-        setDeadlineTime(`${hh}:${min}`);
-      } else {
-        setDeadlineDate("");
-        setDeadlineTime("23:59");
+        if (editingMission.deadline) {
+          const d = new Date(editingMission.deadline);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const dd = String(d.getDate()).padStart(2, "0");
+          const hh = String(d.getHours()).padStart(2, "0");
+          const min = String(d.getMinutes()).padStart(2, "0");
+          setDeadlineDate(`${yyyy}-${mm}-${dd}`);
+          setDeadlineTime(`${hh}:${min}`);
+        } else {
+          setDeadlineDate("");
+          setDeadlineTime("23:59");
+        }
       }
     } else {
       // New mission default
       setTitle("");
       generateCodename();
-      setCategoryId(categories[0]?.id || "");
+      setCategoryId(initialCategoryId || categories[0]?.id || "");
       setPriority("medium");
       setNotes("");
       setXp(50);
@@ -147,18 +175,19 @@ export const MissionModal: React.FC<MissionModalProps> = ({
       setScheduledBlockId(initialBlockId || null);
 
       const targetDateStr = initialDate || todayStr;
+      const targetStart = initialStartTime || "14:00";
+      const targetEnd = initialEndTime || (initialStartTime ? addMinutesToTime(initialStartTime, 60) : "15:00");
+
       setScheduledDate(targetDateStr);
-      setStartTime(initialStartTime || "14:00");
-      setEndTime(initialEndTime || (initialStartTime ? addMinutesToTime(initialStartTime, 60) : "15:00"));
+      setStartTime(targetStart);
+      setEndTime(targetEnd);
 
       // Default to specific time enabled so Date, Start Time, End Time and Quick Duration chips are readily accessible
       setHasSpecificTime(true);
 
-      // Default deadline to tomorrow midnight
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      setDeadlineDate(formatDateKey(tomorrow));
-      setDeadlineTime("23:59");
+      // Default deadline to scheduled end time
+      setDeadlineDate(targetDateStr);
+      setDeadlineTime(targetEnd);
     }
   }, [
     isOpen,
@@ -168,14 +197,9 @@ export const MissionModal: React.FC<MissionModalProps> = ({
     initialStartTime,
     initialEndTime,
     initialBlockId,
+    initialCategoryId,
     todayStr,
   ]);
-
-  const generateCodename = () => {
-    const prefix = CODENAME_PREFIXES[Math.floor(Math.random() * CODENAME_PREFIXES.length)];
-    const num = Math.floor(10 + Math.random() * 90);
-    setCodename(`OP-${prefix}-${num}`);
-  };
 
   // Quick duration chips handler
   const handleApplyDuration = (minutes: number) => {

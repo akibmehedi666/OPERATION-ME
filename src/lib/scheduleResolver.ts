@@ -214,6 +214,33 @@ export function resolveDaySchedule(
         });
 
         if (conflictingClass) {
+          // If the conflicting class leaves at least 30 minutes free at the end of the block, shorten it
+          const [ceh, cem] = conflictingClass.end_time.split(":").map(Number);
+          const cEnd = (ceh || 0) * 60 + (cem || 0);
+
+          if (cEnd > bStart && cEnd < bEnd && (bEnd - cEnd) >= 30) {
+            const hasOtherConflict = substitutedClasses.some((other) => {
+              const [osh, osm] = other.start_time.split(":").map(Number);
+              const [oeh, oem] = other.end_time.split(":").map(Number);
+              const oStart = (osh || 0) * 60 + (osm || 0);
+              const oEnd = (oeh || 0) * 60 + (oem || 0);
+              return Math.max(cEnd, oStart) < Math.min(bEnd, oEnd);
+            });
+
+            if (!hasOtherConflict) {
+              const newSh = Math.floor(cEnd / 60);
+              const newSm = cEnd % 60;
+              const newStartStr = `${String(newSh).padStart(2, "0")}:${String(newSm).padStart(2, "0")}`;
+              return {
+                ...b,
+                start_time: newStartStr,
+                date: dateStr,
+                isOverridden: false,
+                label: b.label,
+              };
+            }
+          }
+
           return {
             ...b,
             date: dateStr,

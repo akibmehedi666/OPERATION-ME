@@ -759,47 +759,67 @@ export function useAgencyState() {
       created_at: new Date().toISOString(),
     };
 
-    if (hasSupabase && supabase && currentUser) {
-      try {
-        const payload: Record<string, unknown> = {
-          user_id: currentUser.id,
-          title: newMission.title,
-          codename: newMission.codename,
-          category_id: newMission.category_id,
-          priority: newMission.priority,
-          deadline: newMission.deadline,
-          notes: newMission.notes,
-          status: newMission.status,
-          xp: newMission.xp,
-          scheduled_start: newMission.scheduled_start,
-          scheduled_end: newMission.scheduled_end,
-          scheduled_block_id: newMission.scheduled_block_id,
-          is_auto_scheduled: newMission.is_auto_scheduled,
-          course_id: newMission.course_id,
-          project_id: newMission.project_id,
-          paper_id: newMission.paper_id,
-          cf_log_id: newMission.cf_log_id,
-        };
-
-        const { data, error } = await supabase
-          .from("missions")
-          .insert(payload)
-          .select()
-          .single();
-
-        if (error) {
-          console.error("Supabase insert mission error:", error);
-          return { success: false, error: error.message || "Failed to persist mission in Supabase" };
+    if (hasSupabase && supabase) {
+      let activeUserId = currentUser?.id;
+      if (!activeUserId) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user?.id) {
+            activeUserId = session.user.id;
+            setCurrentUser({ id: session.user.id, email: session.user.email || "" });
+          }
+        } catch {
+          // ignore
         }
+      }
 
-        if (data) {
-          persistMissions([data, ...missions]);
-          return { success: true, mission: data };
+      if (activeUserId) {
+        try {
+          const payload: Record<string, unknown> = {
+            user_id: activeUserId,
+            title: newMission.title,
+            codename: newMission.codename,
+            category_id: newMission.category_id,
+            priority: newMission.priority,
+            deadline: newMission.deadline,
+            notes: newMission.notes,
+            status: newMission.status,
+            xp: newMission.xp,
+            scheduled_start: newMission.scheduled_start,
+            scheduled_end: newMission.scheduled_end,
+            scheduled_block_id: newMission.scheduled_block_id,
+            is_auto_scheduled: newMission.is_auto_scheduled,
+            course_id: newMission.course_id,
+            project_id: newMission.project_id,
+            paper_id: newMission.paper_id,
+            cf_log_id: newMission.cf_log_id,
+          };
+
+          const { data, error } = await supabase
+            .from("missions")
+            .insert(payload)
+            .select()
+            .single();
+
+          if (error) {
+            console.error("Supabase insert mission error:", error);
+            showErrorToast("Mission Creation Failed", error.message || "Failed to persist mission in Supabase");
+            return { success: false, error: error.message || "Failed to persist mission in Supabase" };
+          }
+
+          if (data) {
+            persistMissions([data, ...missions]);
+            return { success: true, mission: data };
+          }
+        } catch (e: unknown) {
+          console.error("Supabase insert mission exception:", e);
+          const errMessage = e instanceof Error ? e.message : "Failed to insert mission in cloud database";
+          showErrorToast("Mission Creation Failed", errMessage);
+          return { success: false, error: errMessage };
         }
-      } catch (e: unknown) {
-        console.error("Supabase insert mission exception:", e);
-        const errMessage = e instanceof Error ? e.message : "Failed to insert mission in cloud database";
-        return { success: false, error: errMessage };
+      } else {
+        showErrorToast("Authentication Required", "You must be logged in to create missions.");
+        return { success: false, error: "Active user session not found. Please log in again." };
       }
     }
 
@@ -1232,7 +1252,50 @@ export function useAgencyState() {
     startTime?: string,
     endTime?: string,
     isAuto: boolean = false
-  ) => {
+  ): Promise<{ success: boolean; error?: string }> => {
+    // 1. Transactional write to Supabase first in cloud mode
+    if (hasSupabase && supabase) {
+      let activeUserId = currentUser?.id;
+      if (!activeUserId) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user?.id) {
+            activeUserId = session.user.id;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (activeUserId) {
+        try {
+          const { error } = await supabase
+            .from("missions")
+            .update({
+              scheduled_block_id: blockId,
+              scheduled_start: startTime || null,
+              scheduled_end: endTime || null,
+              deadline: endTime || null,
+              is_auto_scheduled: isAuto,
+            })
+            .eq("id", missionId)
+            .eq("user_id", activeUserId);
+
+          if (error) {
+            console.error("Supabase schedule mission error:", error);
+            showErrorToast("Schedule Mission Failed", error.message || "Failed to update mission in cloud database");
+            return { success: false, error: error.message };
+          }
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Failed to schedule mission in cloud database";
+          console.error("Supabase schedule mission exception:", e);
+          showErrorToast("Schedule Mission Failed", msg);
+          return { success: false, error: msg };
+        }
+      }
+    }
+
+    // 2. Update local state
     const updated = missions.map((m) =>
       m.id === missionId
         ? {
@@ -1240,27 +1303,13 @@ export function useAgencyState() {
             scheduled_block_id: blockId,
             scheduled_start: startTime || m.scheduled_start,
             scheduled_end: endTime || m.scheduled_end,
+            deadline: endTime || m.deadline,
             is_auto_scheduled: isAuto,
           }
         : m
     );
     persistMissions(updated);
-
-    if (hasSupabase && supabase) {
-      try {
-        await supabase
-          .from("missions")
-          .update({
-            scheduled_block_id: blockId,
-            scheduled_start: startTime || null,
-            scheduled_end: endTime || null,
-            is_auto_scheduled: isAuto,
-          })
-          .eq("id", missionId);
-      } catch (e) {
-        console.error("Supabase schedule mission error:", e);
-      }
-    }
+    return { success: true };
   };
 
   const confirmAutoScheduledMission = async (missionId: string) => {

@@ -52,6 +52,13 @@ interface PlannerViewProps {
   onCompleteMission: (mission: Mission) => void;
   onOpenCourseHQ?: (courseId: string) => void;
   onEditMission?: (mission: Mission) => void;
+  onAssignNewMission?: (params: {
+    block?: TimeBlock | null;
+    dateStr: string;
+    startTime: string;
+    endTime: string;
+    defaultCategoryId?: string;
+  }) => void;
   onUpdateTuitionSchedule?: (options: {
     days: DayOfWeek[];
     startTime: string;
@@ -81,6 +88,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   onCompleteMission,
   onOpenCourseHQ,
   onEditMission,
+  onAssignNewMission,
   onUpdateTuitionSchedule,
 }) => {
   const [viewMode, setViewMode] = useState<"grid" | "calendar">("grid");
@@ -362,13 +370,35 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               defaultDate: dateStr,
             })
           }
-          onAssignMissionToBlock={(block, dateStr) =>
-            setAssignModal({
-              isOpen: true,
-              block,
-              blockDateStr: dateStr,
-            })
-          }
+          onAssignMissionToBlock={(block, dateStr) => {
+            if (onAssignNewMission) {
+              onAssignNewMission({
+                block,
+                dateStr,
+                startTime: block.start_time,
+                endTime: block.end_time,
+                defaultCategoryId: block.default_category || undefined,
+              });
+            } else {
+              setAssignModal({
+                isOpen: true,
+                block,
+                blockDateStr: dateStr,
+              });
+            }
+          }}
+          onAddMissionAtSlot={(dateStr, timeStr) => {
+            if (onAssignNewMission) {
+              const [hh, mm] = timeStr.split(":").map(Number);
+              const endHh = (hh + 1) % 24;
+              const endTime = `${String(endHh).padStart(2, "0")}:${String(mm || 0).padStart(2, "0")}`;
+              onAssignNewMission({
+                dateStr,
+                startTime: timeStr,
+                endTime,
+              });
+            }
+          }}
           onConfirmAutoSchedule={onConfirmAutoSchedule}
           onCompleteMission={onCompleteMission}
           onOpenCourseHQ={onOpenCourseHQ}
@@ -439,6 +469,17 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         blockDateStr={assignModal.blockDateStr}
         missions={missions}
         categories={categories}
+        onCreateNew={() => {
+          if (assignModal.block && onAssignNewMission) {
+            onAssignNewMission({
+              block: assignModal.block,
+              dateStr: assignModal.blockDateStr,
+              startTime: assignModal.block.start_time,
+              endTime: assignModal.block.end_time,
+              defaultCategoryId: assignModal.block.default_category || undefined,
+            });
+          }
+        }}
         onAssign={(missionId, blockId, start, end) =>
           onScheduleMission(missionId, blockId, start, end)
         }

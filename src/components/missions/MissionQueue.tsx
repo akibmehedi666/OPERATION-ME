@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, ArrowUpDown } from "lucide-react";
+import { Search, ChevronDown, ArrowUpDown, Sparkles } from "lucide-react";
 import { Mission, Category, Priority } from "@/types/database";
 import { MissionCard } from "@/components/ui/MissionCard";
 import { getCategoryTheme } from "@/lib/categoryTheme";
@@ -16,6 +16,7 @@ interface MissionQueueProps {
   onDelete: (mission: Mission) => void;
   onSetActive: (mission: Mission) => void;
   onEditNote?: (mission: Mission) => void;
+  onDeduplicate?: () => Promise<{ removedCount: number }>;
 }
 
 // Category filter chips requested by user:
@@ -50,10 +51,22 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
   onDelete,
   onSetActive,
   onEditNote,
+  onDeduplicate,
 }) => {
   const [selectedChip, setSelectedChip] = useState("all");
   const [sortBy, setSortBy] = useState<"deadline" | "priority">("deadline");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
+
+  const handleCleanDuplicates = async () => {
+    if (!onDeduplicate) return;
+    setIsDeduplicating(true);
+    try {
+      await onDeduplicate();
+    } finally {
+      setIsDeduplicating(false);
+    }
+  };
 
   // Completed is collapsed by default; others expanded
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -226,8 +239,20 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
             />
           </div>
 
-          {/* Sort Dropdown */}
+          {/* Sort Dropdown & Deduplicate button */}
           <div className="flex items-center gap-2 shrink-0 text-xs font-mono">
+            {onDeduplicate && (
+              <button
+                type="button"
+                onClick={handleCleanDuplicates}
+                disabled={isDeduplicating}
+                className="px-2.5 py-1.5 rounded-[3px] bg-spy-surface2 hover:bg-spy-surface border border-spy-border hover:border-spy-borderLight text-spy-text font-mono text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                title="Remove duplicate missions"
+              >
+                <Sparkles className={`w-3.5 h-3.5 text-spy-green ${isDeduplicating ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">{isDeduplicating ? "Cleaning..." : "Remove Duplicates"}</span>
+              </button>
+            )}
             <ArrowUpDown className="w-3.5 h-3.5 text-spy-muted" />
             <span className="text-spy-muted">Sort:</span>
             <select
