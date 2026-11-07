@@ -305,8 +305,30 @@ export async function ensureStructureData(
         .upsert(recordsToInsert, { onConflict: "id", ignoreDuplicates: true });
 
       if (insertCyberErr) {
-        console.error("[EnsureStructure] Failed to insert cyber_topics:", insertCyberErr.message);
-        details.push(`cyber_topics insert error: ${insertCyberErr.message}`);
+        console.warn("[EnsureStructure] Full cyber_topics upsert failed, retrying with baseline columns:", insertCyberErr.message);
+        // Fallback: If extended columns (goal, learning_links, etc.) are not in the schema yet, insert core fields
+        const baselineRecords = DEFAULT_CYBER_TOPICS.map((t) => ({
+          id: t.id,
+          user_id: userId,
+          section: t.section,
+          title: t.title,
+          status: "not_started" as const,
+          resources: t.resources || [],
+          notes: null,
+          time_spent_minutes: 0,
+          order_index: t.order_index || 0,
+          completed_at: null,
+        }));
+        const { error: baselineErr } = await supabase
+          .from("cyber_topics")
+          .upsert(baselineRecords, { onConflict: "id", ignoreDuplicates: true });
+
+        if (baselineErr) {
+          console.error("[EnsureStructure] Failed to insert baseline cyber_topics:", baselineErr.message);
+          details.push(`cyber_topics insert error: ${baselineErr.message}`);
+        } else {
+          details.push(`Seeded ${baselineRecords.length} baseline cyber topics.`);
+        }
       } else {
         details.push(`Seeded ${recordsToInsert.length} cyber topics.`);
       }

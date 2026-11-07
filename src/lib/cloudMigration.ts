@@ -118,13 +118,17 @@ export function checkLocalDataToMigrate(userId?: string): LocalDataSummary {
     }
   };
 
-  const userMissions = getFilteredItems<Mission>("op_me_missions", DEMO_MISSION_IDS);
-  const userProjects = getFilteredItems<SideProject>("op_me_side_projects", DEMO_PROJECT_IDS);
-  const userPapers = getFilteredItems<ResearchPaper>("op_me_papers", DEMO_PAPER_IDS);
-  const userCfLogs = getFilteredItems<CodeforcesLog>("op_me_cf_logs", DEMO_CF_IDS);
-  const userLectureLogs = getFilteredItems<LectureLog>("op_me_lecture_logs", DEMO_LOG_IDS);
-  const userCourses = getFilteredItems<Course>("op_me_courses");
-  const userTimeBlocks = getFilteredItems<TimeBlock>("op_me_time_blocks");
+  const isUnmigrated = <T extends { user_id?: string | null }>(item: T) => {
+    return !item.user_id || item.user_id === "agent-akib-local";
+  };
+
+  const userMissions = getFilteredItems<Mission>("op_me_missions", DEMO_MISSION_IDS).filter(isUnmigrated);
+  const userProjects = getFilteredItems<SideProject>("op_me_side_projects", DEMO_PROJECT_IDS).filter(isUnmigrated);
+  const userPapers = getFilteredItems<ResearchPaper>("op_me_papers", DEMO_PAPER_IDS).filter(isUnmigrated);
+  const userCfLogs = getFilteredItems<CodeforcesLog>("op_me_cf_logs", DEMO_CF_IDS).filter(isUnmigrated);
+  const userLectureLogs = getFilteredItems<LectureLog>("op_me_lecture_logs", DEMO_LOG_IDS).filter(isUnmigrated);
+  const userCourses = getFilteredItems<Course>("op_me_courses").filter(isUnmigrated);
+  const userTimeBlocks = getFilteredItems<TimeBlock>("op_me_time_blocks").filter(isUnmigrated);
 
   // Only prompt migration if the user has actual created operational content
   const userCreatedItemsCount =

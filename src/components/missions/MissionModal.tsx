@@ -110,22 +110,48 @@ export const MissionModal: React.FC<MissionModalProps> = ({
 
       if (editingMission.scheduled_start) {
         setHasSpecificTime(true);
-        const s = new Date(editingMission.scheduled_start);
-        const syyyy = s.getFullYear();
-        const smm = String(s.getMonth() + 1).padStart(2, "0");
-        const sdd = String(s.getDate()).padStart(2, "0");
-        const shh = String(s.getHours()).padStart(2, "0");
-        const smin = String(s.getMinutes()).padStart(2, "0");
-        const targetDate = `${syyyy}-${smm}-${sdd}`;
+        let targetDate = "";
+        let shh = "14";
+        let smin = "00";
+
+        if (typeof editingMission.scheduled_start === "string" && editingMission.scheduled_start.includes("T")) {
+          const [dPart, tPart] = editingMission.scheduled_start.split("T");
+          targetDate = dPart.slice(0, 10);
+          const tChunks = tPart.split(":");
+          shh = (tChunks[0] || "14").slice(0, 2).padStart(2, "0");
+          smin = (tChunks[1] || "00").slice(0, 2).padStart(2, "0");
+        } else {
+          const s = new Date(editingMission.scheduled_start);
+          if (!isNaN(s.getTime())) {
+            const syyyy = s.getFullYear();
+            const smm = String(s.getMonth() + 1).padStart(2, "0");
+            const sdd = String(s.getDate()).padStart(2, "0");
+            shh = String(s.getHours()).padStart(2, "0");
+            smin = String(s.getMinutes()).padStart(2, "0");
+            targetDate = `${syyyy}-${smm}-${sdd}`;
+          }
+        }
+
+        if (!targetDate) targetDate = initialDate || todayStr;
         setScheduledDate(targetDate);
         setStartTime(`${shh}:${smin}`);
 
         let targetEndTime = addMinutesToTime(`${shh}:${smin}`, 60);
         if (editingMission.scheduled_end) {
-          const e = new Date(editingMission.scheduled_end);
-          const ehh = String(e.getHours()).padStart(2, "0");
-          const emin = String(e.getMinutes()).padStart(2, "0");
-          targetEndTime = `${ehh}:${emin}`;
+          if (typeof editingMission.scheduled_end === "string" && editingMission.scheduled_end.includes("T")) {
+            const [, etPart] = editingMission.scheduled_end.split("T");
+            const etChunks = etPart.split(":");
+            const ehh = (etChunks[0] || "15").slice(0, 2).padStart(2, "0");
+            const emin = (etChunks[1] || "00").slice(0, 2).padStart(2, "0");
+            targetEndTime = `${ehh}:${emin}`;
+          } else {
+            const e = new Date(editingMission.scheduled_end);
+            if (!isNaN(e.getTime())) {
+              const ehh = String(e.getHours()).padStart(2, "0");
+              const emin = String(e.getMinutes()).padStart(2, "0");
+              targetEndTime = `${ehh}:${emin}`;
+            }
+          }
         }
         setEndTime(targetEndTime);
 
@@ -319,7 +345,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
             <div className="flex items-center gap-2">
               <Target className="w-4 h-4 text-spy-green" />
               <span className="font-mono text-sm font-semibold text-spy-text">
-                {editingMission ? "EDIT MISSION DIRECTIVE" : "NEW MISSION DIRECTIVE"}
+                {(editingMission && editingMission.id) ? "EDIT MISSION DIRECTIVE" : "NEW MISSION DIRECTIVE"}
               </span>
             </div>
             <button
@@ -626,7 +652,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                 size="sm"
                 disabled={isSaving}
               >
-                {isSaving ? "SAVING..." : editingMission ? "Save Changes" : "Create Mission"}
+                {isSaving ? "SAVING..." : (editingMission && editingMission.id) ? "Save Changes" : "Create Mission"}
               </Button>
             </div>
           </form>

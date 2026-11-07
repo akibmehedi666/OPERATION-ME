@@ -102,12 +102,26 @@ export const ProgressReviewView: React.FC<ProgressReviewViewProps> = ({
     return lectureLogs.filter((l) => !l.studied).length;
   }, [lectureLogs]);
 
+  // Find existing review for this week
+  const currentWeekReview = useMemo(() => {
+    return weeklyReviews.find((r) => r.week_start_date === weekStartStr);
+  }, [weeklyReviews, weekStartStr]);
+
   // Form states for weekly review
   const [whatWentWell, setWhatWentWell] = useState("");
   const [whatToFix, setWhatToFix] = useState("");
   const [nextWeekFocus, setNextWeekFocus] = useState("");
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isPastReviewsExpanded, setIsPastReviewsExpanded] = useState(false);
+
+  // Sync form inputs when current week review is loaded/fetched
+  React.useEffect(() => {
+    if (currentWeekReview) {
+      setWhatWentWell(currentWeekReview.what_went_well || "");
+      setWhatToFix(currentWeekReview.what_to_fix || "");
+      setNextWeekFocus(currentWeekReview.next_week_focus || "");
+    }
+  }, [currentWeekReview]);
 
   // 2. CATEGORY COMPLETION BREAKDOWN
   const categoryStats = useMemo(() => {

@@ -53,6 +53,7 @@ interface AgentHeaderProps {
   onDeleteRecurringRule?: (ruleId: string) => void;
   onRunAutoMissionsGenerator?: () => { createdCount: number; message: string };
   onUpdateNotificationSettings?: (settings: NotificationSettings) => void;
+  onUpdateUserSettings?: (updates: { animations_enabled?: boolean; sound_enabled?: boolean }) => void;
   onResetAllProgress?: () => Promise<unknown>;
   onOpenTuitionModal?: () => void;
 }
@@ -87,6 +88,7 @@ export function AgentHeader({
   onDeleteRecurringRule,
   onRunAutoMissionsGenerator,
   onUpdateNotificationSettings,
+  onUpdateUserSettings,
   onResetAllProgress,
   onOpenTuitionModal,
 }: AgentHeaderProps) {
@@ -162,6 +164,7 @@ export function AgentHeader({
   const toggleSound = () => {
     const newState = soundFX.toggleSound();
     setSoundEnabled(newState);
+    onUpdateUserSettings?.({ sound_enabled: newState });
   };
 
   const getRankBadgeClass = (rankName: string) => {
@@ -442,7 +445,11 @@ export function AgentHeader({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setAnimationsEnabled(!animationsEnabled)}
+                    onClick={() => {
+                      const next = !animationsEnabled;
+                      setAnimationsEnabled(next);
+                      onUpdateUserSettings?.({ animations_enabled: next });
+                    }}
                     className={`px-3 py-1 border rounded-[3px] font-mono font-bold text-xs transition-colors ${
                       animationsEnabled && !systemReducedMotion
                         ? "bg-spy-greenMuted text-spy-green border-spy-green"

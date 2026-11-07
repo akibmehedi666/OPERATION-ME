@@ -140,6 +140,8 @@ export default function Home() {
     deleteSideProject,
     saveWeeklyReview,
     updateNotificationSettings,
+    updateDefaultTheme,
+    updateUserSettings,
     resetAllProgress,
     deduplicateMissions,
     errorToasts,
@@ -430,8 +432,15 @@ export default function Home() {
     defaultCategoryId?: string;
   }) => {
     soundFX.playBlip();
-    const scheduledStart = `${dateStr}T${startTime}:00`;
-    const scheduledEnd = `${dateStr}T${endTime}:00`;
+    const cleanTime = (t: string) => {
+      if (!t) return "14:00";
+      const parts = t.split(":");
+      return `${(parts[0] || "14").padStart(2, "0")}:${(parts[1] || "00").slice(0, 2).padStart(2, "0")}`;
+    };
+    const cleanStart = cleanTime(startTime);
+    const cleanEnd = cleanTime(endTime);
+    const scheduledStart = `${dateStr}T${cleanStart}:00`;
+    const scheduledEnd = `${dateStr}T${cleanEnd}:00`;
 
     let targetCatId = defaultCategoryId || block?.default_category || null;
     if (targetCatId && !categories.some((c) => c.id === targetCatId)) {
@@ -538,7 +547,10 @@ export default function Home() {
             currentTheme={activeTheme}
             defaultTheme={defaultTheme}
             onToggleTheme={toggleActiveTheme}
-            onUpdateDefaultTheme={setDefaultTheme}
+            onUpdateDefaultTheme={(pref) => {
+              setDefaultTheme(pref);
+              updateDefaultTheme(pref);
+            }}
             onQuickAdd={handleOpenAdd}
             onLogout={logout}
             recurringRules={recurringRules}
@@ -551,6 +563,7 @@ export default function Home() {
             onDeleteRecurringRule={deleteRecurringRule}
             onRunAutoMissionsGenerator={runAutoMissionsGenerator}
             onUpdateNotificationSettings={updateNotificationSettings}
+            onUpdateUserSettings={updateUserSettings}
             onResetAllProgress={resetAllProgress}
             onOpenTuitionModal={() => setTuitionModal({ isOpen: true })}
           />

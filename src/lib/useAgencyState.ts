@@ -123,7 +123,7 @@ export function useAgencyState() {
   const supabase = createClient();
   const hasSupabase = isSupabaseConfigured() && supabase !== null;
 
-  const initHandledRef = useRef(false);
+  const fetchedUserIdRef = useRef<string | null>(null);
 
   // Safety fallback: ensure loading NEVER exceeds 3.0s under any circumstances
   useEffect(() => {
@@ -144,9 +144,6 @@ export function useAgencyState() {
     let isCancelled = false;
 
     async function init() {
-      if (initHandledRef.current) return;
-      initHandledRef.current = true;
-
       // Check if user authenticated in Supabase (with timeout guard so network latency never blocks initial render)
       if (hasSupabase && supabase) {
         if (typeof window !== "undefined") {
@@ -156,7 +153,7 @@ export function useAgencyState() {
         try {
           const sessionPromise = supabase.auth.getSession();
           const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
-            setTimeout(() => resolve({ data: { session: null } }), 1800)
+            setTimeout(() => resolve({ data: { session: null } }), 6000)
           );
 
           const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
@@ -167,10 +164,12 @@ export function useAgencyState() {
             setIsAuthenticated(true);
             setCurrentUser({ id: session.user.id, email: session.user.email || "" });
             setLoading(false); // End loading screen immediately so UI renders!
-            // Load user data asynchronously
-            fetchSupabaseData(session.user.id).catch((err) => {
-              console.error("Background data fetch error:", err);
-            });
+            if (fetchedUserIdRef.current !== session.user.id) {
+              fetchedUserIdRef.current = session.user.id;
+              fetchSupabaseData(session.user.id).catch((err) => {
+                console.error("Background data fetch error:", err);
+              });
+            }
             return;
           }
         } catch (e) {
@@ -223,12 +222,19 @@ export function useAgencyState() {
           setIsAuthenticated(true);
           setCurrentUser({ id: session.user.id, email: session.user.email || "" });
           setLoading(false);
+          if (fetchedUserIdRef.current !== session.user.id) {
+            fetchedUserIdRef.current = session.user.id;
+            fetchSupabaseData(session.user.id).catch((err) => {
+              console.error("Data fetch error in onAuthStateChange:", err);
+            });
+          }
         } else if (event === "INITIAL_SESSION") {
           setIsAuthenticated(false);
           setCurrentUser(null);
           setLoading(false);
         }
       } else if (event === "SIGNED_OUT") {
+        fetchedUserIdRef.current = null;
         setIsAuthenticated(false);
         setCurrentUser(null);
         setLoading(false);
@@ -571,25 +577,33 @@ export function useAgencyState() {
         setSideProjects(DEFAULT_SIDE_PROJECTS);
       }
 
-      // 14. Fetch user_settings (for cf_handle)
+      // 14. Fetch user_settings (for cf_handle, theme, notifications)
       try {
         const { data: settingsData } = await supabase
           .from("user_settings")
-          .select("cf_handle")
+          .select("*")
           .eq("user_id", userId)
           .maybeSingle();
 
-        if (settingsData?.cf_handle) {
-          const norm = normalizeCodeforcesHandle(settingsData.cf_handle);
-          if (norm) {
-            setCfHandle(norm);
-            if (typeof window !== "undefined") {
-              localStorage.setItem("op_me_cf_handle", norm);
+        if (settingsData) {
+          if (settingsData.cf_handle) {
+            const norm = normalizeCodeforcesHandle(settingsData.cf_handle);
+            if (norm) {
+              setCfHandle(norm);
+              if (typeof window !== "undefined") {
+                localStorage.setItem("op_me_cf_handle", norm);
+              }
             }
+          }
+          if (settingsData.default_theme) {
+            saveThemePreference(settingsData.default_theme);
+          }
+          if (settingsData.notification_settings && Object.keys(settingsData.notification_settings).length > 0) {
+            persistNotificationSettings(settingsData.notification_settings);
           }
         }
       } catch (err) {
-        console.warn("Could not fetch user_settings cf_handle:", err);
+        console.warn("Could not fetch user_settings:", err);
       }
 
       // 15. Fetch cf_log
@@ -1701,29 +1715,68 @@ export function useAgencyState() {
   };
 
   // 2. Course HQ Actions
-  const addLectureLog = (logData: Omit<LectureLog, "id">) => {
+  const addLectureLog = async (logData: Omit<LectureLog, "id">) => {
     const newLog: LectureLog = {
       ...logData,
       id: `ll-${Date.now()}`,
       created_at: new Date().toISOString(),
     };
     persistLectureLogs([newLog, ...lectureLogs]);
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        const { error } = await supabase.from("lecture_logs").insert({
+          ...newLog,
+          user_id: currentUser.id,
+        });
+        if (error) console.error("Supabase addLectureLog error:", error);
+      } catch (err) {
+        console.error("Supabase addLectureLog error:", err);
+      }
+    }
   };
 
-  const updateLectureLog = (log: LectureLog) => {
+  const updateLectureLog = async (log: LectureLog) => {
     const updated = lectureLogs.map((l) => (l.id === log.id ? log : l));
     persistLectureLogs(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        const { error } = await supabase.from("lecture_logs").update(log).eq("id", log.id);
+        if (error) console.error("Supabase updateLectureLog error:", error);
+      } catch (err) {
+        console.error("Supabase updateLectureLog error:", err);
+      }
+    }
   };
 
-  const deleteLectureLog = (logId: string) => {
+  const deleteLectureLog = async (logId: string) => {
     persistLectureLogs(lectureLogs.filter((l) => l.id !== logId));
+
+    if (hasSupabase && supabase) {
+      try {
+        const { error } = await supabase.from("lecture_logs").delete().eq("id", logId);
+        if (error) console.error("Supabase deleteLectureLog error:", error);
+      } catch (err) {
+        console.error("Supabase deleteLectureLog error:", err);
+      }
+    }
   };
 
-  const toggleLectureStudied = (logId: string, studied: boolean) => {
+  const toggleLectureStudied = async (logId: string, studied: boolean) => {
     const updated = lectureLogs.map((l) =>
       l.id === logId ? { ...l, studied } : l
     );
     persistLectureLogs(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        const { error } = await supabase.from("lecture_logs").update({ studied }).eq("id", logId);
+        if (error) console.error("Supabase toggleLectureStudied error:", error);
+      } catch (err) {
+        console.error("Supabase toggleLectureStudied error:", err);
+      }
+    }
   };
 
   const addCourseResource = (courseId: string, resource: Omit<CourseResource, "id">) => {
@@ -1982,84 +2035,147 @@ export function useAgencyState() {
     // In cloud mode, immediately persist topic update to Supabase
     if (hasSupabase && supabase && currentUser?.id && updatedTopic) {
       const t: CyberTopic = updatedTopic;
+      const updatePayload = {
+        status: t.status,
+        notes: t.notes || null,
+        time_spent_minutes: t.time_spent_minutes || 0,
+        completed_at: t.completed_at || null,
+      };
+
       supabase
         .from("cyber_topics")
-        .upsert(
-          {
-            id: t.id,
-            user_id: currentUser.id,
-            section: t.section,
-            title: t.title,
-            status: t.status,
-            goal: t.goal || null,
-            learning_links: t.learning_links || [],
-            hands_on_task: t.hands_on_task || null,
-            hands_on_url: t.hands_on_url || null,
-            hands_on_platform: t.hands_on_platform || null,
-            hands_on_completed: t.hands_on_completed || false,
-            takeaway: t.takeaway || null,
-            notes: t.notes || null,
-            time_spent_minutes: t.time_spent_minutes || 0,
-            order_index: t.order_index || 0,
-            completed_at: t.completed_at || null,
-          },
-          { onConflict: "id" }
-        )
+        .update(updatePayload)
+        .eq("id", t.id)
+        .eq("user_id", currentUser.id)
         .then(({ error }: { error: unknown }) => {
-          if (error) console.error("Error persisting cyber topic to Supabase:", error);
+          if (error) console.error("Error updating cyber topic:", error);
         });
     }
   };
 
-  const addCyberTopic = (topicData: Omit<CyberTopic, "id">) => {
+  const addCyberTopic = async (topicData: Omit<CyberTopic, "id">) => {
     const newTopic: CyberTopic = {
       ...topicData,
       id: `ct-${Date.now()}`,
       created_at: new Date().toISOString(),
     };
     persistCyberTopics([...cyberTopics, newTopic]);
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      const basePayload = {
+        id: newTopic.id,
+        user_id: currentUser.id,
+        section: newTopic.section,
+        title: newTopic.title,
+        status: newTopic.status || "not_started",
+        notes: newTopic.notes || null,
+        time_spent_minutes: newTopic.time_spent_minutes || 0,
+        order_index: newTopic.order_index || 0,
+        completed_at: newTopic.completed_at || null,
+      };
+      try {
+        const { error } = await supabase.from("cyber_topics").insert(basePayload);
+        if (error) console.error("Supabase addCyberTopic error:", error);
+      } catch (err) {
+        console.error("Supabase addCyberTopic error:", err);
+      }
+    }
   };
 
   // 5. Research Papers Actions
-  const addResearchPaper = (paperData: Omit<ResearchPaper, "id">) => {
+  const addResearchPaper = async (paperData: Omit<ResearchPaper, "id">) => {
     const newPaper: ResearchPaper = {
       ...paperData,
       id: `paper-${Date.now()}`,
       created_at: new Date().toISOString(),
     };
     persistResearchPapers([newPaper, ...researchPapers]);
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        const { error } = await supabase.from("papers").insert({ ...newPaper, user_id: currentUser.id });
+        if (error) console.error("Supabase addResearchPaper error:", error);
+      } catch (err) {
+        console.error("Supabase addResearchPaper error:", err);
+      }
+    }
   };
 
-  const updateResearchPaper = (paper: ResearchPaper) => {
+  const updateResearchPaper = async (paper: ResearchPaper) => {
     const updated = researchPapers.map((p) => (p.id === paper.id ? paper : p));
     persistResearchPapers(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        const { error } = await supabase.from("papers").update(paper).eq("id", paper.id);
+        if (error) console.error("Supabase updateResearchPaper error:", error);
+      } catch (err) {
+        console.error("Supabase updateResearchPaper error:", err);
+      }
+    }
   };
 
-  const deleteResearchPaper = (paperId: string) => {
+  const deleteResearchPaper = async (paperId: string) => {
     persistResearchPapers(researchPapers.filter((p) => p.id !== paperId));
+
+    if (hasSupabase && supabase) {
+      try {
+        const { error } = await supabase.from("papers").delete().eq("id", paperId);
+        if (error) console.error("Supabase deleteResearchPaper error:", error);
+      } catch (err) {
+        console.error("Supabase deleteResearchPaper error:", err);
+      }
+    }
   };
 
   // 6. Side Projects Actions
-  const addSideProject = (projData: Omit<SideProject, "id">) => {
+  const addSideProject = async (projData: Omit<SideProject, "id">) => {
     const newProj: SideProject = {
       ...projData,
       id: `proj-${Date.now()}`,
       created_at: new Date().toISOString(),
     };
     persistSideProjects([newProj, ...sideProjects]);
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        const { error } = await supabase.from("side_projects").insert({ ...newProj, user_id: currentUser.id });
+        if (error) console.error("Supabase addSideProject error:", error);
+      } catch (err) {
+        console.error("Supabase addSideProject error:", err);
+      }
+    }
   };
 
-  const updateSideProject = (proj: SideProject) => {
+  const updateSideProject = async (proj: SideProject) => {
     const updated = sideProjects.map((p) => (p.id === proj.id ? proj : p));
     persistSideProjects(updated);
+
+    if (hasSupabase && supabase) {
+      try {
+        const { error } = await supabase.from("side_projects").update(proj).eq("id", proj.id);
+        if (error) console.error("Supabase updateSideProject error:", error);
+      } catch (err) {
+        console.error("Supabase updateSideProject error:", err);
+      }
+    }
   };
 
-  const deleteSideProject = (projId: string) => {
+  const deleteSideProject = async (projId: string) => {
     persistSideProjects(sideProjects.filter((p) => p.id !== projId));
+
+    if (hasSupabase && supabase) {
+      try {
+        const { error } = await supabase.from("side_projects").delete().eq("id", projId);
+        if (error) console.error("Supabase deleteSideProject error:", error);
+      } catch (err) {
+        console.error("Supabase deleteSideProject error:", err);
+      }
+    }
   };
 
   // 7. Weekly Reviews
-  const saveWeeklyReview = (review: Omit<WeeklyReview, "id" | "created_at"> & { id?: string; created_at?: string }) => {
+  const saveWeeklyReview = async (review: Omit<WeeklyReview, "id" | "created_at"> & { id?: string; created_at?: string }) => {
     const fullReview: WeeklyReview = {
       ...review,
       id: review.id || `wr-${Date.now()}`,
@@ -2076,15 +2192,86 @@ export function useAgencyState() {
       updated = [fullReview, ...weeklyReviews];
     }
     persistWeeklyReviews(updated);
+
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        const { error } = await supabase.from("weekly_reviews").upsert(
+          {
+            ...fullReview,
+            user_id: currentUser.id,
+          },
+          { onConflict: "id" }
+        );
+        if (error) console.error("Supabase saveWeeklyReview error:", error);
+      } catch (err) {
+        console.error("Supabase saveWeeklyReview error:", err);
+      }
+    }
   };
 
   // 8. Notifications
-  const updateNotificationSettings = (settings: NotificationSettings) => {
+  const updateNotificationSettings = async (settings: NotificationSettings) => {
     persistNotificationSettings(settings);
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        await supabase
+          .from("user_settings")
+          .upsert(
+            {
+              user_id: currentUser.id,
+              notification_settings: settings,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" }
+          );
+      } catch (err) {
+        console.error("Failed to update notification_settings in user_settings:", err);
+      }
+    }
   };
 
-  const updateDefaultTheme = (pref: ThemePreference) => {
+  const updateDefaultTheme = async (pref: ThemePreference) => {
     saveThemePreference(pref);
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        await supabase
+          .from("user_settings")
+          .upsert(
+            {
+              user_id: currentUser.id,
+              default_theme: pref,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" }
+          );
+      } catch (err) {
+        console.error("Failed to update default_theme in user_settings:", err);
+      }
+    }
+  };
+
+  const updateUserSettings = async (updates: {
+    animations_enabled?: boolean;
+    sound_enabled?: boolean;
+    default_theme?: ThemePreference;
+    notification_settings?: NotificationSettings;
+  }) => {
+    if (hasSupabase && supabase && currentUser?.id) {
+      try {
+        await supabase
+          .from("user_settings")
+          .upsert(
+            {
+              user_id: currentUser.id,
+              ...updates,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" }
+          );
+      } catch (err) {
+        console.error("Failed to update user_settings in Supabase:", err);
+      }
+    }
   };
 
   /**
@@ -2355,6 +2542,7 @@ export function useAgencyState() {
     deleteSideProject,
     saveWeeklyReview,
     updateNotificationSettings,
+    updateUserSettings,
     resetAllProgress,
   };
 }
