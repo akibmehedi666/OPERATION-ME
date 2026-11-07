@@ -58,6 +58,8 @@ import {
   getCanonicalProblemKey,
   normalizeCodeforcesHandle,
 } from "@/lib/codeforcesApi";
+import { ensureStructureData } from "@/lib/ensureStructure";
+import { ErrorToastItem } from "@/components/ui/ErrorToastContainer";
 
 const PRIORITY_WEIGHTS: Record<Priority, number> = {
   urgent: 4,
@@ -66,13 +68,15 @@ const PRIORITY_WEIGHTS: Record<Priority, number> = {
   low: 1,
 };
 
+// Tables wiped on Reset All Progress.
+// Structure tables (categories, courses, class_schedule, time_blocks, academic_events, recurring_rules, cyber_topics, user_settings)
+// are strictly PRESERVED and never deleted.
 export const RESET_PROGRESS_TABLES = [
   "missions",
   "cf_log",
   "lecture_logs",
   "papers",
   "side_projects",
-  "cyber_topics",
   "weekly_reviews",
   "xp_events",
   "streaks",
@@ -81,6 +85,17 @@ export const RESET_PROGRESS_TABLES = [
 export function useAgencyState() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
+  const [errorToasts, setErrorToasts] = useState<ErrorToastItem[]>([]);
+  const [structureLoadingError, setStructureLoadingError] = useState<string | null>(null);
+
+  const showErrorToast = (title: string, message: string) => {
+    const id = `err-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setErrorToasts((prev) => [...prev, { id, title, message, timestamp: Date.now() }]);
+  };
+
+  const dismissErrorToast = (id: string) => {
+    setErrorToasts((prev) => prev.filter((t) => t.id !== id));
+  };
   const [missions, setMissions] = useState<Mission[]>([]);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [schedule, setSchedule] = useState<ClassScheduleItem[]>(DEFAULT_SCHEDULE);
@@ -384,6 +399,24 @@ export function useAgencyState() {
     if (!supabase) return;
 
     try {
+      // 0. Ensure structure baseline tables are seeded for this user
+      try {
+        const structRes = await ensureStructureData(supabase, userId);
+        if (!structRes.success) {
+          const errMsg = structRes.error || "Failed to initialize structure tables";
+          console.error("[useAgencyState] Ensure structure error:", errMsg);
+          setStructureLoadingError(errMsg);
+          showErrorToast("Structure Synchronization", errMsg);
+        } else {
+          setStructureLoadingError(null);
+        }
+      } catch (structErr: unknown) {
+        const msg = structErr instanceof Error ? structErr.message : "Structure initialization failed";
+        console.error("[useAgencyState] Ensure structure exception:", msg);
+        setStructureLoadingError(msg);
+        showErrorToast("Structure Synchronization", msg);
+      }
+
       // 1. Fetch categories
       const { data: catData } = await supabase
         .from("categories")
@@ -1066,9 +1099,17 @@ export function useAgencyState() {
 
     if (hasSupabase && supabase && currentUser) {
       try {
-        await supabase.from("time_blocks").insert({ ...newBlock, user_id: currentUser.id });
-      } catch (e) {
+        const { error } = await supabase.from("time_blocks").insert({ ...newBlock, user_id: currentUser.id });
+        if (error) {
+          console.error("Supabase add time_block error:", error);
+          showErrorToast("Time Block Sync Failed", error.message);
+          throw new Error(error.message);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to add time block";
         console.error("Supabase add time_block error:", e);
+        showErrorToast("Time Block Sync Failed", msg);
+        throw e;
       }
     }
     return newBlock;
@@ -1080,9 +1121,17 @@ export function useAgencyState() {
 
     if (hasSupabase && supabase) {
       try {
-        await supabase.from("time_blocks").update(updates).eq("id", id);
-      } catch (e) {
+        const { error } = await supabase.from("time_blocks").update(updates).eq("id", id);
+        if (error) {
+          console.error("Supabase update time_block error:", error);
+          showErrorToast("Time Block Update Failed", error.message);
+          throw new Error(error.message);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to update time block";
         console.error("Supabase update time_block error:", e);
+        showErrorToast("Time Block Update Failed", msg);
+        throw e;
       }
     }
   };
@@ -1093,9 +1142,17 @@ export function useAgencyState() {
 
     if (hasSupabase && supabase) {
       try {
-        await supabase.from("time_blocks").delete().eq("id", id);
-      } catch (e) {
+        const { error } = await supabase.from("time_blocks").delete().eq("id", id);
+        if (error) {
+          console.error("Supabase delete time_block error:", error);
+          showErrorToast("Time Block Delete Failed", error.message);
+          throw new Error(error.message);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to delete time block";
         console.error("Supabase delete time_block error:", e);
+        showErrorToast("Time Block Delete Failed", msg);
+        throw e;
       }
     }
   };
@@ -1111,9 +1168,17 @@ export function useAgencyState() {
 
     if (hasSupabase && supabase && currentUser) {
       try {
-        await supabase.from("academic_events").insert({ ...newEvent, user_id: currentUser.id });
-      } catch (e) {
+        const { error } = await supabase.from("academic_events").insert({ ...newEvent, user_id: currentUser.id });
+        if (error) {
+          console.error("Supabase add academic_event error:", error);
+          showErrorToast("Key Date Sync Failed", error.message);
+          throw new Error(error.message);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to add academic event";
         console.error("Supabase add academic_event error:", e);
+        showErrorToast("Key Date Sync Failed", msg);
+        throw e;
       }
     }
     return newEvent;
@@ -1125,9 +1190,17 @@ export function useAgencyState() {
 
     if (hasSupabase && supabase) {
       try {
-        await supabase.from("academic_events").update(updates).eq("id", id);
-      } catch (e) {
+        const { error } = await supabase.from("academic_events").update(updates).eq("id", id);
+        if (error) {
+          console.error("Supabase update academic_event error:", error);
+          showErrorToast("Key Date Update Failed", error.message);
+          throw new Error(error.message);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to update academic event";
         console.error("Supabase update academic_event error:", e);
+        showErrorToast("Key Date Update Failed", msg);
+        throw e;
       }
     }
   };
@@ -1138,9 +1211,17 @@ export function useAgencyState() {
 
     if (hasSupabase && supabase) {
       try {
-        await supabase.from("academic_events").delete().eq("id", id);
-      } catch (e) {
+        const { error } = await supabase.from("academic_events").delete().eq("id", id);
+        if (error) {
+          console.error("Supabase delete academic_event error:", error);
+          showErrorToast("Key Date Delete Failed", error.message);
+          throw new Error(error.message);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to delete academic event";
         console.error("Supabase delete academic_event error:", e);
+        showErrorToast("Key Date Delete Failed", msg);
+        throw e;
       }
     }
   };
@@ -1278,10 +1359,13 @@ export function useAgencyState() {
         });
         if (error) {
           console.error("Supabase updateCourse error:", error);
+          showErrorToast("Course Update Failed", error.message);
           throw new Error(error.message);
         }
       } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to update course";
         console.error("Supabase update course failed:", e);
+        showErrorToast("Course Update Failed", msg);
         throw e;
       }
     }
@@ -1350,16 +1434,24 @@ export function useAgencyState() {
       // 4. Supabase sync
       if (hasSupabase && supabase && currentUser) {
         try {
-          await supabase.from("time_blocks").delete().eq("type", "tuition").is("override_date", null).eq("user_id", currentUser.id);
-          await supabase.from("time_blocks").insert(newTuitionBlocks.map((b) => ({ ...b, user_id: currentUser.id })));
-          await supabase.from("class_schedule").delete().eq("type", "tuition").eq("user_id", currentUser.id);
-          await supabase.from("class_schedule").insert(newScheduleItems.map((s) => ({ ...s, user_id: currentUser.id })));
+          const { error: e1 } = await supabase.from("time_blocks").delete().eq("type", "tuition").is("override_date", null).eq("user_id", currentUser.id);
+          if (e1) throw new Error(e1.message);
+          const { error: e2 } = await supabase.from("time_blocks").insert(newTuitionBlocks.map((b) => ({ ...b, user_id: currentUser.id })));
+          if (e2) throw new Error(e2.message);
+          const { error: e3 } = await supabase.from("class_schedule").delete().eq("type", "tuition").eq("user_id", currentUser.id);
+          if (e3) throw new Error(e3.message);
+          const { error: e4 } = await supabase.from("class_schedule").insert(newScheduleItems.map((s) => ({ ...s, user_id: currentUser.id })));
+          if (e4) throw new Error(e4.message);
           const prepRule = updatedRules.find((r) => r.rule_type === "tuition_prep");
           if (prepRule) {
-            await supabase.from("recurring_rules").update({ days_of_week: dayNumbers }).eq("id", prepRule.id);
+            const { error: e5 } = await supabase.from("recurring_rules").update({ days_of_week: dayNumbers }).eq("id", prepRule.id);
+            if (e5) throw new Error(e5.message);
           }
-        } catch (e) {
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Failed to update tuition schedule";
           console.error("Supabase tuition update error:", e);
+          showErrorToast("Tuition Schedule Sync Failed", msg);
+          throw e;
         }
       }
     } else if (scope === "this_week") {
@@ -1395,9 +1487,13 @@ export function useAgencyState() {
 
       if (hasSupabase && supabase && currentUser) {
         try {
-          await supabase.from("time_blocks").insert(overrideBlocks.map((b) => ({ ...b, user_id: currentUser.id })));
-        } catch (e) {
+          const { error } = await supabase.from("time_blocks").insert(overrideBlocks.map((b) => ({ ...b, user_id: currentUser.id })));
+          if (error) throw new Error(error.message);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Failed to save tuition override";
           console.error("Supabase this_week tuition override error:", e);
+          showErrorToast("Tuition Schedule Sync Failed", msg);
+          throw e;
         }
       }
     } else if (scope === "move_session" && targetDate) {
@@ -1424,9 +1520,13 @@ export function useAgencyState() {
 
       if (hasSupabase && supabase && currentUser) {
         try {
-          await supabase.from("time_blocks").insert({ ...overrideBlock, user_id: currentUser.id });
-        } catch (e) {
+          const { error } = await supabase.from("time_blocks").insert({ ...overrideBlock, user_id: currentUser.id });
+          if (error) throw new Error(error.message);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Failed to move tuition session";
           console.error("Supabase move_session tuition override error:", e);
+          showErrorToast("Tuition Schedule Sync Failed", msg);
+          throw e;
         }
       }
     }
@@ -2026,6 +2126,27 @@ export function useAgencyState() {
         })
       );
 
+      // Reset cyber_topics progress without deleting structure rows
+      try {
+        const { error: cyberResetErr } = await supabase
+          .from("cyber_topics")
+          .update({
+            status: "not_started",
+            time_spent_minutes: 0,
+            notes: null,
+            hands_on_completed: false,
+            takeaway: null,
+            completed_at: null,
+          })
+          .eq("user_id", uid);
+        if (cyberResetErr) {
+          deleteErrors.push(`[cyber_topics update]: ${cyberResetErr.message}`);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Cyber topics update failed";
+        deleteErrors.push(`[cyber_topics update]: ${msg}`);
+      }
+
       if (deleteErrors.length > 0) {
         const errorSummary = `Failed to reset cloud tables: ${deleteErrors.join("; ")}`;
         console.error("Error clearing Supabase progress:", errorSummary);
@@ -2065,9 +2186,51 @@ export function useAgencyState() {
     };
   };
 
+  const retryLoadStructure = async () => {
+    if (hasSupabase && supabase && currentUser) {
+      setStructureLoadingError(null);
+      await fetchSupabaseData(currentUser.id);
+    }
+  };
+
+  const deduplicateMissions = async (): Promise<{ removedCount: number }> => {
+    const seen = new Set<string>();
+    const keep: Mission[] = [];
+    const duplicateIds: string[] = [];
+
+    for (const m of missions) {
+      const key = `${(m.title || "").trim().toLowerCase()}|${m.deadline || ""}|${m.category_id || ""}`;
+      if (seen.has(key)) {
+        duplicateIds.push(m.id);
+      } else {
+        seen.add(key);
+        keep.push(m);
+      }
+    }
+
+    if (duplicateIds.length > 0) {
+      persistMissions(keep);
+      if (hasSupabase && supabase && currentUser?.id) {
+        try {
+          await supabase.from("missions").delete().in("id", duplicateIds);
+        } catch (e) {
+          console.error("Supabase deduplicate missions error:", e);
+        }
+      }
+    }
+
+    return { removedCount: duplicateIds.length };
+  };
+
   return {
     isAuthenticated,
     currentUser,
+    errorToasts,
+    showErrorToast,
+    dismissErrorToast,
+    structureLoadingError,
+    retryLoadStructure,
+    deduplicateMissions,
     missions,
     categories,
     schedule,

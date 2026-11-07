@@ -44,6 +44,25 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# scratch and QA artifacts
+qa-chrome-profile/
+qa-chrome-profile
+qa_report.json
+qa_session.json
+get_token.*
+read_cookies.*
+read_locked_cookies.*
+check_cookies.*
+search_*.cjs
+scan_*.cjs
+find_*.cjs
+read_*.cjs
+check_chrome_log.cjs
+inspect_page.*
+verify_local.mjs
+verify_app.mjs
+scratch/
+
 # vercel
 .vercel
 

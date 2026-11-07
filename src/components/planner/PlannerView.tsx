@@ -28,7 +28,9 @@ import {
   Plus, 
   Wand2, 
   ShieldAlert,
-  Sparkles
+  Sparkles,
+  AlertTriangle,
+  RefreshCw
 } from "lucide-react";
 
 interface PlannerViewProps {
@@ -36,6 +38,8 @@ interface PlannerViewProps {
   academicEvents: AcademicEvent[];
   missions: Mission[];
   categories: Category[];
+  structureLoadingError?: string | null;
+  onRetryLoad?: () => void;
   onAddTimeBlock: (block: Omit<TimeBlock, "id" | "created_at">) => void;
   onUpdateTimeBlock: (id: string, updates: Partial<TimeBlock>) => void;
   onDeleteTimeBlock: (id: string) => void;
@@ -63,6 +67,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   academicEvents,
   missions,
   categories,
+  structureLoadingError,
+  onRetryLoad,
   onAddTimeBlock,
   onUpdateTimeBlock,
   onDeleteTimeBlock,
@@ -313,7 +319,27 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       </div>
 
       {/* Main View Mode Content */}
-      {viewMode === "grid" ? (
+      {structureLoadingError || timeBlocks.length === 0 ? (
+        <div className="p-8 my-6 rounded-[3px] border border-amber-500/40 bg-amber-500/10 text-center flex flex-col items-center justify-center">
+          <AlertTriangle className="w-10 h-10 text-amber-500 mb-3 animate-pulse" />
+          <h3 className="text-base font-mono font-bold text-spy-text mb-1">
+            {structureLoadingError ? "Structure Synchronization Notice" : "Planner Grid Unpopulated"}
+          </h3>
+          <p className="text-xs font-mono text-spy-muted max-w-md mb-4 leading-relaxed">
+            {structureLoadingError ||
+              "Supabase structure tables returned 0 blocks for this session. Click below to retry seeding and synchronizing your routine."}
+          </p>
+          {onRetryLoad && (
+            <button
+              onClick={onRetryLoad}
+              className="px-4 py-2 text-xs font-mono font-bold rounded-[3px] bg-spy-green text-black hover:bg-spy-green/90 transition-colors shadow-sm flex items-center gap-2"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Synchronization</span>
+            </button>
+          )}
+        </div>
+      ) : viewMode === "grid" ? (
         <WeeklyGridView
           weekStartDate={currentWeekStart}
           timeBlocks={timeBlocks}

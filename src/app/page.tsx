@@ -40,6 +40,7 @@ import { SideProjectsView } from "@/components/projects/SideProjectsView";
 import { ProgressReviewView } from "@/components/review/ProgressReviewView";
 import { InsightsCard } from "@/components/dashboard/InsightsCard";
 import { NotificationToast } from "@/components/ui/NotificationToast";
+import { ErrorToastContainer } from "@/components/ui/ErrorToastContainer";
 import { getDueNotifications } from "@/lib/notificationScheduler";
 import { checkLocalDataToMigrate } from "@/lib/cloudMigration";
 import { CloudMigrationBanner } from "@/components/dashboard/CloudMigrationBanner";
@@ -140,6 +141,10 @@ export default function Home() {
     saveWeeklyReview,
     updateNotificationSettings,
     resetAllProgress,
+    errorToasts,
+    dismissErrorToast,
+    structureLoadingError,
+    retryLoadStructure,
   } = useAgencyState();
 
   const [initTimedOut, setInitTimedOut] = useState(false);
@@ -780,6 +785,8 @@ export default function Home() {
                   academicEvents={academicEvents}
                   missions={missions}
                   categories={categories}
+                  structureLoadingError={structureLoadingError}
+                  onRetryLoad={retryLoadStructure}
                   onAddTimeBlock={addTimeBlock}
                   onUpdateTimeBlock={updateTimeBlock}
                   onDeleteTimeBlock={deleteTimeBlock}
@@ -1054,6 +1061,9 @@ export default function Home() {
 
         {/* Global In-App Notifications Toast */}
         <NotificationToast alerts={dueNotifications} />
+
+        {/* Global Error Alert Toasts */}
+        <ErrorToastContainer toasts={errorToasts} onDismiss={dismissErrorToast} />
       </div>
   );
 }

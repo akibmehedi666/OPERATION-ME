@@ -671,20 +671,17 @@ export async function migrateLocalDataToSupabase(
 }
 
 /**
- * Deletes operational localStorage keys ONLY when user explicitly confirms.
+ * Deletes operational progress localStorage keys ONLY when user explicitly confirms.
+ * NEVER deletes structure tables: courses, time blocks, academic events, recurring rules, cyber roadmap, categories.
  * Preserves user's UI theme and animation preferences.
  */
 export function clearMigratedLocalData(userId?: string): void {
   if (typeof window === "undefined") return;
 
+  // STRICT RULE: Only clear operational progress data. Never delete structure tables.
   const keysToDelete = [
     "op_me_missions",
-    "op_me_courses",
-    "op_me_time_blocks",
-    "op_me_academic_events",
-    "op_me_recurring_rules",
     "op_me_lecture_logs",
-    "op_me_cyber_topics",
     "op_me_papers",
     "op_me_side_projects",
     "op_me_cf_logs",
