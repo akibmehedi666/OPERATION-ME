@@ -299,7 +299,7 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
     default_theme TEXT DEFAULT 'dark' CHECK (default_theme IN ('dark', 'light', 'system')),
     animations_enabled BOOLEAN DEFAULT true,
     sound_enabled BOOLEAN DEFAULT true,
-    cf_handle TEXT DEFAULT 'tourist',
+    cf_handle TEXT DEFAULT '',
     notification_settings JSONB DEFAULT '{}'::jsonb,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
