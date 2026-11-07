@@ -7,7 +7,7 @@ import { Mission, Category, ClassScheduleItem, DayOfWeek, TimeBlock, AcademicEve
 import { formatTime12, formatTimeRange12 } from "@/lib/formatters";
 import { getCategoryTheme } from "@/lib/categoryTheme";
 import { Button } from "@/components/ui/Button";
-import { resolveDaySchedule } from "@/lib/scheduleResolver";
+import { resolveDaySchedule, formatDateKey, getLocalTimeString } from "@/lib/scheduleResolver";
 
 const DAY_KEYS: DayOfWeek[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
@@ -91,7 +91,7 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
 
       // Has scheduled start time today
       if (m.scheduled_start) {
-        const startKey = m.scheduled_start.slice(0, 10);
+        const startKey = formatDateKey(m.scheduled_start);
         if (startKey === todayDateKey) return true;
       }
 
@@ -115,18 +115,14 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
       const cat = categories.find((c) => c.id === m.category_id);
 
       if (m.scheduled_start) {
-        const sDate = new Date(m.scheduled_start);
-        const hh = String(sDate.getHours()).padStart(2, "0");
-        const mm = String(sDate.getMinutes()).padStart(2, "0");
-        sortTime = `${hh}:${mm}`;
+        const startStr = getLocalTimeString(m.scheduled_start);
+        sortTime = startStr || "23:59";
 
         if (m.scheduled_end) {
-          const eDate = new Date(m.scheduled_end);
-          const ehh = String(eDate.getHours()).padStart(2, "0");
-          const emm = String(eDate.getMinutes()).padStart(2, "0");
-          timeDisplay = `${formatTime12(`${hh}:${mm}`)} - ${formatTime12(`${ehh}:${emm}`)}`;
+          const endStr = getLocalTimeString(m.scheduled_end);
+          timeDisplay = `${formatTime12(startStr)} - ${formatTime12(endStr)}`;
         } else {
-          timeDisplay = formatTime12(`${hh}:${mm}`);
+          timeDisplay = formatTime12(startStr);
         }
       } else if (m.deadline) {
         const d = new Date(m.deadline);

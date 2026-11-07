@@ -32,14 +32,27 @@ export const WEEKDAY_TO_NAME: Record<DayOfWeek, string> = {
 
 export function formatDateKey(date: Date | string): string {
   if (typeof date === "string") {
-    if (date.length === 10 && date.includes("-")) return date;
+    if (date.length === 10 && date.includes("-") && !date.includes("T")) return date;
     const d = new Date(date);
-    return d.toISOString().slice(0, 10);
+    if (isNaN(d.getTime())) return date;
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+export function getLocalTimeString(dateInput: Date | string): string {
+  if (!dateInput) return "";
+  const d = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+  if (isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
 export function getWeekdayFromDate(date: Date | string): DayOfWeek {
@@ -225,9 +238,7 @@ export function resolveDaySchedule(
         const mDate = formatDateKey(m.scheduled_start);
         if (mDate === dateStr) {
           // Check if time overlaps or falls within block
-          const mTime = m.scheduled_start.includes("T")
-            ? m.scheduled_start.split("T")[1].slice(0, 5)
-            : "";
+          const mTime = getLocalTimeString(m.scheduled_start);
           if (mTime && mTime >= block.start_time && mTime < block.end_time) {
             return true;
           }
@@ -599,12 +610,8 @@ export function checkScheduleOverlap(
     if (m.scheduled_start && m.scheduled_end) {
       const mDate = formatDateKey(m.scheduled_start);
       if (mDate === dateStr) {
-        const mStartStr = m.scheduled_start.includes("T")
-          ? m.scheduled_start.split("T")[1].slice(0, 5)
-          : "";
-        const mEndStr = m.scheduled_end.includes("T")
-          ? m.scheduled_end.split("T")[1].slice(0, 5)
-          : "";
+        const mStartStr = getLocalTimeString(m.scheduled_start);
+        const mEndStr = getLocalTimeString(m.scheduled_end);
         if (mStartStr && mEndStr) {
           const [msh, msm] = mStartStr.split(":").map(Number);
           const [meh, mem] = mEndStr.split(":").map(Number);

@@ -9,7 +9,8 @@ import {
 import { 
   resolveDaySchedule, 
   getDaysOfWeek, 
-  formatDateKey 
+  formatDateKey,
+  getLocalTimeString 
 } from "@/lib/scheduleResolver";
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -104,9 +105,7 @@ export function calculateBlockFill(
     if (m.scheduled_start) {
       const mDate = formatDateKey(m.scheduled_start);
       if (mDate === blockDateStr) {
-        const mTime = m.scheduled_start.includes("T")
-          ? m.scheduled_start.split("T")[1].slice(0, 5)
-          : "";
+        const mTime = getLocalTimeString(m.scheduled_start);
         if (mTime && mTime >= block.start_time && mTime < block.end_time) {
           return true;
         }

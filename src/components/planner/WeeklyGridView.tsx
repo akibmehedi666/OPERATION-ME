@@ -11,7 +11,8 @@ import {
 import { 
   resolveDaySchedule, 
   getDaysOfWeek, 
-  formatDateKey 
+  formatDateKey,
+  getLocalTimeString 
 } from "@/lib/scheduleResolver";
 import { 
   calculateBlockFill 
@@ -583,12 +584,8 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
 
                   {/* Render Standalone Scheduled Missions (exact start & end time) */}
                   {standaloneMissions.map((mission) => {
-                    const startStr = mission.scheduled_start!.includes("T")
-                      ? mission.scheduled_start!.split("T")[1].slice(0, 5)
-                      : "14:00";
-                    const endStr = mission.scheduled_end!.includes("T")
-                      ? mission.scheduled_end!.split("T")[1].slice(0, 5)
-                      : addMinutes(startStr, 60);
+                    const startStr = getLocalTimeString(mission.scheduled_start!) || "14:00";
+                    const endStr = getLocalTimeString(mission.scheduled_end!) || addMinutes(startStr, 60);
                     const style = getBlockStyles(startStr, endStr);
                     const isCompleted = mission.status === "completed";
 
