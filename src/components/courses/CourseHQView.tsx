@@ -13,7 +13,7 @@ import {
   MapPin,
   Plus,
   Trash2,
-  User,
+  Edit3,
 } from "lucide-react";
 import {
   Course,
@@ -29,6 +29,7 @@ import { getCategoryTheme } from "@/lib/categoryTheme";
 import { Button } from "@/components/ui/Button";
 import { LectureLogModal } from "./LectureLogModal";
 import { CourseResourceModal } from "./CourseResourceModal";
+import { EditCourseModal } from "./EditCourseModal";
 
 interface CourseHQViewProps {
   courses: Course[];
@@ -47,6 +48,7 @@ interface CourseHQViewProps {
   onDeleteCourseResource: (courseId: string, resourceId: string) => void;
   onCompleteMission: (mission: Mission) => void;
   onAddMissionForCourse: (course: Course) => void;
+  onUpdateCourse?: (courseId: string, updates: Partial<Course>) => Promise<void> | void;
 }
 
 export const CourseHQView: React.FC<CourseHQViewProps> = ({
@@ -65,6 +67,7 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
   onDeleteCourseResource,
   onCompleteMission,
   onAddMissionForCourse,
+  onUpdateCourse,
 }) => {
   const [activeCourseId, setActiveCourseId] = useState<string>(() => {
     return selectedCourseId || courses[0]?.id || "course-os";
@@ -76,6 +79,7 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
   const [editingLecture, setEditingLecture] = useState<LectureLog | null>(null);
   const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isEditCourseModalOpen, setIsEditCourseModalOpen] = useState(false);
 
   // Sync when selectedCourseId changes from outside
   React.useEffect(() => {
@@ -239,12 +243,6 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
                   <span>Room {activeCourse.room}</span>
                 </div>
               )}
-              {activeCourse.faculty && (
-                <div className="flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-spy-dim" />
-                  <span>{activeCourse.faculty}</span>
-                </div>
-              )}
               {activeCourse.class_times && (
                 <div className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-spy-dim" />
@@ -254,7 +252,7 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
             </div>
           </div>
 
-          {/* Right: Live Countdown Banner + Quick Add */}
+          {/* Right: Live Countdown Banner + Actions */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             {countdownInfo && (
               <div
@@ -278,6 +276,20 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
                   {countdownInfo.nextDateText} &middot; {countdownInfo.room}
                 </div>
               </div>
+            )}
+
+            {/* Edit Course Button */}
+            {onUpdateCourse && (
+              <Button
+                variant="stealth"
+                size="sm"
+                onClick={() => setIsEditCourseModalOpen(true)}
+                className="border border-spy-border hover:border-spy-green text-spy-muted hover:text-spy-text"
+                title="Edit Course Information"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit Course</span>
+              </Button>
             )}
 
             {/* Quick Add Dropdown */}
@@ -802,6 +814,15 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
         onClose={() => setIsResourceModalOpen(false)}
         onSave={(res) => onAddCourseResource(activeCourse.id, res)}
       />
+
+      {onUpdateCourse && (
+        <EditCourseModal
+          isOpen={isEditCourseModalOpen}
+          course={activeCourse}
+          onSave={onUpdateCourse}
+          onClose={() => setIsEditCourseModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

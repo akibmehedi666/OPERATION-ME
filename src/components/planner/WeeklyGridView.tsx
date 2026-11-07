@@ -25,7 +25,9 @@ import {
   ShieldAlert,
   CreditCard,
   Laptop,
-  CheckCircle2
+  CheckCircle2,
+  Target,
+  Flag
 } from "lucide-react";
 
 interface WeeklyGridViewProps {
@@ -39,6 +41,8 @@ interface WeeklyGridViewProps {
   onConfirmAutoSchedule: (missionId: string) => void;
   onCompleteMission: (mission: Mission) => void;
   onOpenCourseHQ?: (courseId: string) => void;
+  onEditMission?: (mission: Mission) => void;
+  onEditTuition?: (slot: { day: DayOfWeek; startTime: string; endTime: string; targetDate?: string }) => void;
 }
 
 const categoryToCourseMap: Record<string, string> = {
@@ -49,6 +53,14 @@ const categoryToCourseMap: Record<string, string> = {
   "cat-5": "course-stat",
   "cat-6": "course-fydp",
 };
+
+function addMinutes(timeStr: string, minutes: number): string {
+  const [h, m] = (timeStr || "14:00").split(":").map(Number);
+  const total = (h || 0) * 60 + (m || 0) + minutes;
+  const newH = Math.min(23, Math.floor(total / 60));
+  const newM = total % 60;
+  return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+}
 
 const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]; // 9 AM to 10 PM
 const TOTAL_MINUTES = 13 * 60; // 780 minutes
@@ -64,6 +76,8 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
   onConfirmAutoSchedule,
   onCompleteMission,
   onOpenCourseHQ,
+  onEditMission,
+  onEditTuition,
 }) => {
   const [selectedMobileDayIndex, setSelectedMobileDayIndex] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -346,6 +360,19 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
             {resolvedDays.map(({ dateStr, weekday, blocks }) => {
               const isToday = dateStr === todayKey;
 
+              // Standalone missions with exact scheduled start/end on this date
+              const standaloneMissions = missions.filter((m) => {
+                if (!m.scheduled_start || !m.scheduled_end) return false;
+                return formatDateKey(m.scheduled_start) === dateStr && !m.scheduled_block_id;
+              });
+
+              // Deadline-only missions on this date
+              const deadlineMissions = missions.filter((m) => {
+                if (m.scheduled_start) return false;
+                if (!m.deadline) return false;
+                return formatDateKey(m.deadline) === dateStr;
+              });
+
               return (
                 <div
                   key={dateStr}
@@ -389,6 +416,7 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                     const theme = getBlockThemeClasses(block.type);
                     const fill = calculateBlockFill(block, dateStr, missions);
                     const isFlexible = block.type === "study" || block.type === "project" || block.type === "cp";
+                    const isTuition = block.type === "tuition";
                     const isShortBlock = style.durationMinutes < 60;
 
                     return (
@@ -399,14 +427,29 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                           if (block.type === "class" && onOpenCourseHQ) {
                             const courseId = categoryToCourseMap[block.default_category || ""] || "course-os";
                             onOpenCourseHQ(courseId);
+                          } else if (isTuition && onEditTuition) {
+                            onEditTuition({
+                              day: weekday,
+                              startTime: block.start_time,
+                              endTime: block.end_time,
+                              targetDate: dateStr,
+                            });
                           } else if (isFlexible) {
                             onEditBlock(block, dateStr);
                           }
                         }}
                         className={`absolute inset-x-1 rounded-[6px] border p-2 pl-3 overflow-hidden transition-all shadow-xs flex flex-col justify-between group z-10 ${
                           theme.card
-                        } ${isFlexible ? "cursor-pointer hover:ring-1 hover:ring-spy-green/50" : ""}`}
-                        title={`${block.label} (${formatTimeRange12(block.start_time, block.end_time)})`}
+                        } ${
+                          isFlexible
+                            ? "cursor-pointer hover:ring-1 hover:ring-spy-green/50"
+                            : isTuition
+                            ? "cursor-pointer hover:ring-1 hover:ring-yellow-500/50"
+                            : ""
+                        }`}
+                        title={`${block.label} (${formatTimeRange12(block.start_time, block.end_time)})${
+                          isTuition ? " - Click to edit tuition routine" : ""
+                        }`}
                       >
                         {/* 3px Left Accent Bar in Category Color */}
                         <div
@@ -452,8 +495,11 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                               return (
                                 <div
                                   key={mission.id}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className={`p-1 rounded-[3px] border text-[10px] font-sans flex items-center justify-between gap-1 transition-all ${
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onEditMission) onEditMission(mission);
+                                  }}
+                                  className={`p-1 rounded-[3px] border text-[10px] font-sans flex items-center justify-between gap-1 transition-all cursor-pointer ${
                                     isCompleted
                                       ? "opacity-60 bg-black/5 dark:bg-white/5 line-through border-spy-border"
                                       : isMissed
@@ -480,7 +526,10 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                                     {mission.is_auto_scheduled ? (
                                       <button
                                         type="button"
-                                        onClick={() => onConfirmAutoSchedule(mission.id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onConfirmAutoSchedule(mission.id);
+                                        }}
                                         className="px-1 py-0.2 text-[9px] font-mono font-bold bg-[#14663a] text-white dark:bg-spy-green dark:text-black rounded-[2px]"
                                         title="Confirm suggestion"
                                       >
@@ -489,7 +538,10 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                                     ) : !isCompleted ? (
                                       <button
                                         type="button"
-                                        onClick={() => onCompleteMission(mission)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onCompleteMission(mission);
+                                        }}
                                         className="p-1 rounded-[2px] bg-spy-green/20 hover:bg-spy-green text-spy-green hover:text-black transition-colors"
                                         title="Accomplish target"
                                       >
@@ -525,6 +577,91 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                             </button>
                           </div>
                         )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Render Standalone Scheduled Missions (exact start & end time) */}
+                  {standaloneMissions.map((mission) => {
+                    const startStr = mission.scheduled_start!.includes("T")
+                      ? mission.scheduled_start!.split("T")[1].slice(0, 5)
+                      : "14:00";
+                    const endStr = mission.scheduled_end!.includes("T")
+                      ? mission.scheduled_end!.split("T")[1].slice(0, 5)
+                      : addMinutes(startStr, 60);
+                    const style = getBlockStyles(startStr, endStr);
+                    const isCompleted = mission.status === "completed";
+
+                    return (
+                      <div
+                        key={`mission-${mission.id}`}
+                        style={{ top: style.top, height: style.height }}
+                        onClick={() => onEditMission && onEditMission(mission)}
+                        className={`absolute inset-x-1 rounded-[6px] border border-spy-green/50 p-2 pl-3 overflow-hidden transition-all shadow-xs flex flex-col justify-between group z-20 cursor-pointer bg-spy-surface2/90 hover:border-spy-green hover:shadow-md ${
+                          isCompleted ? "opacity-60 line-through" : ""
+                        }`}
+                        title={`${mission.title} (${formatTime12(startStr)} - ${formatTime12(endStr)})`}
+                      >
+                        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-spy-green rounded-l-[5px]" />
+                        <div>
+                          <div className="flex items-center justify-between gap-1 text-[10px] font-mono leading-tight mb-0.5 text-spy-green">
+                            <span className="truncate flex items-center gap-1 font-bold">
+                              <Target className="w-3 h-3" />
+                              {formatTime12(startStr)} - {formatTime12(endStr)}
+                            </span>
+                            <span className="text-[9px] bg-spy-green/20 text-spy-green px-1 rounded-[2px] font-bold">
+                              +{mission.xp} XP
+                            </span>
+                          </div>
+                          <div className="font-sans font-semibold text-[11px] sm:text-[12px] leading-tight text-spy-text truncate">
+                            {mission.title}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] font-mono pt-1 text-spy-muted">
+                          <span className="truncate opacity-75">{mission.codename}</span>
+                          {!isCompleted ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onCompleteMission(mission);
+                              }}
+                              className="p-1 rounded-[2px] bg-spy-green/20 hover:bg-spy-green text-spy-green hover:text-black transition-colors"
+                              title="Complete mission"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                          ) : (
+                            <CheckCircle2 className="w-3 h-3 text-spy-green" />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Render Deadline Markers on Grid */}
+                  {deadlineMissions.map((mission) => {
+                    const d = new Date(mission.deadline!);
+                    const hh = d.getHours();
+                    const mm = d.getMinutes();
+                    const timeStr = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+                    const style = getBlockStyles(timeStr, addMinutes(timeStr, 20));
+                    const isCompleted = mission.status === "completed";
+
+                    return (
+                      <div
+                        key={`deadline-${mission.id}`}
+                        style={{ top: style.top }}
+                        onClick={() => onEditMission && onEditMission(mission)}
+                        className={`absolute inset-x-2 -translate-y-1/2 z-25 flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] border border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300 font-mono text-[9px] cursor-pointer hover:bg-amber-500/25 transition-all shadow-xs ${
+                          isCompleted ? "opacity-50 line-through" : ""
+                        }`}
+                        title={`Deadline: ${mission.title} (${formatTime12(d)})`}
+                      >
+                        <Flag className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                        <span className="truncate font-semibold flex-1">
+                          {formatTime12(d)}: {mission.title}
+                        </span>
                       </div>
                     );
                   })}

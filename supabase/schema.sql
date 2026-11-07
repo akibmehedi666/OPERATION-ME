@@ -50,13 +50,13 @@ CREATE TABLE IF NOT EXISTS public.missions (
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     codename TEXT,
-    category_id TEXT REFERENCES public.categories(id) ON DELETE SET NULL,
+    category_id TEXT,
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
     deadline TIMESTAMPTZ,
     notes TEXT,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('locked', 'active', 'completed', 'failed')),
     xp INTEGER NOT NULL DEFAULT 50,
-    recurring_rule_id TEXT REFERENCES public.recurring_rules(id) ON DELETE SET NULL,
+    recurring_rule_id TEXT,
     auto_generated_date DATE,
     course_id TEXT,
     project_id TEXT,
@@ -129,7 +129,6 @@ CREATE TABLE IF NOT EXISTS public.courses (
     name TEXT NOT NULL,
     section TEXT,
     room TEXT,
-    faculty TEXT,
     category_id TEXT,
     color TEXT,
     class_times TEXT,
@@ -473,3 +472,44 @@ CREATE INDEX IF NOT EXISTS idx_side_projects_user ON public.side_projects(user_i
 CREATE INDEX IF NOT EXISTS idx_cyber_topics_user ON public.cyber_topics(user_id, section);
 CREATE INDEX IF NOT EXISTS idx_weekly_reviews_user ON public.weekly_reviews(user_id, week_start_date);
 CREATE INDEX IF NOT EXISTS idx_xp_events_user ON public.xp_events(user_id);
+
+-- ====================================================================
+-- IDEMPOTENT CONSTRAINTS & COLUMNS CLEANUP MIGRATION
+-- ====================================================================
+ALTER TABLE public.missions DROP CONSTRAINT IF EXISTS missions_category_id_fkey;
+ALTER TABLE public.missions DROP CONSTRAINT IF EXISTS missions_recurring_rule_id_fkey;
+ALTER TABLE public.recurring_rules DROP CONSTRAINT IF EXISTS recurring_rules_category_id_fkey;
+ALTER TABLE public.courses DROP COLUMN IF EXISTS faculty;
+
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS scheduled_start TIMESTAMPTZ;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS scheduled_end TIMESTAMPTZ;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS scheduled_block_id TEXT;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS is_auto_scheduled BOOLEAN DEFAULT false;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS completion_note TEXT;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS time_spent_minutes INTEGER;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS course_id TEXT;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS project_id TEXT;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS paper_id TEXT;
+ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS cf_log_id TEXT;
+
+-- Seed default categories for global reference
+INSERT INTO public.categories (id, user_id, name, codename, color, icon) VALUES
+  ('cat-1', NULL, 'Operating Systems', 'CAT-OS', '#3b82f6', 'Cpu'),
+  ('cat-2', NULL, 'Operating Systems Lab', 'CAT-OS-LAB', '#60a5fa', 'Terminal'),
+  ('cat-3', NULL, 'Engineering Economics', 'CAT-ECON', '#f59e0b', 'TrendingUp'),
+  ('cat-4', NULL, 'Digital Image Processing', 'CAT-DIP', '#8b5cf6', 'Camera'),
+  ('cat-5', NULL, 'Mathematical Analysis & Statistics', 'CAT-STAT', '#ec4899', 'Calculator'),
+  ('cat-6', NULL, 'Final Year Design Project I', 'CAT-FYDP', '#ef4444', 'Rocket'),
+  ('cat-7', NULL, 'Codeforces / CP', 'CAT-CF', '#10b981', 'Code'),
+  ('cat-8', NULL, 'Cybersecurity', 'CAT-CYBER', '#06b6d4', 'Shield'),
+  ('cat-9', NULL, 'Research / Paper Writing', 'CAT-RESEARCH', '#84cc16', 'FileText'),
+  ('cat-10', NULL, 'Side Projects', 'CAT-PROJECT', '#a855f7', 'FolderGit2'),
+  ('cat-11', NULL, 'Tuition', 'CAT-TUITION', '#eab308', 'GraduationCap'),
+  ('cat-12', NULL, 'General Routine', 'CAT-GENERAL', '#64748b', 'Clock')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  codename = EXCLUDED.codename,
+  color = EXCLUDED.color,
+  icon = EXCLUDED.icon;
+

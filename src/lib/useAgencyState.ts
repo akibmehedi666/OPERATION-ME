@@ -18,7 +18,14 @@ import {
   SideProject,
   WeeklyReview,
   NotificationSettings,
+  DayOfWeek,
 } from "@/types/database";
+import { 
+  getDaysOfWeek, 
+  getWeekStartDate, 
+  getWeekdayFromDate, 
+  formatDateKey 
+} from "@/lib/scheduleResolver";
 import { 
   DEFAULT_CATEGORIES, 
   DEFAULT_SCHEDULE, 
@@ -690,95 +697,161 @@ export function useAgencyState() {
     setCurrentUser(null);
   };
 
-  // Add Mission
-  const addMission = async (missionData: Partial<Mission>) => {
+  // Add Mission (Transactional: writes to Supabase first in cloud mode)
+  const addMission = async (
+    missionData: Partial<Mission>
+  ): Promise<{ success: boolean; error?: string; mission?: Mission }> => {
+    const rawCategoryId = missionData.category_id;
+    const cleanCategoryId =
+      rawCategoryId && rawCategoryId.trim() !== "" ? rawCategoryId.trim() : null;
+
     const newMission: Mission = {
-      id: "m-" + Date.now(),
+      id: missionData.id || "m-" + Date.now(),
       title: missionData.title || "Untitled Mission",
       codename: missionData.codename || `OP-${Date.now().toString().slice(-4)}`,
-      category_id: missionData.category_id || null,
+      category_id: cleanCategoryId,
       priority: missionData.priority || "medium",
       deadline: missionData.deadline || null,
       notes: missionData.notes || null,
       status: missionData.status || "active",
       xp: missionData.xp || 50,
+      scheduled_start: missionData.scheduled_start || null,
+      scheduled_end: missionData.scheduled_end || null,
+      scheduled_block_id: missionData.scheduled_block_id || null,
+      is_auto_scheduled: missionData.is_auto_scheduled || false,
+      course_id: missionData.course_id || null,
+      project_id: missionData.project_id || null,
+      paper_id: missionData.paper_id || null,
+      cf_log_id: missionData.cf_log_id || null,
       created_at: new Date().toISOString(),
     };
 
     if (hasSupabase && supabase && currentUser) {
       try {
+        const payload: Record<string, unknown> = {
+          user_id: currentUser.id,
+          title: newMission.title,
+          codename: newMission.codename,
+          category_id: newMission.category_id,
+          priority: newMission.priority,
+          deadline: newMission.deadline,
+          notes: newMission.notes,
+          status: newMission.status,
+          xp: newMission.xp,
+          scheduled_start: newMission.scheduled_start,
+          scheduled_end: newMission.scheduled_end,
+          scheduled_block_id: newMission.scheduled_block_id,
+          is_auto_scheduled: newMission.is_auto_scheduled,
+          course_id: newMission.course_id,
+          project_id: newMission.project_id,
+          paper_id: newMission.paper_id,
+          cf_log_id: newMission.cf_log_id,
+        };
+
         const { data, error } = await supabase
           .from("missions")
-          .insert({
-            user_id: currentUser.id,
-            title: newMission.title,
-            codename: newMission.codename,
-            category_id: newMission.category_id,
-            priority: newMission.priority,
-            deadline: newMission.deadline,
-            notes: newMission.notes,
-            status: newMission.status,
-            xp: newMission.xp,
-          })
+          .insert(payload)
           .select()
           .single();
 
-        if (!error && data) {
-          persistMissions([data, ...missions]);
-          return;
+        if (error) {
+          console.error("Supabase insert mission error:", error);
+          return { success: false, error: error.message || "Failed to persist mission in Supabase" };
         }
-      } catch (e) {
-        console.error("Supabase insert mission error:", e);
+
+        if (data) {
+          persistMissions([data, ...missions]);
+          return { success: true, mission: data };
+        }
+      } catch (e: unknown) {
+        console.error("Supabase insert mission exception:", e);
+        const errMessage = e instanceof Error ? e.message : "Failed to insert mission in cloud database";
+        return { success: false, error: errMessage };
       }
     }
 
     persistMissions([newMission, ...missions]);
+    return { success: true, mission: newMission };
   };
 
-  // Edit Mission
-  const editMission = async (missionData: Partial<Mission>) => {
-    if (!missionData.id) return;
+  // Edit Mission (Transactional: writes to Supabase first in cloud mode)
+  const editMission = async (
+    missionData: Partial<Mission>
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!missionData.id) return { success: false, error: "Missing mission identifier" };
+
+    if (hasSupabase && supabase && currentUser) {
+      try {
+        const rawCategoryId = missionData.category_id;
+        const cleanCategoryId =
+          rawCategoryId !== undefined
+            ? rawCategoryId && rawCategoryId.trim() !== ""
+              ? rawCategoryId.trim()
+              : null
+            : undefined;
+
+        const updatePayload: Record<string, unknown> = {};
+        if (missionData.title !== undefined) updatePayload.title = missionData.title;
+        if (missionData.codename !== undefined) updatePayload.codename = missionData.codename;
+        if (cleanCategoryId !== undefined) updatePayload.category_id = cleanCategoryId;
+        if (missionData.priority !== undefined) updatePayload.priority = missionData.priority;
+        if (missionData.deadline !== undefined) updatePayload.deadline = missionData.deadline;
+        if (missionData.notes !== undefined) updatePayload.notes = missionData.notes;
+        if (missionData.status !== undefined) updatePayload.status = missionData.status;
+        if (missionData.xp !== undefined) updatePayload.xp = missionData.xp;
+        if (missionData.scheduled_start !== undefined) updatePayload.scheduled_start = missionData.scheduled_start;
+        if (missionData.scheduled_end !== undefined) updatePayload.scheduled_end = missionData.scheduled_end;
+        if (missionData.scheduled_block_id !== undefined) updatePayload.scheduled_block_id = missionData.scheduled_block_id;
+        if (missionData.is_auto_scheduled !== undefined) updatePayload.is_auto_scheduled = missionData.is_auto_scheduled;
+        if (missionData.course_id !== undefined) updatePayload.course_id = missionData.course_id;
+        if (missionData.project_id !== undefined) updatePayload.project_id = missionData.project_id;
+        if (missionData.paper_id !== undefined) updatePayload.paper_id = missionData.paper_id;
+        if (missionData.cf_log_id !== undefined) updatePayload.cf_log_id = missionData.cf_log_id;
+
+        const { error } = await supabase
+          .from("missions")
+          .update(updatePayload)
+          .eq("id", missionData.id);
+
+        if (error) {
+          console.error("Supabase update error:", error);
+          return { success: false, error: error.message };
+        }
+      } catch (e: unknown) {
+        console.error("Supabase update error:", e);
+        const errMessage = e instanceof Error ? e.message : "Failed to update mission in cloud database";
+        return { success: false, error: errMessage };
+      }
+    }
 
     const updated = missions.map((m) =>
       m.id === missionData.id ? { ...m, ...missionData } : m
     );
-
-    if (hasSupabase && supabase && currentUser) {
-      try {
-        await supabase
-          .from("missions")
-          .update({
-            title: missionData.title,
-            codename: missionData.codename,
-            category_id: missionData.category_id,
-            priority: missionData.priority,
-            deadline: missionData.deadline,
-            notes: missionData.notes,
-            status: missionData.status,
-            xp: missionData.xp,
-          })
-          .eq("id", missionData.id);
-      } catch (e) {
-        console.error("Supabase update error:", e);
-      }
-    }
-
     persistMissions(updated);
+    return { success: true };
   };
 
-  // Delete Mission
-  const deleteMission = async (missionId: string) => {
-    const updated = missions.filter((m) => m.id !== missionId);
-
-    if (hasSupabase && supabase) {
+  // Delete Mission (Transactional: writes to Supabase first in cloud mode)
+  const deleteMission = async (
+    missionId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (hasSupabase && supabase && currentUser) {
       try {
-        await supabase.from("missions").delete().eq("id", missionId);
-      } catch (e) {
+        const { error } = await supabase.from("missions").delete().eq("id", missionId);
+        if (error) {
+          console.error("Supabase delete error:", error);
+          return { success: false, error: error.message };
+        }
+      } catch (e: unknown) {
         console.error("Supabase delete error:", e);
+        const errMessage = e instanceof Error ? e.message : "Failed to delete mission in cloud database";
+        return { success: false, error: errMessage };
       }
     }
 
+    const updated = missions.filter((m) => m.id !== missionId);
     persistMissions(updated);
+    return { success: true };
   };
 
   // Set as Active Mission
@@ -1163,6 +1236,13 @@ export function useAgencyState() {
     return result.scheduledCount;
   };
 
+  const persistSchedule = (updated: ClassScheduleItem[]) => {
+    setSchedule(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("op_me_schedule", JSON.stringify(updated));
+    }
+  };
+
   const persistRecurringRules = (rules: RecurringRule[]) => {
     setRecurringRules(rules);
     if (typeof window !== "undefined") {
@@ -1174,6 +1254,181 @@ export function useAgencyState() {
     setCourses(updated);
     if (typeof window !== "undefined") {
       localStorage.setItem("op_me_courses", JSON.stringify(updated));
+    }
+  };
+
+  const updateCourse = async (courseId: string, updates: Partial<Course>) => {
+    const updated = courses.map((c) => (c.id === courseId ? { ...c, ...updates } : c));
+    const targetCourse = updated.find((c) => c.id === courseId);
+
+    if (hasSupabase && supabase && currentUser && targetCourse) {
+      try {
+        const { error } = await supabase.from("courses").upsert({
+          id: targetCourse.id,
+          user_id: currentUser.id,
+          code: targetCourse.code,
+          name: targetCourse.name,
+          section: targetCourse.section || null,
+          room: targetCourse.room || null,
+          category_id: targetCourse.category_id || null,
+          color: targetCourse.color || null,
+          class_times: targetCourse.class_times || null,
+          credits: targetCourse.credits || 3.0,
+          resources: targetCourse.resources || [],
+        });
+        if (error) {
+          console.error("Supabase updateCourse error:", error);
+          throw new Error(error.message);
+        }
+      } catch (e: unknown) {
+        console.error("Supabase update course failed:", e);
+        throw e;
+      }
+    }
+
+    persistCourses(updated);
+  };
+
+  const updateTuitionSchedule = async (params: {
+    days: DayOfWeek[];
+    startTime: string;
+    endTime: string;
+    scope: "always" | "this_week" | "move_session";
+    targetDate?: string;
+    targetDay?: DayOfWeek;
+  }) => {
+    const { days, startTime, endTime, scope, targetDate, targetDay } = params;
+
+    if (scope === "always") {
+      // 1. Time blocks
+      const otherBlocks = timeBlocks.filter((b) => b.type !== "tuition" || Boolean(b.override_date));
+      const newTuitionBlocks: TimeBlock[] = days.map((day) => ({
+        id: `tb-tuition-${day.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        user_id: currentUser?.id || null,
+        weekday: day,
+        start_time: startTime,
+        end_time: endTime,
+        type: "tuition",
+        label: "TUITION",
+        default_category: "cat-11",
+        is_fixed: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      }));
+      const updatedTimeBlocks = [...otherBlocks, ...newTuitionBlocks];
+      persistTimeBlocks(updatedTimeBlocks);
+
+      // 2. Class schedule
+      const otherSchedule = schedule.filter((s) => s.type !== "tuition");
+      const newScheduleItems: ClassScheduleItem[] = days.map((day) => ({
+        id: `cs-tuition-${day.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        user_id: currentUser?.id || null,
+        day_of_week: day,
+        start_time: startTime,
+        end_time: endTime,
+        course_name: "Tuition (I teach)",
+        room: "Remote/Home",
+        type: "tuition",
+        created_at: new Date().toISOString(),
+      }));
+      const updatedSchedule = [...otherSchedule, ...newScheduleItems];
+      persistSchedule(updatedSchedule);
+
+      // 3. Recurring rule days
+      const dayNumbers = days.map((d) => {
+        const map: Record<DayOfWeek, number> = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
+        return map[d];
+      });
+      const updatedRules = recurringRules.map((r) => {
+        if (r.rule_type === "tuition_prep") {
+          return { ...r, days_of_week: dayNumbers };
+        }
+        return r;
+      });
+      persistRecurringRules(updatedRules);
+
+      // 4. Supabase sync
+      if (hasSupabase && supabase && currentUser) {
+        try {
+          await supabase.from("time_blocks").delete().eq("type", "tuition").is("override_date", null).eq("user_id", currentUser.id);
+          await supabase.from("time_blocks").insert(newTuitionBlocks.map((b) => ({ ...b, user_id: currentUser.id })));
+          await supabase.from("class_schedule").delete().eq("type", "tuition").eq("user_id", currentUser.id);
+          await supabase.from("class_schedule").insert(newScheduleItems.map((s) => ({ ...s, user_id: currentUser.id })));
+          const prepRule = updatedRules.find((r) => r.rule_type === "tuition_prep");
+          if (prepRule) {
+            await supabase.from("recurring_rules").update({ days_of_week: dayNumbers }).eq("id", prepRule.id);
+          }
+        } catch (e) {
+          console.error("Supabase tuition update error:", e);
+        }
+      }
+    } else if (scope === "this_week") {
+      const weekDays = getDaysOfWeek(getWeekStartDate(new Date()));
+      const overrideBlocks: TimeBlock[] = [];
+      for (const d of weekDays) {
+        const dayKey = getWeekdayFromDate(d);
+        const dateStr = formatDateKey(d);
+        if (days.includes(dayKey)) {
+          overrideBlocks.push({
+            id: `tb-tuition-override-${dateStr}`,
+            user_id: currentUser?.id || null,
+            weekday: dayKey,
+            start_time: startTime,
+            end_time: endTime,
+            type: "tuition",
+            label: "TUITION (This Week)",
+            default_category: "cat-11",
+            is_fixed: true,
+            is_active: true,
+            override_date: dateStr,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+      const updatedTimeBlocks = [
+        ...timeBlocks.filter(
+          (b) => !b.override_date || !overrideBlocks.some((ob) => ob.override_date === b.override_date && b.type === "tuition")
+        ),
+        ...overrideBlocks,
+      ];
+      persistTimeBlocks(updatedTimeBlocks);
+
+      if (hasSupabase && supabase && currentUser) {
+        try {
+          await supabase.from("time_blocks").insert(overrideBlocks.map((b) => ({ ...b, user_id: currentUser.id })));
+        } catch (e) {
+          console.error("Supabase this_week tuition override error:", e);
+        }
+      }
+    } else if (scope === "move_session" && targetDate) {
+      const dayKey = targetDay || getWeekdayFromDate(targetDate);
+      const overrideBlock: TimeBlock = {
+        id: `tb-tuition-override-${targetDate}`,
+        user_id: currentUser?.id || null,
+        weekday: dayKey,
+        start_time: startTime,
+        end_time: endTime,
+        type: "tuition",
+        label: "TUITION (Moved)",
+        default_category: "cat-11",
+        is_fixed: true,
+        is_active: true,
+        override_date: targetDate,
+        created_at: new Date().toISOString(),
+      };
+      const updatedTimeBlocks = [
+        ...timeBlocks.filter((b) => b.override_date !== targetDate || b.type !== "tuition"),
+        overrideBlock,
+      ];
+      persistTimeBlocks(updatedTimeBlocks);
+
+      if (hasSupabase && supabase && currentUser) {
+        try {
+          await supabase.from("time_blocks").insert({ ...overrideBlock, user_id: currentUser.id });
+        } catch (e) {
+          console.error("Supabase move_session tuition override error:", e);
+        }
+      }
     }
   };
 
@@ -1869,6 +2124,8 @@ export function useAgencyState() {
     toggleLectureStudied,
     addCourseResource,
     deleteCourseResource,
+    updateCourse,
+    updateTuitionSchedule,
     addCfLog,
     updateCfLog,
     deleteCfLog,

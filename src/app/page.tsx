@@ -17,10 +17,11 @@ import { MissionCelebration } from "@/components/missions/MissionCelebration";
 import { PromotionOverlay } from "@/components/missions/PromotionOverlay";
 import { CompletionNoteModal } from "@/components/missions/CompletionNoteModal";
 import { Button } from "@/components/ui/Button";
-import { Mission } from "@/types/database";
+import { Mission, DayOfWeek } from "@/types/database";
 import { soundFX } from "@/lib/sound";
 import { useTheme } from "@/lib/themeContext";
 import { PlannerView } from "@/components/planner/PlannerView";
+import { TuitionScheduleModal } from "@/components/planner/TuitionScheduleModal";
 import { UpcomingDatesCard } from "@/components/dashboard/UpcomingDatesCard";
 import { DashboardBanner } from "@/components/dashboard/DashboardBanner";
 import { CourseHQView } from "@/components/courses/CourseHQView";
@@ -119,6 +120,8 @@ export default function Home() {
     toggleLectureStudied,
     addCourseResource,
     deleteCourseResource,
+    updateCourse,
+    updateTuitionSchedule,
     addCfLog,
     updateCfLog,
     deleteCfLog,
@@ -173,6 +176,15 @@ export default function Home() {
   const [isPaperMissionModalOpen, setIsPaperMissionModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
   const [migrationDismissed, setMigrationDismissed] = useState(false);
+  const [tuitionModal, setTuitionModal] = useState<{
+    isOpen: boolean;
+    day?: DayOfWeek;
+    startTime?: string;
+    endTime?: string;
+    targetDate?: string;
+  }>({
+    isOpen: false,
+  });
 
   const localSummary = React.useMemo(() => {
     if (!isSupabaseConnected || !currentUser || currentUser.id === "agent-akib-local" || migrationDismissed) {
@@ -398,11 +410,11 @@ export default function Home() {
     }
   };
 
-  const handleSaveMission = (data: Partial<Mission>) => {
+  const handleSaveMission = async (data: Partial<Mission>) => {
     if (editingMission && editingMission.id && editingMission.id.trim() !== "") {
-      editMission(data);
+      return await editMission(data);
     } else {
-      addMission(data);
+      return await addMission(data);
     }
   };
 
@@ -486,6 +498,7 @@ export default function Home() {
             onRunAutoMissionsGenerator={runAutoMissionsGenerator}
             onUpdateNotificationSettings={updateNotificationSettings}
             onResetAllProgress={resetAllProgress}
+            onOpenTuitionModal={() => setTuitionModal({ isOpen: true })}
           />
 
           {/* Navigation Tabs (Smooth layoutId sliding indicator) */}
@@ -661,12 +674,26 @@ export default function Home() {
                         activeMissionId={heroMission?.id}
                         accomplishingMissionId={accomplishingMissionId}
                         onCompleteMission={handleInitiateAccomplish}
+                        onOpenTuitionModal={() => setTuitionModal({ isOpen: true })}
                       />
                     </motion.div>
 
                     {/* Right Column: Today's Briefing & Upcoming Key Dates */}
                     <motion.div variants={dashboardCardVariants} className="space-y-6">
-                      <TodayBriefing schedule={schedule} />
+                      <TodayBriefing
+                        schedule={schedule}
+                        timeBlocks={timeBlocks}
+                        academicEvents={academicEvents}
+                        missions={missions}
+                        onOpenTuitionModal={(slot) =>
+                          setTuitionModal({
+                            isOpen: true,
+                            day: slot?.day,
+                            startTime: slot?.startTime,
+                            endTime: slot?.endTime,
+                          })
+                        }
+                      />
                       <UpcomingDatesCard events={academicEvents} onOpenCalendar={() => setActiveTab("planner")} />
                     </motion.div>
                   </div>
@@ -767,6 +794,8 @@ export default function Home() {
                     setSelectedCourseId(courseId);
                     setActiveTab("courses");
                   }}
+                  onEditMission={handleOpenEdit}
+                  onUpdateTuitionSchedule={updateTuitionSchedule}
                 />
               </motion.div>
             )}
@@ -796,6 +825,7 @@ export default function Home() {
                   onAddCourseResource={addCourseResource}
                   onDeleteCourseResource={deleteCourseResource}
                   onCompleteMission={handleInitiateAccomplish}
+                  onUpdateCourse={updateCourse}
                   onAddMissionForCourse={(course) => {
                     setEditingMission({
                       id: "",
@@ -954,6 +984,9 @@ export default function Home() {
           onSave={handleSaveMission}
           categories={categories}
           editingMission={editingMission}
+          timeBlocks={timeBlocks}
+          academicEvents={academicEvents}
+          existingMissions={missions}
         />
 
         <CompletionNoteModal
@@ -1005,6 +1038,18 @@ export default function Home() {
           onClose={() => setIsPaperMissionModalOpen(false)}
           onSave={addResearchPaper}
           isTriggeredByMission={true}
+        />
+
+        {/* Global Tuition Teaching Routine Configuration Modal */}
+        <TuitionScheduleModal
+          isOpen={tuitionModal.isOpen}
+          initialDays={tuitionModal.day ? [tuitionModal.day] : ["MON", "THU", "FRI"]}
+          initialStartTime={tuitionModal.startTime || "18:00"}
+          initialEndTime={tuitionModal.endTime || "19:30"}
+          targetDate={tuitionModal.targetDate}
+          targetDay={tuitionModal.day}
+          onSave={updateTuitionSchedule}
+          onClose={() => setTuitionModal({ isOpen: false })}
         />
 
         {/* Global In-App Notifications Toast */}

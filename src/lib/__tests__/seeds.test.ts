@@ -156,7 +156,6 @@ describe("seeds - routine & categories requirement verification", () => {
       expect(DEFAULT_COURSES).toHaveLength(6);
       DEFAULT_COURSES.forEach((c) => {
         expect(c.code).toBeTruthy();
-        expect(c.faculty).toBeTruthy();
         expect(c.room).toBeTruthy();
         expect(c.resources).toHaveLength(0); // Clean slate for user resources
       });

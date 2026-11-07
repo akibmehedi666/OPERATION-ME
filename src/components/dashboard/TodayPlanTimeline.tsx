@@ -20,6 +20,7 @@ interface TodayPlanTimelineProps {
   activeMissionId?: string | null;
   accomplishingMissionId?: string | null;
   onCompleteMission: (mission: Mission) => void;
+  onOpenTuitionModal?: (slot?: { day: DayOfWeek; startTime: string; endTime: string }) => void;
 }
 
 interface TimelineItem {
@@ -45,9 +46,11 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
   activeMissionId,
   accomplishingMissionId,
   onCompleteMission,
+  onOpenTuitionModal,
 }) => {
   const now = new Date();
   const currentDayKey = DAY_KEYS[now.getDay()];
+  const todayDateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   // 1. Gather today's schedule (classes & tuition)
   // If timeBlocks provided, resolve today's schedule honoring academic overrides & holidays
@@ -81,34 +84,65 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
       }));
   }
 
-  // 2. Gather today's missions (excluding active mission to adhere to single appearance rule)
+  // 2. Gather today's missions: includes both scheduled start/end tasks and deadline tasks
   const todayMissions: TimelineItem[] = missions
     .filter((m) => {
       if (m.id === activeMissionId) return false;
-      if (!m.deadline) return false;
 
-      const d = new Date(m.deadline);
-      const isToday =
-        d.getDate() === now.getDate() &&
-        d.getMonth() === now.getMonth() &&
-        d.getFullYear() === now.getFullYear();
+      // Has scheduled start time today
+      if (m.scheduled_start) {
+        const startKey = m.scheduled_start.slice(0, 10);
+        if (startKey === todayDateKey) return true;
+      }
 
-      // Include if due today or overdue
-      const isOverdue = d < now && m.status !== "completed";
-      return isToday || isOverdue;
+      // Has deadline today or overdue
+      if (m.deadline) {
+        const d = new Date(m.deadline);
+        const isToday =
+          d.getDate() === now.getDate() &&
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear();
+
+        const isOverdue = d < now && m.status !== "completed";
+        return isToday || isOverdue;
+      }
+
+      return false;
     })
     .map((m) => {
-      const d = new Date(m.deadline!);
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      const isOverdue = d < now && m.status !== "completed";
+      let sortTime = "23:59";
+      let timeDisplay = "";
       const cat = categories.find((c) => c.id === m.category_id);
+
+      if (m.scheduled_start) {
+        const sDate = new Date(m.scheduled_start);
+        const hh = String(sDate.getHours()).padStart(2, "0");
+        const mm = String(sDate.getMinutes()).padStart(2, "0");
+        sortTime = `${hh}:${mm}`;
+
+        if (m.scheduled_end) {
+          const eDate = new Date(m.scheduled_end);
+          const ehh = String(eDate.getHours()).padStart(2, "0");
+          const emm = String(eDate.getMinutes()).padStart(2, "0");
+          timeDisplay = `${formatTime12(`${hh}:${mm}`)} - ${formatTime12(`${ehh}:${emm}`)}`;
+        } else {
+          timeDisplay = formatTime12(`${hh}:${mm}`);
+        }
+      } else if (m.deadline) {
+        const d = new Date(m.deadline);
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        sortTime = `${hh}:${mm}`;
+        timeDisplay = `Due ${formatTime12(d)}`;
+      }
+
+      const isOverdue = Boolean(m.deadline && new Date(m.deadline) < now && m.status !== "completed");
 
       return {
         id: m.id,
         type: "mission",
-        sortTime: `${hh}:${mm}`,
-        timeDisplay: formatTime12(d),
+        sortTime,
+        timeDisplay,
         title: m.title,
         categoryName: cat?.name || "Mission",
         priority: m.priority,
@@ -191,7 +225,12 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
                     item
                   )} ${item.isOverdue ? "bg-spy-redMuted" : ""} ${item.isCompleted ? "opacity-60" : ""} ${
                     isAccomplishing ? "border-spy-green bg-spy-green/10" : ""
-                  }`}
+                  } ${item.type === "tuition" ? "cursor-pointer hover:border-spy-green" : ""}`}
+                  onClick={() => {
+                    if (item.type === "tuition" && onOpenTuitionModal) {
+                      onOpenTuitionModal();
+                    }
+                  }}
                 >
                 {/* Left Details: Icon + Time + Title + Category Chip */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">

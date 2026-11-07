@@ -6,6 +6,7 @@ import {
   Mission,
   Category 
 } from "@/types/database";
+import { formatTime12, formatCountdown } from "@/lib/formatters";
 
 export const WEEKDAY_ORDER: DayOfWeek[] = ["SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI"];
 
@@ -47,12 +48,29 @@ export function getWeekdayFromDate(date: Date | string): DayOfWeek {
 }
 
 /**
+ * Deduplicates academic events on the same date with the same title or type
+ */
+export function deduplicateAcademicEvents(events: AcademicEvent[]): AcademicEvent[] {
+  const seen = new Set<string>();
+  const result: AcademicEvent[] = [];
+  for (const ev of events) {
+    const key = `${ev.date}_${ev.end_date || ""}_${ev.type}_${ev.title.trim().toLowerCase()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(ev);
+    }
+  }
+  return result;
+}
+
+/**
  * Returns all academic events active on a specific date (single date or within a range)
  */
 export function getEventsForDate(dateInput: Date | string, events: AcademicEvent[]): AcademicEvent[] {
   const targetKey = formatDateKey(dateInput);
+  const deduplicated = deduplicateAcademicEvents(events);
 
-  return events.filter((ev) => {
+  return deduplicated.filter((ev) => {
     if (ev.end_date) {
       return targetKey >= ev.date && targetKey <= ev.end_date;
     }
@@ -428,3 +446,184 @@ export function generateExamPrepMissions(
 
   return newMissions;
 }
+
+export interface UpcomingClassInfo {
+  block: ResolvedTimeBlock;
+  dateStr: string;
+  isToday: boolean;
+  startsAt: Date;
+  endsAt: Date;
+  diffMinutes: number;
+  countdownText: string;
+}
+
+/**
+ * Finds the next real university class, intelligently skipping holidays and class cancellations.
+ */
+export function getNextUpcomingClass(
+  referenceDate: Date,
+  weeklyBlocks: TimeBlock[],
+  academicEvents: AcademicEvent[],
+  maxDaysAhead: number = 14
+): UpcomingClassInfo | null {
+  const currentTotalMin = referenceDate.getHours() * 60 + referenceDate.getMinutes();
+  const currentSec = referenceDate.getSeconds();
+
+  for (let offset = 0; offset <= maxDaysAhead; offset++) {
+    const targetDate = new Date(referenceDate);
+    targetDate.setDate(targetDate.getDate() + offset);
+    const dateStr = formatDateKey(targetDate);
+
+    const resolution = resolveDaySchedule(targetDate, weeklyBlocks, academicEvents);
+    // If holiday/suspended: university classes do not happen! Skip to the next day!
+    if (resolution.isHoliday) continue;
+
+    const classBlocks = resolution.blocks.filter((b) => b.type === "class");
+    if (classBlocks.length === 0) continue;
+
+    for (const b of classBlocks) {
+      const [sh, sm] = b.start_time.split(":").map(Number);
+      const [eh, em] = b.end_time.split(":").map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+
+      if (offset === 0) {
+        // Today: only upcoming or currently in-progress
+        if (currentTotalMin < endMin) {
+          const startsAt = new Date(targetDate);
+          startsAt.setHours(sh, sm, 0, 0);
+          const endsAt = new Date(targetDate);
+          endsAt.setHours(eh, em, 0, 0);
+          const diffMinutes = Math.max(0, startMin - currentTotalMin);
+          let countdownText = "";
+          if (currentTotalMin >= startMin) {
+            countdownText = "In progress now";
+          } else {
+            const diffSec = (startMin - currentTotalMin) * 60 - currentSec;
+            countdownText = `Next in ${formatCountdown(diffSec)}`;
+          }
+          return {
+            block: b,
+            dateStr,
+            isToday: true,
+            startsAt,
+            endsAt,
+            diffMinutes,
+            countdownText,
+          };
+        }
+      } else {
+        // Future day: first class of that valid day
+        const startsAt = new Date(targetDate);
+        startsAt.setHours(sh, sm, 0, 0);
+        const endsAt = new Date(targetDate);
+        endsAt.setHours(eh, em, 0, 0);
+        const diffMs = startsAt.getTime() - referenceDate.getTime();
+        const diffDays = offset;
+        const time12 = formatTime12(b.start_time);
+        const dayName = WEEKDAY_TO_NAME[resolution.weekday] || resolution.weekday;
+        const countdownText =
+          diffDays === 1
+            ? `Tomorrow (${dayName}) at ${time12}`
+            : `${dayName} at ${time12} (in ${diffDays} days)`;
+
+        return {
+          block: b,
+          dateStr,
+          isToday: false,
+          startsAt,
+          endsAt,
+          diffMinutes: Math.floor(diffMs / 60000),
+          countdownText,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+export interface OverlapConflict {
+  hasConflict: boolean;
+  conflictType?: "class" | "tuition" | "mission" | "block";
+  conflictName?: string;
+  conflictTimeRange?: string;
+}
+
+/**
+ * Checks if a requested time range overlaps with any university class, tuition, or existing mission
+ */
+export function checkScheduleOverlap(
+  dateInput: Date | string,
+  startTime: string, // "HH:MM" e.g. "10:00"
+  endTime: string,   // "HH:MM" e.g. "11:30"
+  weeklyBlocks: TimeBlock[],
+  academicEvents: AcademicEvent[],
+  existingMissions: Mission[] = [],
+  ignoreMissionId?: string
+): OverlapConflict {
+  if (!startTime || !endTime) return { hasConflict: false };
+
+  const dateStr = formatDateKey(dateInput);
+  const resolved = resolveDaySchedule(dateStr, weeklyBlocks, academicEvents);
+
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  const startMin = (sh || 0) * 60 + (sm || 0);
+  const endMin = (eh || 0) * 60 + (em || 0);
+
+  if (endMin <= startMin) return { hasConflict: false };
+
+  // 1. Check classes and tuition
+  for (const b of resolved.blocks) {
+    if (b.type === "class" || b.type === "tuition") {
+      const [bsh, bsm] = b.start_time.split(":").map(Number);
+      const [beh, bem] = b.end_time.split(":").map(Number);
+      const bStartMin = (bsh || 0) * 60 + (bsm || 0);
+      const bEndMin = (beh || 0) * 60 + (bem || 0);
+
+      if (startMin < bEndMin && endMin > bStartMin) {
+        return {
+          hasConflict: true,
+          conflictType: b.type,
+          conflictName: b.label,
+          conflictTimeRange: `${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}`,
+        };
+      }
+    }
+  }
+
+  // 2. Check other scheduled missions
+  for (const m of existingMissions) {
+    if (m.id === ignoreMissionId || m.status === "completed") continue;
+    if (m.scheduled_start && m.scheduled_end) {
+      const mDate = formatDateKey(m.scheduled_start);
+      if (mDate === dateStr) {
+        const mStartStr = m.scheduled_start.includes("T")
+          ? m.scheduled_start.split("T")[1].slice(0, 5)
+          : "";
+        const mEndStr = m.scheduled_end.includes("T")
+          ? m.scheduled_end.split("T")[1].slice(0, 5)
+          : "";
+        if (mStartStr && mEndStr) {
+          const [msh, msm] = mStartStr.split(":").map(Number);
+          const [meh, mem] = mEndStr.split(":").map(Number);
+          const mStartMin = (msh || 0) * 60 + (msm || 0);
+          const mEndMin = (meh || 0) * 60 + (mem || 0);
+
+          if (startMin < mEndMin && endMin > mStartMin) {
+            return {
+              hasConflict: true,
+              conflictType: "mission",
+              conflictName: m.title,
+              conflictTimeRange: `${formatTime12(mStartStr)} - ${formatTime12(mEndStr)}`,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return { hasConflict: false };
+}
+

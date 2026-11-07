@@ -272,7 +272,6 @@ export async function migrateLocalDataToSupabase(
           name: c.name,
           section: c.section || null,
           room: c.room || null,
-          faculty: c.faculty || null,
           category_id: c.category_id || null,
           color: c.color || null,
           class_times: c.class_times || null,

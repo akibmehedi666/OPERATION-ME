@@ -133,7 +133,6 @@ export interface Course {
   name: string;
   section?: string;
   room?: string;
-  faculty?: string;
   category_id?: string;
   color?: string;
   class_times?: string;

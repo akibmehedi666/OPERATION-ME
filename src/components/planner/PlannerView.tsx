@@ -19,6 +19,7 @@ import { AcademicCalendarView } from "@/components/planner/AcademicCalendarView"
 import { TimeBlockModal } from "@/components/planner/TimeBlockModal";
 import { AcademicEventModal } from "@/components/planner/AcademicEventModal";
 import { AssignMissionModal } from "@/components/planner/AssignMissionModal";
+import { TuitionScheduleModal } from "@/components/planner/TuitionScheduleModal";
 import { 
   Calendar, 
   Grid3X3, 
@@ -46,6 +47,15 @@ interface PlannerViewProps {
   onRunAutoSchedule: (weekStartDate: Date) => number;
   onCompleteMission: (mission: Mission) => void;
   onOpenCourseHQ?: (courseId: string) => void;
+  onEditMission?: (mission: Mission) => void;
+  onUpdateTuitionSchedule?: (options: {
+    days: DayOfWeek[];
+    startTime: string;
+    endTime: string;
+    scope: "always" | "this_week" | "move_session";
+    targetDate?: string;
+    targetDay?: DayOfWeek;
+  }) => Promise<void> | void;
 }
 
 export const PlannerView: React.FC<PlannerViewProps> = ({
@@ -64,11 +74,13 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   onRunAutoSchedule,
   onCompleteMission,
   onOpenCourseHQ,
+  onEditMission,
+  onUpdateTuitionSchedule,
 }) => {
   const [viewMode, setViewMode] = useState<"grid" | "calendar">("grid");
-  // Default to Nov 5, 2026 week
+  // Default to current week containing today (weeks run Sat-Fri)
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(
-    getWeekStartDate(new Date(2026, 10, 5))
+    getWeekStartDate(new Date())
   );
 
   // Modals state
@@ -99,6 +111,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     isOpen: false,
     block: null,
     blockDateStr: "",
+  });
+
+  const [tuitionModal, setTuitionModal] = useState<{
+    isOpen: boolean;
+    day?: DayOfWeek;
+    startTime?: string;
+    endTime?: string;
+    targetDate?: string;
+  }>({
+    isOpen: false,
   });
 
   const [autoScheduleNotice, setAutoScheduleNotice] = useState<string | null>(null);
@@ -323,6 +345,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           onConfirmAutoSchedule={onConfirmAutoSchedule}
           onCompleteMission={onCompleteMission}
           onOpenCourseHQ={onOpenCourseHQ}
+          onEditMission={onEditMission}
+          onEditTuition={(slot) =>
+            setTuitionModal({
+              isOpen: true,
+              day: slot.day,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              targetDate: slot.targetDate,
+            })
+          }
         />
       ) : (
         <AcademicCalendarView
@@ -385,6 +417,19 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         }
         onClose={() => setAssignModal({ isOpen: false, block: null, blockDateStr: "" })}
       />
+
+      {onUpdateTuitionSchedule && (
+        <TuitionScheduleModal
+          isOpen={tuitionModal.isOpen}
+          initialDays={tuitionModal.day ? [tuitionModal.day] : ["MON", "THU", "FRI"]}
+          initialStartTime={tuitionModal.startTime || "18:00"}
+          initialEndTime={tuitionModal.endTime || "19:30"}
+          targetDate={tuitionModal.targetDate}
+          targetDay={tuitionModal.day}
+          onSave={onUpdateTuitionSchedule}
+          onClose={() => setTuitionModal({ isOpen: false })}
+        />
+      )}
     </div>
   );
 };

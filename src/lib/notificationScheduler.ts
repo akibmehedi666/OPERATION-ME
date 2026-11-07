@@ -67,10 +67,32 @@ export function getDueNotifications(
   const currentDay = daysOfWeek[now.getDay()];
   const todayStr = now.toISOString().split("T")[0];
 
-  // 1. CLASS REMINDERS (15 minutes before class start)
-  if (settings.class_reminder) {
+  const isHolidayToday = events.some((e) => {
+    if (e.type !== "holiday") return false;
+    if (e.end_date) return todayStr >= e.date && todayStr <= e.end_date;
+    return e.date === todayStr;
+  });
+
+  const classOverrideEvent = events.find((e) => {
+    if (e.type !== "class_override") return false;
+    if (e.end_date) return todayStr >= e.date && todayStr <= e.end_date;
+    return e.date === todayStr;
+  });
+
+  let effectiveScheduleDay: typeof currentDay = currentDay;
+  if (classOverrideEvent) {
+    try {
+      if (classOverrideEvent.details) {
+        const parsed = JSON.parse(classOverrideEvent.details);
+        if (parsed.overrideWeekday) effectiveScheduleDay = parsed.overrideWeekday;
+      }
+    } catch {}
+  }
+
+  // 1. CLASS REMINDERS (15 minutes before class start - skips holidays, respects overrides)
+  if (settings.class_reminder && !isHolidayToday) {
     const todayClasses = schedule.filter(
-      (s) => s.day_of_week === currentDay && s.type === "class"
+      (s) => s.day_of_week === effectiveScheduleDay && s.type === "class"
     );
 
     todayClasses.forEach((item) => {

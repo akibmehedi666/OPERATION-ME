@@ -17,7 +17,8 @@ import {
   Download,
   Database,
   AlertTriangle,
-  Trash2
+  Trash2,
+  GraduationCap
 } from "lucide-react";
 import { getRankFromXp } from "@/lib/rank";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -53,6 +54,7 @@ interface AgentHeaderProps {
   onRunAutoMissionsGenerator?: () => { createdCount: number; message: string };
   onUpdateNotificationSettings?: (settings: NotificationSettings) => void;
   onResetAllProgress?: () => Promise<unknown>;
+  onOpenTuitionModal?: () => void;
 }
 
 export function AgentHeader({
@@ -86,6 +88,7 @@ export function AgentHeader({
   onRunAutoMissionsGenerator,
   onUpdateNotificationSettings,
   onResetAllProgress,
+  onOpenTuitionModal,
 }: AgentHeaderProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"general" | "auto_missions" | "reminders" | "data">("general");
@@ -471,6 +474,31 @@ export function AgentHeader({
                     {soundEnabled ? "ENABLED" : "MUTED"}
                   </button>
                 </div>
+
+                {/* Tuition Teaching Routine */}
+                {onOpenTuitionModal && (
+                  <div className="flex items-center justify-between py-3 border-b border-spy-border">
+                    <div>
+                      <div className="text-spy-text font-semibold flex items-center gap-1.5">
+                        <GraduationCap className="w-4 h-4 text-yellow-500" />
+                        <span>Tuition Teaching Routine</span>
+                      </div>
+                      <div className="text-[10px] text-spy-dim font-sans mt-0.5">
+                        Configure teaching days, time slots, and schedule overrides
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSettingsOpen(false);
+                        onOpenTuitionModal();
+                      }}
+                      className="px-3 py-1 border border-spy-border hover:border-yellow-500 text-yellow-600 dark:text-yellow-400 rounded-[3px] font-mono font-bold text-xs transition-colors bg-spy-surface2 hover:bg-spy-surface"
+                    >
+                      CONFIGURE
+                    </button>
+                  </div>
+                )}
 
                 {/* Storage Engine & Data Backup */}
                 <div className="py-3 border-b border-spy-border space-y-2.5">
