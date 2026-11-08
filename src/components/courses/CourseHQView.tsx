@@ -677,11 +677,28 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
                       <div className="text-sm font-semibold text-spy-text">
                         {event.title}
                       </div>
-                      {event.details && (
-                        <div className="text-xs text-spy-muted font-sans">
-                          {event.details}
-                        </div>
-                      )}
+                      {(() => {
+                        if (!event.details) return null;
+                        const d = event.details.trim();
+                        let text = d;
+                        if (d.startsWith("{") && d.endsWith("}")) {
+                          try {
+                            const p = JSON.parse(d);
+                            if (p.overrideWeekday) {
+                              text = `Follows ${p.overrideWeekday} schedule${p.isOnline ? ", online" : ""}`;
+                            } else if (p.isOnline !== undefined) {
+                              text = p.isOnline ? "Online class session" : "In-person class session";
+                            }
+                          } catch {
+                            text = d;
+                          }
+                        }
+                        return (
+                          <div className="text-xs text-spy-muted font-sans">
+                            {text}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="text-right font-mono shrink-0">

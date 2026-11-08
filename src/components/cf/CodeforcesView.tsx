@@ -59,6 +59,11 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "solved" | "upsolve" | "tried">("all");
+  const [visibleCount, setVisibleCount] = useState<number>(15);
+
+  useEffect(() => {
+    setVisibleCount(15);
+  }, [statusFilter, selectedTag, searchQuery]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<CodeforcesLog | null>(null);
@@ -362,6 +367,10 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
       })
       .sort((a, b) => new Date(b.date || b.created_at || 0).getTime() - new Date(a.date || a.created_at || 0).getTime());
   }, [logs, statusFilter, selectedTag, searchQuery]);
+
+  const displayedLogs = useMemo(() => {
+    return filteredLogs.slice(0, visibleCount);
+  }, [filteredLogs, visibleCount]);
 
   const getRatingBadgeClass = (r?: number) => {
     if (!r) return "text-spy-dim border-spy-border bg-spy-surface2";
@@ -719,7 +728,7 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
           </div>
         ) : (
           <div className="space-y-2.5">
-            {filteredLogs.map((log) => (
+            {displayedLogs.map((log) => (
               <div
                 key={log.id}
                 className="clean-card p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-spy-borderLight transition-all"
@@ -836,6 +845,19 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
                 </div>
               </div>
             ))}
+
+            {visibleCount < filteredLogs.length && (
+              <div className="pt-2 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setVisibleCount((prev) => prev + 15)}
+                  className="font-mono text-xs gap-1.5"
+                >
+                  <span>Show more problems ({filteredLogs.length - visibleCount} remaining)</span>
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

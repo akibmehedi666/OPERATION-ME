@@ -88,14 +88,9 @@ export const CyberRoadmapView: React.FC<CyberRoadmapViewProps> = ({
   topics,
   onUpdateTopicStatus,
 }) => {
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    "Foundations (Linux, Networking, Python/Bash scripting)": true,
-    "Cryptography basics": true,
-    "Web Security & OWASP Top 10": true,
-    "Tools (Nmap, Burp Suite, Wireshark, Metasploit)": true,
-    "CTF Practice (ongoing, unlockable from the start)": true,
-    "Advanced (Reverse Engineering, Binary Exploitation, Privilege Escalation)": false,
-  });
+  // Accordion: all collapsed by default, expand one at a time
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -112,10 +107,11 @@ export const CyberRoadmapView: React.FC<CyberRoadmapViewProps> = ({
   const [completionTimeMinutes, setCompletionTimeMinutes] = useState<number>(45);
 
   const toggleSection = (name: string) => {
-    setExpandedSections((prev) => ({
-      ...prev,
-      [name]: !prev[name],
-    }));
+    setExpandedSection((prev) => (prev === name ? null : name));
+  };
+
+  const toggleTopic = (id: string) => {
+    setExpandedTopicId((prev) => (prev === id ? null : id));
   };
 
   // Progress metrics
@@ -364,7 +360,7 @@ export const CyberRoadmapView: React.FC<CyberRoadmapViewProps> = ({
           const secDone = sectionTopics.filter((t) => t.status === "done").length;
           const secTotal = sectionTopics.length;
           const secPct = secTotal > 0 ? Math.round((secDone / secTotal) * 100) : 0;
-          const isExpanded = searchQuery.trim() ? true : !!expandedSections[sec.name];
+          const isExpanded = searchQuery.trim() ? true : expandedSection === sec.name;
 
           return (
             <div key={sec.name} className="clean-card overflow-hidden">
@@ -423,46 +419,51 @@ export const CyberRoadmapView: React.FC<CyberRoadmapViewProps> = ({
                 <div className="divide-y divide-spy-border">
                   {sectionTopics.map((topic) => {
                     const isEditing = editingTopicId === topic.id;
+                    const isTopicExpanded = searchQuery.trim() ? true : expandedTopicId === topic.id;
+                    const hasRealLinks = Boolean(topic.learning_links && topic.learning_links.length > 0);
+                    const hasRealHandsOn = Boolean((topic.hands_on_task && topic.hands_on_task.trim() !== "") || topic.hands_on_url);
+                    const hasRealGoal = Boolean(topic.goal && topic.goal.trim() !== "");
 
                     return (
                       <div
                         key={topic.id}
-                        className="p-3.5 sm:p-4 space-y-3 hover:bg-spy-surface2/40 transition-colors"
+                        className="p-3 sm:p-3.5 hover:bg-spy-surface2/40 transition-colors"
                       >
-                        {/* Topic Header: Title, Order, Time, and Status Pills */}
-                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono text-xs font-bold text-spy-text">
-                                {topic.title}
-                              </span>
-                              {topic.time_spent_minutes ? (
-                                <span className="text-[10px] font-mono text-spy-dim flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  <span>{topic.time_spent_minutes}m</span>
-                                </span>
-                              ) : null}
-                              {topic.hands_on_completed && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Lab Completed
-                                </span>
+                        {/* Topic Header: Title, Time, Status Pills & Accordion toggle */}
+                        <div
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none"
+                          onClick={() => toggleTopic(topic.id)}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                            <span className="text-spy-muted hover:text-spy-text p-0.5">
+                              {isTopicExpanded ? (
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5" />
                               )}
-                            </div>
-
-                            {/* Short Goal */}
-                            {topic.goal && (
-                              <p className="text-xs text-spy-muted font-sans leading-relaxed">
-                                <span className="font-mono text-spy-dim font-bold text-[11px] uppercase mr-1">
-                                  Goal:
-                                </span>
-                                {topic.goal}
-                              </p>
+                            </span>
+                            <span className="font-mono text-xs font-bold text-spy-text truncate">
+                              {topic.title}
+                            </span>
+                            {topic.time_spent_minutes ? (
+                              <span className="text-[10px] font-mono text-spy-dim flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                <span>{topic.time_spent_minutes}m</span>
+                              </span>
+                            ) : null}
+                            {topic.hands_on_completed && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Lab Done
+                              </span>
                             )}
                           </div>
 
                           {/* Status Pill Switcher */}
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div
+                            className="flex items-center gap-1.5 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {(["not_started", "learning", "done"] as CyberTopicStatus[]).map((st) => {
                               const isActive = topic.status === st;
                               const label =
@@ -487,148 +488,164 @@ export const CyberRoadmapView: React.FC<CyberRoadmapViewProps> = ({
                           </div>
                         </div>
 
-                        {/* Learning Links & Required Hands-On Lab Task Box */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
-                          {/* 1. Learning Links */}
-                          <div className="p-2.5 rounded-[4px] bg-spy-surface border border-spy-border space-y-1.5">
-                            <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-spy-dim font-bold">
-                              <BookOpen className="w-3 h-3 text-spy-green" />
-                              <span>Learning Links</span>
-                            </div>
-                            {topic.learning_links && topic.learning_links.length > 0 ? (
-                              <div className="space-y-1">
-                                {topic.learning_links.map((link, idx) => (
-                                  <a
-                                    key={idx}
-                                    href={link.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-between gap-2 p-1.5 rounded hover:bg-spy-surface2 text-xs text-spy-text group transition-colors"
+                        {/* Expanded Details: ONLY real data, NO filler text */}
+                        {isTopicExpanded && (
+                          <div className="mt-3 pt-3 border-t border-spy-border/50 space-y-3">
+                            {hasRealGoal && (
+                              <p className="text-xs text-spy-muted font-sans leading-relaxed">
+                                <span className="font-mono text-spy-dim font-bold text-[11px] uppercase mr-1">
+                                  Goal:
+                                </span>
+                                {topic.goal}
+                              </p>
+                            )}
+
+                            {/* Learning Links & Required Hands-On Lab Task Box */}
+                            {(hasRealLinks || hasRealHandsOn) && (
+                              <div className={`grid grid-cols-1 ${hasRealLinks && hasRealHandsOn ? "md:grid-cols-2" : ""} gap-2.5 pt-1`}>
+                                {/* 1. Learning Links (rendered only when real links exist) */}
+                                {hasRealLinks && (
+                                  <div className="p-2.5 rounded-[4px] bg-spy-surface border border-spy-border space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-spy-dim font-bold">
+                                      <BookOpen className="w-3 h-3 text-spy-green" />
+                                      <span>Learning Links</span>
+                                    </div>
+                                    <div className="space-y-1">
+                                      {topic.learning_links!.map((link, idx) => (
+                                        <a
+                                          key={idx}
+                                          href={link.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center justify-between gap-2 p-1.5 rounded hover:bg-spy-surface2 text-xs text-spy-text group transition-colors"
+                                        >
+                                          <span className="truncate group-hover:text-spy-green transition-colors">
+                                            {link.title}
+                                          </span>
+                                          <ExternalLink className="w-3 h-3 text-spy-dim group-hover:text-spy-green shrink-0" />
+                                        </a>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* 2. Required Hands-On Task Box (rendered only when real task/url exists) */}
+                                {hasRealHandsOn && (
+                                  <div
+                                    className={`p-2.5 rounded-[4px] border space-y-1.5 transition-colors ${topic.hands_on_completed
+                                        ? "bg-emerald-500/5 border-emerald-500/20"
+                                        : "bg-spy-surface border-spy-border"
+                                      }`}
                                   >
-                                    <span className="truncate group-hover:text-spy-green transition-colors">
-                                      {link.title}
-                                    </span>
-                                    <ExternalLink className="w-3 h-3 text-spy-dim group-hover:text-spy-green shrink-0" />
-                                  </a>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-[11px] text-spy-dim italic">
-                                Standard syllabus documentation and official guides.
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-spy-dim font-bold">
+                                        <FlaskConical className="w-3 h-3 text-spy-amber" />
+                                        <span>Required Hands-On Lab</span>
+                                      </div>
+                                      {topic.hands_on_platform && (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase bg-spy-surface2 border border-spy-border text-spy-dim">
+                                          {topic.hands_on_platform}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {topic.hands_on_task && topic.hands_on_task.trim() !== "" && (
+                                      <p className="text-xs text-spy-text font-sans">
+                                        {topic.hands_on_task}
+                                      </p>
+                                    )}
+
+                                    {topic.hands_on_url && (
+                                      <div className="pt-1 flex items-center justify-between">
+                                        <a
+                                          href={topic.hands_on_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-[11px] font-mono text-[#14663a] dark:text-spy-green hover:underline font-semibold"
+                                        >
+                                          <span>Launch Lab Platform</span>
+                                          <ExternalLink className="w-3 h-3" />
+                                        </a>
+
+                                        <span className="text-[10px] font-mono text-spy-dim">
+                                          {topic.hands_on_completed ? "✓ Verified Done" : "Mandatory for Done"}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
-                          </div>
 
-                          {/* 2. Required Hands-On Task Box */}
-                          <div
-                            className={`p-2.5 rounded-[4px] border space-y-1.5 transition-colors ${topic.hands_on_completed
-                                ? "bg-emerald-500/5 border-emerald-500/20"
-                                : "bg-spy-surface border-spy-border"
-                              }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-spy-dim font-bold">
-                                <FlaskConical className="w-3 h-3 text-spy-amber" />
-                                <span>Required Hands-On Lab</span>
+                            {/* Completed Takeaway Display */}
+                            {topic.takeaway && topic.takeaway.trim() !== "" && (
+                              <div className="p-2.5 rounded-[4px] bg-[#eef7f1] border border-[#cde5d4] dark:bg-spy-surface2/60 dark:border-spy-border flex items-start gap-2">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-spy-green shrink-0 mt-0.5" />
+                                <div className="space-y-0.5 min-w-0">
+                                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#14663a] dark:text-spy-green font-bold block">
+                                    Technical Takeaway Logged:
+                                  </span>
+                                  <p className="text-xs text-spy-text font-sans italic">
+                                    &ldquo;{topic.takeaway}&rdquo;
+                                  </p>
+                                </div>
                               </div>
-                              {topic.hands_on_platform && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase bg-spy-surface2 border border-spy-border text-spy-dim">
-                                  {topic.hands_on_platform}
-                                </span>
-                              )}
-                            </div>
+                            )}
 
-                            <p className="text-xs text-spy-text font-sans">
-                              {topic.hands_on_task || "Complete practical lab simulation."}
-                            </p>
-
-                            {topic.hands_on_url && (
-                              <div className="pt-1 flex items-center justify-between">
-                                <a
-                                  href={topic.hands_on_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] font-mono text-[#14663a] dark:text-spy-green hover:underline font-semibold"
+                            {/* Inline Notes & Resources Editor */}
+                            {isEditing ? (
+                              <div className="p-2.5 bg-spy-surface2 border border-spy-border rounded-[4px] space-y-2 mt-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] font-mono text-spy-dim mb-0.5">
+                                      Time Spent (min)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={editTime}
+                                      onChange={(e) => setEditTime(parseInt(e.target.value) || 0)}
+                                      className="w-full bg-spy-surface border border-spy-border rounded-[3px] px-2 py-1 text-xs text-spy-text font-mono"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-mono text-spy-dim mb-0.5">
+                                    Notes & Observations
+                                  </label>
+                                  <textarea
+                                    rows={2}
+                                    value={editNotes}
+                                    onChange={(e) => setEditNotes(e.target.value)}
+                                    className="w-full bg-spy-surface border border-spy-border rounded-[3px] p-2 text-xs text-spy-text font-sans"
+                                    placeholder="Key observations, attack vectors, or defense rules..."
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-1.5">
+                                  <Button variant="stealth" size="sm" onClick={() => setEditingTopicId(null)}>
+                                    Cancel
+                                  </Button>
+                                  <Button variant="primary" size="sm" onClick={() => handleSaveEdit(topic)}>
+                                    Save
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between text-xs text-spy-muted pt-1">
+                                {topic.notes ? (
+                                  <p className="font-sans text-[11px] text-spy-dim italic truncate flex-1 pr-2">
+                                    &quot;{topic.notes}&quot;
+                                  </p>
+                                ) : (
+                                  <div className="flex-1" />
+                                )}
+                                <button
+                                  onClick={() => handleStartEdit(topic)}
+                                  className="text-[11px] font-mono text-spy-dim hover:text-spy-green underline shrink-0"
                                 >
-                                  <span>Launch Lab Platform</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-
-                                <span className="text-[10px] font-mono text-spy-dim">
-                                  {topic.hands_on_completed ? "✓ Verified Done" : "Mandatory for Done"}
-                                </span>
+                                  {topic.notes ? "Edit Notes" : "+ Add Note"}
+                                </button>
                               </div>
                             )}
-                          </div>
-                        </div>
-
-                        {/* Completed Takeaway Display */}
-                        {topic.takeaway && (
-                          <div className="p-2.5 rounded-[4px] bg-[#eef7f1] border border-[#cde5d4] dark:bg-spy-surface2/60 dark:border-spy-border flex items-start gap-2">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-spy-green shrink-0 mt-0.5" />
-                            <div className="space-y-0.5 min-w-0">
-                              <span className="text-[10px] font-mono uppercase tracking-wider text-[#14663a] dark:text-spy-green font-bold block">
-                                Technical Takeaway Logged:
-                              </span>
-                              <p className="text-xs text-spy-text font-sans italic">
-                                &ldquo;{topic.takeaway}&rdquo;
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Inline Notes & Resources Editor */}
-                        {isEditing ? (
-                          <div className="p-2.5 bg-spy-surface2 border border-spy-border rounded-[4px] space-y-2 mt-2">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div>
-                                <label className="block text-[10px] font-mono text-spy-dim mb-0.5">
-                                  Time Spent (min)
-                                </label>
-                                <input
-                                  type="number"
-                                  value={editTime}
-                                  onChange={(e) => setEditTime(parseInt(e.target.value) || 0)}
-                                  className="w-full bg-spy-surface border border-spy-border rounded-[3px] px-2 py-1 text-xs text-spy-text font-mono"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-mono text-spy-dim mb-0.5">
-                                Notes & Observations
-                              </label>
-                              <textarea
-                                rows={2}
-                                value={editNotes}
-                                onChange={(e) => setEditNotes(e.target.value)}
-                                className="w-full bg-spy-surface border border-spy-border rounded-[3px] p-2 text-xs text-spy-text font-sans"
-                                placeholder="Key observations, attack vectors, or defense rules..."
-                              />
-                            </div>
-                            <div className="flex justify-end gap-1.5">
-                              <Button variant="stealth" size="sm" onClick={() => setEditingTopicId(null)}>
-                                Cancel
-                              </Button>
-                              <Button variant="primary" size="sm" onClick={() => handleSaveEdit(topic)}>
-                                Save
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between text-xs text-spy-muted pt-1">
-                            {topic.notes ? (
-                              <p className="font-sans text-[11px] text-spy-dim italic truncate flex-1 pr-2">
-                                &quot;{topic.notes}&quot;
-                              </p>
-                            ) : (
-                              <span className="text-[10px] font-mono text-spy-dim">No extra notes</span>
-                            )}
-                            <button
-                              onClick={() => handleStartEdit(topic)}
-                              className="text-[11px] font-mono text-spy-dim hover:text-spy-green underline shrink-0"
-                            >
-                              {topic.notes ? "Edit Notes" : "+ Add Note"}
-                            </button>
                           </div>
                         )}
                       </div>
