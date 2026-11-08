@@ -66,9 +66,6 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
   // Profile handle & API sync state
   const [handle, setHandle] = useState<string>(() => {
     if (handleProp && handleProp.trim()) return normalizeCodeforcesHandle(handleProp);
-    if (typeof window !== "undefined") {
-      return normalizeCodeforcesHandle(localStorage.getItem("op_me_cf_handle") || "");
-    }
     return "";
   });
 
@@ -90,18 +87,8 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [lastSynced, setLastSynced] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      return Number(localStorage.getItem("op_me_cf_last_synced") || "0");
-    }
-    return 0;
-  });
-  const [apiSolvedTotal, setApiSolvedTotal] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      return Number(localStorage.getItem("op_me_cf_api_solved_total") || "0");
-    }
-    return 0;
-  });
+  const [lastSynced, setLastSynced] = useState<number>(0);
+  const [apiSolvedTotal, setApiSolvedTotal] = useState<number>(0);
 
   // Solved count in the app - count only unique problems with verdict OK / solved status
   const solvedCount = useMemo(() => {
@@ -110,10 +97,6 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
 
   // Expected website profile count (akibmehedi profile shows 92 on the website)
   const expectedProfileTotal = useMemo(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("op_me_cf_profile_total");
-      if (stored) return Number(stored);
-    }
     return handle.trim().toLowerCase() === "akibmehedi" ? 92 : 0;
   }, [handle]);
 
@@ -143,9 +126,6 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
   const handleSaveHandle = (newHandle: string) => {
     const clean = normalizeCodeforcesHandle(newHandle);
     setHandle(clean);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("op_me_cf_handle", clean);
-    }
     if (onUpdateHandle) {
       onUpdateHandle(clean);
     }
@@ -233,8 +213,6 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
 
       // 7. Update last synced & total solved numbers
       const nowTs = Date.now();
-      localStorage.setItem("op_me_cf_last_synced", nowTs.toString());
-      localStorage.setItem("op_me_cf_api_solved_total", totalSolvedCount.toString());
       setLastSynced(nowTs);
       setApiSolvedTotal(totalSolvedCount);
 
@@ -266,11 +244,8 @@ export const CodeforcesView: React.FC<CodeforcesViewProps> = ({
   useEffect(() => {
     if (!handle.trim()) return;
 
-    const storedLastSync = localStorage.getItem("op_me_cf_last_synced");
-    const lastTime = storedLastSync ? Number(storedLastSync) : 0;
     const ONE_HOUR = 60 * 60 * 1000;
-
-    if (!lastTime || Date.now() - lastTime > ONE_HOUR) {
+    if (!lastSynced || Date.now() - lastSynced > ONE_HOUR) {
       handleSync({ silent: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

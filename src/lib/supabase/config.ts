@@ -19,7 +19,7 @@ export const validateSupabaseConfig = (): SupabaseConfigStatus => {
     return {
       isConfigured: false,
       status: 'missing',
-      message: 'Local mode: data stays on this device',
+      message: 'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local',
     };
   }
 
@@ -61,7 +61,7 @@ export const validateSupabaseConfig = (): SupabaseConfigStatus => {
   return {
     isConfigured: true,
     status: 'valid',
-    message: 'Supabase Cloud Connected (Email/Password Auth)',
+    message: 'Supabase Cloud Connected',
     url,
   };
 };

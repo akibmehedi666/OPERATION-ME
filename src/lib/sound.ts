@@ -5,14 +5,7 @@ class SoundFX {
   private ctx: AudioContext | null = null;
   private enabled: boolean = true;
 
-  constructor() {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("spy_sound_enabled");
-      if (stored !== null) {
-        this.enabled = stored === "true";
-      }
-    }
-  }
+  constructor() {}
 
   private initCtx() {
     if (!this.ctx && typeof window !== "undefined") {
@@ -30,11 +23,12 @@ class SoundFX {
     return this.enabled;
   }
 
+  public setEnabled(enabled: boolean) {
+    this.enabled = enabled;
+  }
+
   public toggleSound(): boolean {
     this.enabled = !this.enabled;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("spy_sound_enabled", String(this.enabled));
-    }
     return this.enabled;
   }
 

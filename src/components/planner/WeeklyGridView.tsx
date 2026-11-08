@@ -186,22 +186,11 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
     notes?: string | null;
   } | null>(null);
 
-  // Full day preference persisted to localStorage
-  const [isFullDay, setIsFullDay] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("op_me_planner_full_day") === "true";
-    }
-    return false;
-  });
+  // Full day view toggle held in state
+  const [isFullDay, setIsFullDay] = useState<boolean>(false);
 
   const handleToggleFullDay = () => {
-    setIsFullDay((prev) => {
-      const next = !prev;
-      if (typeof window !== "undefined") {
-        localStorage.setItem("op_me_planner_full_day", String(next));
-      }
-      return next;
-    });
+    setIsFullDay((prev) => !prev);
   };
 
   // Update current time clock

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, Plus, AlertCircle, RefreshCw } from "lucide-react";
 import { useAgencyState } from "@/lib/useAgencyState";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { AgentHeader } from "@/components/dashboard/AgentHeader";
@@ -42,8 +42,6 @@ import { InsightsCard } from "@/components/dashboard/InsightsCard";
 import { NotificationToast } from "@/components/ui/NotificationToast";
 import { ErrorToastContainer } from "@/components/ui/ErrorToastContainer";
 import { getDueNotifications } from "@/lib/notificationScheduler";
-import { checkLocalDataToMigrate } from "@/lib/cloudMigration";
-import { CloudMigrationBanner } from "@/components/dashboard/CloudMigrationBanner";
 
 // Dashboard stagger variants: cards fade + slide up 12px with 60ms stagger on load
 const dashboardContainerVariants: Variants = {
@@ -88,12 +86,8 @@ export default function Home() {
     notificationSettings,
     totalXp,
     streak,
-    isSupabaseConnected,
-    currentUser,
-    refreshData,
     login,
     resetPassword,
-    guestBypass,
     logout,
     addMission,
     editMission,
@@ -147,17 +141,11 @@ export default function Home() {
     errorToasts,
     dismissErrorToast,
     structureLoadingError,
+    dataLoadingError,
+    supabaseConfigError,
+    retryLoadData,
     retryLoadStructure,
   } = useAgencyState();
-
-  const [initTimedOut, setInitTimedOut] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setInitTimedOut(true);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, []);
 
   const {
     defaultTheme,
@@ -183,7 +171,6 @@ export default function Home() {
   const [isCpMissionLogOpen, setIsCpMissionLogOpen] = useState(false);
   const [isPaperMissionModalOpen, setIsPaperMissionModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
-  const [migrationDismissed, setMigrationDismissed] = useState(false);
   const [tuitionModal, setTuitionModal] = useState<{
     isOpen: boolean;
     day?: DayOfWeek;
@@ -193,23 +180,6 @@ export default function Home() {
   }>({
     isOpen: false,
   });
-
-  const localSummary = React.useMemo(() => {
-    if (!isSupabaseConnected || !currentUser || currentUser.id === "agent-akib-local" || migrationDismissed) {
-      return {
-        hasData: false,
-        missionCount: 0,
-        courseCount: 0,
-        timeBlockCount: 0,
-        projectCount: 0,
-        paperCount: 0,
-        cfCount: 0,
-        lectureLogCount: 0,
-        totalItems: 0,
-      };
-    }
-    return checkLocalDataToMigrate(currentUser.id);
-  }, [isSupabaseConnected, currentUser, migrationDismissed]);
 
   // Real-time notification alerts evaluated from schedule, deadlines, and quiet hours
   const dueNotifications = React.useMemo(() => {
@@ -247,32 +217,29 @@ export default function Home() {
   }, [activeTab]);
 
   // Codeforces auto-sync on app open (throttled: at most once per hour)
+  const lastCfSyncRef = useRef<number>(0);
   useEffect(() => {
-    if (typeof window === "undefined" || !isAuthenticated || loading) return;
-    const cfHandle = localStorage.getItem("op_me_cf_handle");
-    if (!cfHandle || !cfHandle.trim()) return;
+    if (!isAuthenticated || loading) return;
+    const handleToSync = cfHandle?.trim();
+    if (!handleToSync) return;
 
-    const storedLastSync = localStorage.getItem("op_me_cf_last_synced");
-    const lastTime = storedLastSync ? Number(storedLastSync) : 0;
     const ONE_HOUR = 60 * 60 * 1000;
-
-    if (!lastTime || Date.now() - lastTime > ONE_HOUR) {
+    if (!lastCfSyncRef.current || Date.now() - lastCfSyncRef.current > ONE_HOUR) {
       (async () => {
         try {
-          const subs = await fetchCodeforcesSubmissions(cfHandle.trim());
+          const subs = await fetchCodeforcesSubmissions(handleToSync);
           const parsed = parseSubmissionsToProblems(subs);
-          const { newLogs, totalSolvedCount } = deduplicateAndFormatNewLogs(parsed, cfLogs, cfHandle.trim());
+          const { newLogs } = deduplicateAndFormatNewLogs(parsed, cfLogs, handleToSync);
           if (newLogs.length > 0) {
             await importCfLogs(newLogs);
           }
-          localStorage.setItem("op_me_cf_last_synced", Date.now().toString());
-          localStorage.setItem("op_me_cf_api_solved_total", totalSolvedCount.toString());
+          lastCfSyncRef.current = Date.now();
         } catch (err) {
           console.warn("Background Codeforces auto-sync skipped:", err);
         }
       })();
     }
-  }, [isAuthenticated, loading, cfLogs, importCfLogs]);
+  }, [isAuthenticated, loading, cfHandle, cfLogs, importCfLogs]);
 
   // Mission accomplishment animation state
   const [accomplishingMissionId, setAccomplishingMissionId] = useState<string | null>(null);
@@ -481,25 +448,77 @@ export default function Home() {
     }
   };
 
-  if (loading && !initTimedOut) {
+  // 1. Supabase environment configuration error screen
+  if (supabaseConfigError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-spy-bg font-mono text-spy-text p-6 text-center select-none">
+        <div className="w-full max-w-md bg-spy-surface border border-spy-red/40 rounded-[6px] p-6 space-y-4">
+          <div className="w-10 h-10 mx-auto rounded-full bg-spy-danger-surface text-spy-red flex items-center justify-center border border-spy-red/30">
+            <AlertCircle className="w-5 h-5 text-spy-red" />
+          </div>
+          <h1 className="text-base font-bold text-spy-red tracking-wider uppercase">
+            Supabase is not configured
+          </h1>
+          <p className="text-xs text-spy-muted leading-relaxed">
+            {supabaseConfigError}
+          </p>
+          <div className="text-[11px] bg-spy-surface2 border border-spy-border p-3 rounded text-left text-spy-dim font-mono space-y-1">
+            <div>NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co</div>
+            <div>NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Loading screen while authenticating and loading tables
+  if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-spy-bg font-mono text-spy-muted text-xs gap-3 p-4 select-none">
         <div className="flex items-center gap-2 text-spy-green">
           <span className="w-2 h-2 rounded-full bg-spy-green animate-ping" />
           <span className="tracking-widest font-bold">INITIALIZING SECURE SESSION...</span>
         </div>
+        <p className="text-[10px] text-spy-dim">Connecting to Supabase Cloud</p>
       </div>
     );
   }
 
-  if (!isAuthenticated || (loading && initTimedOut)) {
+  // 3. Login page for unauthenticated users
+  if (!isAuthenticated) {
     return (
       <LoginPage
         onLogin={login}
         onResetPassword={resetPassword}
-        onGuestBypass={guestBypass}
-        isSupabaseConnected={isSupabaseConnected}
       />
+    );
+  }
+
+  // 4. Data loading error screen with Retry button
+  if (dataLoadingError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-spy-bg font-mono text-spy-text p-6 text-center select-none">
+        <div className="w-full max-w-md bg-spy-surface border border-spy-red/40 rounded-[6px] p-6 space-y-4">
+          <div className="w-10 h-10 mx-auto rounded-full bg-spy-danger-surface text-spy-red flex items-center justify-center border border-spy-red/30">
+            <AlertCircle className="w-5 h-5 text-spy-red" />
+          </div>
+          <h1 className="text-base font-bold text-spy-red tracking-wider uppercase">
+            Data Synchronization Failed
+          </h1>
+          <p className="text-xs text-spy-muted leading-relaxed">
+            {dataLoadingError}
+          </p>
+          <Button
+            variant="primary"
+            size="md"
+            onClick={retryLoadData}
+            className="w-full mt-2 flex items-center justify-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Retry Connection</span>
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -556,7 +575,6 @@ export default function Home() {
             recurringRules={recurringRules}
             categories={categories}
             notificationSettings={notificationSettings}
-            isSupabaseConnected={isSupabaseConnected}
             onToggleRecurringRule={toggleRecurringRule}
             onUpdateRecurringRule={updateRecurringRule}
             onAddRecurringRule={addRecurringRule}
@@ -661,18 +679,6 @@ export default function Home() {
                   animate="visible"
                   className="space-y-6"
                 >
-                  {/* One-time local data migration prompt when cloud connected */}
-                  {localSummary.hasData && currentUser && (
-                    <CloudMigrationBanner
-                      summary={localSummary}
-                      userId={currentUser.id}
-                      onMigrationComplete={async () => {
-                        await refreshData();
-                      }}
-                      onDismiss={() => setMigrationDismissed(true)}
-                    />
-                  )}
-
                   {/* Strategic Directive Alert Banner (7-day alert before exams/payments) */}
                   <DashboardBanner events={academicEvents} onOpenPlanner={() => setActiveTab("planner")} />
 

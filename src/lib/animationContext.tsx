@@ -27,10 +27,6 @@ export const AnimationProvider: React.FC<{
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("op_me_animations_enabled");
-      if (stored !== null) {
-        setAnimationsEnabledState(stored === "true");
-      }
       const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
       setSystemReducedMotion(mediaQuery.matches);
       const listener = (e: MediaQueryListEvent) => setSystemReducedMotion(e.matches);
@@ -41,9 +37,6 @@ export const AnimationProvider: React.FC<{
 
   const setAnimationsEnabled = useCallback((enabled: boolean) => {
     setAnimationsEnabledState(enabled);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("op_me_animations_enabled", String(enabled));
-    }
   }, []);
 
   const isMotionActive = animationsEnabled && !systemReducedMotion;

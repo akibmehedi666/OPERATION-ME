@@ -180,6 +180,15 @@ CREATE TABLE IF NOT EXISTS public.cf_log (
 ALTER TABLE public.cf_log ADD COLUMN IF NOT EXISTS problem_key TEXT;
 ALTER TABLE public.cf_log ALTER COLUMN xp SET DEFAULT 0;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'uq_cf_log_user_problem'
+    ) THEN
+        ALTER TABLE public.cf_log ADD CONSTRAINT uq_cf_log_user_problem UNIQUE (user_id, problem_key);
+    END IF;
+END $$;
+
 -- ====================================================================
 -- 10. RESEARCH PAPERS TABLE
 -- ====================================================================
@@ -304,7 +313,17 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS cf_handle TEXT;
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS cf_handle TEXT DEFAULT '';
+ALTER TABLE public.user_settings ALTER COLUMN cf_handle SET DEFAULT '';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'user_settings_user_id_key'
+    ) THEN
+        ALTER TABLE public.user_settings ADD CONSTRAINT user_settings_user_id_key UNIQUE (user_id);
+    END IF;
+END $$;
 
 -- ====================================================================
 -- ROW LEVEL SECURITY (RLS) CONFIGURATION

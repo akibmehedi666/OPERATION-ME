@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { 
@@ -81,7 +81,6 @@ export function AgentHeader({
     quiet_hours_start: "23:00",
     quiet_hours_end: "07:00",
   },
-  isSupabaseConnected = false,
   onToggleRecurringRule,
   onUpdateRecurringRule,
   onAddRecurringRule,
@@ -102,8 +101,9 @@ export function AgentHeader({
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const { animationsEnabled, setAnimationsEnabled, systemReducedMotion } = useAnimations();
 
-  const handleExportData = () => {
-    const res = triggerDataExportDownload();
+  const handleExportData = async () => {
+    setExportStatus("Exporting cloud data...");
+    const res = await triggerDataExportDownload();
     if (res.success) {
       soundFX.playTargetAcquired();
       setExportStatus(`✓ Exported ${res.itemCount} records to ${res.filename}`);
@@ -131,34 +131,29 @@ export function AgentHeader({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isSettingsOpen]);
 
-  // Subtle typewriter effect on Agent greeting on first login of the day (dark theme)
+  // Subtle typewriter effect on Agent greeting on session open (dark theme)
   const [greetingText, setGreetingText] = useState("");
   const [showGreeting, setShowGreeting] = useState(false);
+  const hasShownGreetingRef = useRef(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (currentTheme !== "dark") {
+    if (currentTheme !== "dark" || hasShownGreetingRef.current) {
       setShowGreeting(false);
       return;
     }
 
-    const todayStr = new Date().toDateString();
-    const lastGreeting = localStorage.getItem("op_me_greeting_date");
-
-    if (lastGreeting !== todayStr) {
-      localStorage.setItem("op_me_greeting_date", todayStr);
-      setShowGreeting(true);
-      const full = "Welcome back, Agent Akib.";
-      let idx = 0;
-      const interval = setInterval(() => {
-        idx++;
-        setGreetingText(full.slice(0, idx));
-        if (idx >= full.length) {
-          clearInterval(interval);
-        }
-      }, 40);
-      return () => clearInterval(interval);
-    }
+    hasShownGreetingRef.current = true;
+    setShowGreeting(true);
+    const full = "Welcome back, Agent Akib.";
+    let idx = 0;
+    const interval = setInterval(() => {
+      idx++;
+      setGreetingText(full.slice(0, idx));
+      if (idx >= full.length) {
+        clearInterval(interval);
+      }
+    }, 40);
+    return () => clearInterval(interval);
   }, [currentTheme]);
 
   const toggleSound = () => {
@@ -219,23 +214,13 @@ export function AgentHeader({
               >
                 {rankInfo.rank}
               </span>
-              {!isSupabaseConnected ? (
-                <span
-                  className="text-[10px] font-mono text-spy-amber bg-spy-amberMuted border border-spy-amber/30 px-2 py-0.5 rounded-[3px] inline-flex items-center gap-1"
-                  title="Supabase env vars not detected. Data stored locally in browser."
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-spy-amber" />
-                  <span>Local mode: data stays on this device</span>
-                </span>
-              ) : (
-                <span
-                  className="text-[10px] font-mono text-spy-green bg-spy-green/10 border border-spy-green/30 px-2 py-0.5 rounded-[3px] inline-flex items-center gap-1"
-                  title="Connected to Supabase Cloud"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-spy-green" />
-                  <span>Cloud Active</span>
-                </span>
-              )}
+              <span
+                className="text-[10px] font-mono text-spy-green bg-spy-green/10 border border-spy-green/30 px-2 py-0.5 rounded-[3px] inline-flex items-center gap-1"
+                title="Connected to Supabase Cloud"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-spy-green" />
+                <span>Cloud Active</span>
+              </span>
             </div>
           </div>
         </div>
@@ -514,20 +499,12 @@ export function AgentHeader({
                       <Database className="w-3.5 h-3.5 text-spy-green" />
                       <span>Storage Engine</span>
                     </div>
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded-[2px] border ${
-                        isSupabaseConnected
-                          ? "bg-spy-green/15 text-spy-green border-spy-green/40 font-bold"
-                          : "bg-spy-amberMuted text-spy-amber border-spy-amber/40"
-                      }`}
-                    >
-                      {isSupabaseConnected ? "Supabase Cloud" : "Local Mode (Device Only)"}
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-[2px] border bg-spy-green/15 text-spy-green border-spy-green/40 font-bold">
+                      Supabase Cloud
                     </span>
                   </div>
                   <p className="text-[10px] text-spy-dim font-sans leading-relaxed">
-                    {isSupabaseConnected
-                      ? "Connected to isolated Supabase PostgreSQL database with Row Level Security."
-                      : "Local storage mode active. All missions, courses, and logs stay on this device."}
+                    Connected to isolated Supabase PostgreSQL database with Row Level Security.
                   </p>
 
                   <button
@@ -573,20 +550,12 @@ export function AgentHeader({
                 <div className="p-3 bg-spy-surface2 border border-spy-border rounded-[4px] space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-spy-text font-bold">Active Storage:</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-[2px] text-[10px] uppercase font-bold border ${
-                        isSupabaseConnected
-                          ? "bg-spy-green/15 text-spy-green border-spy-green/40"
-                          : "bg-spy-amberMuted text-spy-amber border-spy-amber/40"
-                      }`}
-                    >
-                      {isSupabaseConnected ? "Supabase Cloud" : "Local Mode (Device Only)"}
+                    <span className="px-2 py-0.5 rounded-[2px] text-[10px] uppercase font-bold border bg-spy-green/15 text-spy-green border-spy-green/40">
+                      Supabase Cloud
                     </span>
                   </div>
                   <p className="text-[11px] text-spy-dim font-sans leading-relaxed">
-                    {isSupabaseConnected
-                      ? "Connected to cloud database with user-isolated Row Level Security."
-                      : "Local storage mode active: all operations stay on this device."}
+                    Connected to cloud database with user-isolated Row Level Security.
                   </p>
                 </div>
 

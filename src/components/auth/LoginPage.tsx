@@ -6,7 +6,6 @@ import {
   Lock, 
   Eye, 
   EyeOff, 
-  UserCheck, 
   AlertCircle,
   AlertTriangle,
   CheckCircle2
@@ -19,15 +18,13 @@ import { LogoIcon } from "@/components/ui/LogoIcon";
 interface LoginPageProps {
   onLogin: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   onResetPassword?: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  onGuestBypass: () => void;
-  isSupabaseConnected: boolean;
+  onGuestBypass?: () => void;
+  isSupabaseConnected?: boolean;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
   onResetPassword,
-  onGuestBypass,
-  isSupabaseConnected,
 }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,6 +85,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
   };
 
+  const configStatus = validateSupabaseConfig();
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-spy-bg text-spy-text">
       <motion.div
@@ -115,7 +114,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             Agent Authorization
           </h1>
           <p className="text-xs text-spy-muted mt-1">
-            Classified Authorization Portal
+            Cloud Authentication Required
           </p>
         </div>
 
@@ -142,7 +141,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
-          {/* Email field with normal placeholder */}
+          {/* Email field */}
           <div>
             <label htmlFor="agent-email" className="block text-spy-muted mb-1 font-medium">
               Email Address
@@ -217,55 +216,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </Button>
         </form>
 
-        {/* Status / Local Mode Direct Access Section */}
-        {(() => {
-          const configStatus = validateSupabaseConfig();
-          if (configStatus.status === "secret_key_blocked") {
-            return (
-              <div className="mt-5 text-left text-[11px] font-mono text-spy-red bg-spy-danger-surface border border-spy-red/40 p-2.5 rounded-[3px] flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-spy-red shrink-0 mt-0.5" />
-                <span>{configStatus.message}</span>
-              </div>
-            );
-          }
-          if (configStatus.status === "malformed_url" || configStatus.status === "invalid_key") {
-            return (
-              <div className="mt-5 text-left text-[11px] font-mono text-spy-amber bg-spy-amberMuted border border-spy-amber/40 p-2.5 rounded-[3px] flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-spy-amber shrink-0 mt-0.5" />
-                <span>{configStatus.message}</span>
-              </div>
-            );
-          }
-          // Cloud Mode: Direct access is completely removed
-          if (isSupabaseConnected) {
-            return (
-              <div className="mt-6 pt-4 border-t border-spy-border">
-                <div className="text-center text-[11px] font-mono text-spy-green bg-spy-green/10 border border-spy-green/30 py-1.5 px-3 rounded-[3px] flex items-center justify-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-spy-green" />
-                  <span>Cloud Mode (Supabase Session Required)</span>
-                </div>
-              </div>
-            );
-          }
-          // Local Mode ONLY: Direct access option with local mode label
-          return (
-            <div className="mt-6 pt-5 border-t border-spy-border">
-              <button
-                type="button"
-                onClick={onGuestBypass}
-                className="w-full py-2 bg-spy-surface2 hover:bg-spy-surface border border-spy-border text-xs text-spy-text hover:text-spy-green transition-colors rounded-[3px] flex items-center justify-center gap-2"
-              >
-                <UserCheck className="w-4 h-4 text-spy-green" />
-                <span>Direct Access (Local Mode)</span>
-              </button>
-
-              <div className="mt-3 text-center text-[11px] font-mono text-spy-amber bg-spy-amberMuted border border-spy-amber/30 py-1.5 px-3 rounded-[3px] flex items-center justify-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-spy-amber" />
-                <span>Local mode: data stays on this device</span>
-              </div>
-            </div>
-          );
-        })()}
+        {/* Configuration Status Warnings */}
+        {configStatus.status === "secret_key_blocked" && (
+          <div className="mt-5 text-left text-[11px] font-mono text-spy-red bg-spy-danger-surface border border-spy-red/40 p-2.5 rounded-[3px] flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-spy-red shrink-0 mt-0.5" />
+            <span>{configStatus.message}</span>
+          </div>
+        )}
+        {(configStatus.status === "malformed_url" || configStatus.status === "invalid_key" || configStatus.status === "missing") && (
+          <div className="mt-5 text-left text-[11px] font-mono text-spy-amber bg-spy-amberMuted border border-spy-amber/40 p-2.5 rounded-[3px] flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-spy-amber shrink-0 mt-0.5" />
+            <span>{configStatus.message}</span>
+          </div>
+        )}
       </motion.div>
     </div>
   );
