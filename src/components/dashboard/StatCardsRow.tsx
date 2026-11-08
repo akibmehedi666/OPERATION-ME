@@ -13,10 +13,20 @@ interface StatCardsRowProps {
 
 export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) => {
   const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-  // Find missions that were due today or completed today
+  // Find missions that belong to today (scheduled today, deadline today, or completed today)
+  // Strictly count missions only (not tuition or classes)
   const todayMissions = missions.filter((m) => {
-    if (!m.deadline && m.status !== "completed") return false;
+    if (m.completed_at && m.completed_at.slice(0, 10) === todayStr) {
+      return true;
+    }
+    if (m.auto_generated_date === todayStr) {
+      return true;
+    }
+    if (m.scheduled_start && m.scheduled_start.slice(0, 10) === todayStr) {
+      return true;
+    }
     if (m.deadline) {
       const d = new Date(m.deadline);
       const isToday =
@@ -25,19 +35,11 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
         d.getFullYear() === now.getFullYear();
       if (isToday) return true;
     }
-    if (m.completed_at) {
-      const cd = new Date(m.completed_at);
-      const isCompletedToday =
-        cd.getDate() === now.getDate() &&
-        cd.getMonth() === now.getMonth() &&
-        cd.getFullYear() === now.getFullYear();
-      if (isCompletedToday) return true;
-    }
     return false;
   });
 
   const completedTodayCount = todayMissions.filter((m) => m.status === "completed").length;
-  const totalTodayCount = Math.max(todayMissions.length, completedTodayCount);
+  const totalTodayCount = todayMissions.length;
 
   // Overdue count (non-completed missions with past deadline)
   const overdueCount = missions.filter((m) => {
@@ -56,10 +58,7 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
           </div>
           <div className="text-base sm:text-lg font-mono font-bold text-[#1f2421] dark:text-spy-text mt-0.5">
             <AnimatedCounter value={completedTodayCount} />/
-            <AnimatedCounter
-              value={totalTodayCount || missions.filter((m) => m.status === "active").length || 1}
-            />{" "}
-            done
+            <AnimatedCounter value={totalTodayCount} /> done
           </div>
         </div>
         <div className="p-2 bg-[#dcf3e4] border border-[#b9e7c8] text-[#14663a] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-green rounded-[4px]">

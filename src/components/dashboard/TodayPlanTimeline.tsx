@@ -2,8 +2,8 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, GraduationCap, Target, Check, Clock } from "lucide-react";
-import { Mission, Category, ClassScheduleItem, DayOfWeek, TimeBlock, AcademicEvent } from "@/types/database";
+import { BookOpen, GraduationCap, Target, Check, Clock, Undo2 } from "lucide-react";
+import { Mission, Category, ClassScheduleItem, DayOfWeek, TimeBlock, AcademicEvent, TuitionException } from "@/types/database";
 import { formatTime12, formatTimeRange12 } from "@/lib/formatters";
 import { getCategoryTheme } from "@/lib/categoryTheme";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +21,9 @@ interface TodayPlanTimelineProps {
   accomplishingMissionId?: string | null;
   onCompleteMission: (mission: Mission) => void;
   onOpenTuitionModal?: (slot?: { day: DayOfWeek; startTime: string; endTime: string }) => void;
+  tuitionExceptions?: TuitionException[];
+  onUndoTuitionException?: (id: string) => Promise<void> | void;
+  onOpenTuitionActionModal?: (slot?: { day: DayOfWeek; startTime: string; endTime: string; dateStr?: string }) => void;
 }
 
 interface TimelineItem {
@@ -35,6 +38,11 @@ interface TimelineItem {
   isOverdue?: boolean;
   isCompleted?: boolean;
   missionObj?: Mission;
+  isCancelled?: boolean;
+  tuitionExceptionId?: string;
+  day?: DayOfWeek;
+  startTime?: string;
+  endTime?: string;
 }
 
 export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
@@ -47,6 +55,9 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
   accomplishingMissionId,
   onCompleteMission,
   onOpenTuitionModal,
+  tuitionExceptions,
+  onUndoTuitionException,
+  onOpenTuitionActionModal,
 }) => {
   const now = new Date();
   const currentDayKey = DAY_KEYS[now.getDay()];
@@ -58,7 +69,7 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
   let dayBadge: string | undefined = undefined;
 
   if (timeBlocks && timeBlocks.length > 0) {
-    const resolved = resolveDaySchedule(now, timeBlocks, academicEvents || [], missions);
+    const resolved = resolveDaySchedule(now, timeBlocks, academicEvents || [], missions, tuitionExceptions || []);
     dayBadge = resolved.badge;
     todayScheduleItems = resolved.blocks
       .filter((b) => b.type === "class" || b.type === "tuition")
@@ -69,6 +80,11 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
         timeDisplay: formatTimeRange12(b.start_time, b.end_time),
         title: b.label,
         categoryName: b.type === "tuition" ? "Tuition" : "Class",
+        isCancelled: b.isCancelled,
+        tuitionExceptionId: b.tuitionException?.id,
+        day: b.weekday,
+        startTime: b.start_time,
+        endTime: b.end_time,
       }));
   } else {
     todayScheduleItems = schedule
@@ -205,6 +221,47 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
 
               const isAccomplishing = item.type === "mission" && item.id === accomplishingMissionId;
 
+              if (item.isCancelled) {
+                return (
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={`${item.type}-${item.id}`}
+                    className="p-3.5 rounded-[4px] bg-spy-surface2/60 border border-dashed border-spy-border text-spy-dim flex items-center justify-between gap-3 opacity-75 shadow-xs"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="p-2 rounded-[4px] border border-spy-border shrink-0 text-spy-dim">
+                        <GraduationCap className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs font-mono text-spy-dim line-through">
+                            {item.timeDisplay}
+                          </span>
+                        </div>
+                        <div className="text-xs font-mono text-spy-dim italic">
+                          Tuition cancelled
+                        </div>
+                      </div>
+                    </div>
+                    {item.tuitionExceptionId && onUndoTuitionException && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUndoTuitionException(item.tuitionExceptionId!);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[3px] bg-spy-surface border border-spy-border hover:border-spy-green text-xs font-mono font-bold text-spy-text hover:text-spy-green transition-colors cursor-pointer shadow-xs"
+                      >
+                        <Undo2 className="w-3 h-3" />
+                        <span>Undo</span>
+                      </button>
+                    )}
+                  </motion.div>
+                );
+              }
+
               return (
                 <motion.div
                   layout
@@ -223,8 +280,21 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
                     isAccomplishing ? "border-spy-green bg-spy-green/10" : ""
                   } ${item.type === "tuition" ? "cursor-pointer hover:border-spy-green" : ""}`}
                   onClick={() => {
-                    if (item.type === "tuition" && onOpenTuitionModal) {
-                      onOpenTuitionModal();
+                    if (item.type === "tuition") {
+                      if (onOpenTuitionActionModal) {
+                        onOpenTuitionActionModal({
+                          day: item.day || currentDayKey,
+                          startTime: item.startTime || item.sortTime,
+                          endTime: item.endTime || "19:30",
+                          dateStr: todayDateKey,
+                        });
+                      } else if (onOpenTuitionModal) {
+                        onOpenTuitionModal({
+                          day: item.day || currentDayKey,
+                          startTime: item.startTime || item.sortTime,
+                          endTime: item.endTime || "19:30",
+                        });
+                      }
                     }
                   }}
                 >

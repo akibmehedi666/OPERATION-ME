@@ -88,7 +88,7 @@ export const UpcomingDatesCard: React.FC<UpcomingDatesCardProps> = ({ events, on
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-spy-text truncate">
+                      <span className="text-sm font-medium text-spy-text line-clamp-2 break-words">
                         {event.title}
                       </span>
                       <span

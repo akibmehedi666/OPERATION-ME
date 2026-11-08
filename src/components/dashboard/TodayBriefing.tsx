@@ -1,18 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { 
   Calendar, 
-  Clock, 
   MapPin, 
   BookOpen, 
   GraduationCap,
   ShieldAlert,
-  Laptop
+  Laptop,
+  Undo2
 } from "lucide-react";
-import { ClassScheduleItem, DayOfWeek, TimeBlock, AcademicEvent, Mission } from "@/types/database";
+import { ClassScheduleItem, DayOfWeek, TimeBlock, AcademicEvent, Mission, TuitionException } from "@/types/database";
 import { formatTimeRange12, formatDate } from "@/lib/formatters";
-import { getCategoryTheme } from "@/lib/categoryTheme";
 import { 
   resolveDaySchedule, 
   getWeekStartDate, 
@@ -26,6 +25,9 @@ interface TodayBriefingProps {
   academicEvents?: AcademicEvent[];
   missions?: Mission[];
   onOpenTuitionModal?: (slot?: { day: DayOfWeek; startTime: string; endTime: string }) => void;
+  tuitionExceptions?: TuitionException[];
+  onUndoTuitionException?: (id: string) => Promise<void> | void;
+  onOpenTuitionActionModal?: (slot?: { day: DayOfWeek; startTime: string; endTime: string; dateStr?: string }) => void;
 }
 
 const DAY_NAMES: Record<DayOfWeek, string> = {
@@ -45,7 +47,10 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
   timeBlocks = [], 
   academicEvents = [], 
   missions = [],
-  onOpenTuitionModal 
+  onOpenTuitionModal,
+  tuitionExceptions = [],
+  onUndoTuitionException,
+  onOpenTuitionActionModal,
 }) => {
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("SAT");
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -76,12 +81,12 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
   // Resolve schedule for selectedDay honoring academic events & overrides
   const resolution = useMemo(() => {
     if (timeBlocks.length > 0) {
-      return resolveDaySchedule(selectedDate, timeBlocks, academicEvents, missions);
+      return resolveDaySchedule(selectedDate, timeBlocks, academicEvents, missions, tuitionExceptions);
     }
     return null;
-  }, [selectedDate, timeBlocks, academicEvents, missions]);
+  }, [selectedDate, timeBlocks, academicEvents, missions, tuitionExceptions]);
 
-  // Unified items to display
+  // Unified items to evaluate for selected day
   const displayItems = useMemo(() => {
     if (resolution) {
       return resolution.blocks
@@ -94,6 +99,8 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
           type: b.type === "tuition" ? ("tuition" as const) : ("class" as const),
           room: b.isOnline ? "Online Session" : (b.label.match(/\((\d+)\)/)?.[1] ? `UB${b.label.match(/\((\d+)\)/)?.[1]}` : null),
           isOnline: b.isOnline,
+          isCancelled: b.isCancelled,
+          tuitionExceptionId: b.tuitionException?.id,
         }));
     }
 
@@ -108,6 +115,8 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
         type: item.type,
         room: item.room,
         isOnline: false,
+        isCancelled: false,
+        tuitionExceptionId: undefined,
       }));
   }, [resolution, schedule, selectedDay]);
 
@@ -119,7 +128,9 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
     return null;
   }, [currentTime, timeBlocks, academicEvents]);
 
-  const getEventStatus = (item: { start_time: string; end_time: string }) => {
+  const isToday = DAY_KEYS[currentTime.getDay()] === selectedDay;
+
+  const getEventStatus = useCallback((item: { start_time: string; end_time: string }) => {
     const todayIndex = currentTime.getDay();
     const todayKey = DAY_KEYS[todayIndex];
     if (selectedDay !== todayKey) return "scheduled";
@@ -133,9 +144,96 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
     if (currentMinutes >= endMinutes) return "concluded";
     if (currentMinutes >= startMinutes && currentMinutes < endMinutes) return "in-progress";
     return "upcoming";
-  };
+  }, [currentTime, selectedDay]);
 
-  const isToday = DAY_KEYS[currentTime.getDay()] === selectedDay;
+  // 1. Next Class resolution
+  const classItems = useMemo(
+    () => displayItems.filter((i) => i.type === "class"),
+    [displayItems]
+  );
+
+  const nextClassDisplay = useMemo(() => {
+    if (resolution?.isHoliday) {
+      return {
+        title: "Academic Holiday",
+        time: "No classes scheduled",
+        room: null,
+        statusText: "Classes Suspended",
+        statusColor: "text-amber-500",
+        isOnline: false,
+      };
+    }
+
+    if (classItems.length === 0) {
+      return {
+        title: "No Classes Scheduled",
+        time: "Free day",
+        room: null,
+        statusText: "Open Schedule",
+        statusColor: "text-spy-dim",
+        isOnline: false,
+      };
+    }
+
+    if (isToday) {
+      // Find currently active or next upcoming class
+      const activeOrUpcoming = classItems.find((c) => {
+        const s = getEventStatus(c);
+        return s === "in-progress" || s === "upcoming";
+      });
+
+      if (activeOrUpcoming) {
+        const s = getEventStatus(activeOrUpcoming);
+        return {
+          title: activeOrUpcoming.course_name.replace(/\s*\(\d+\)/, ""),
+          time: formatTimeRange12(activeOrUpcoming.start_time, activeOrUpcoming.end_time),
+          room: activeOrUpcoming.room,
+          statusText: s === "in-progress" ? "Active Now" : (upcomingClassInfo?.countdownText || "Upcoming"),
+          statusColor: s === "in-progress" ? "text-spy-green" : "text-spy-green",
+          isOnline: activeOrUpcoming.isOnline,
+        };
+      }
+
+      // All classes completed today
+      const lastClass = classItems[classItems.length - 1];
+      return {
+        title: lastClass.course_name.replace(/\s*\(\d+\)/, ""),
+        time: formatTimeRange12(lastClass.start_time, lastClass.end_time),
+        room: lastClass.room,
+        statusText: "Concluded",
+        statusColor: "text-spy-dim",
+        isOnline: lastClass.isOnline,
+      };
+    }
+
+    // Future / alternate day: show the day's first scheduled class
+    const firstClass = classItems[0];
+    return {
+      title: firstClass.course_name.replace(/\s*\(\d+\)/, ""),
+      time: formatTimeRange12(firstClass.start_time, firstClass.end_time),
+      room: firstClass.room,
+      statusText: `${classItems.length} class${classItems.length > 1 ? "es" : ""}`,
+      statusColor: "text-spy-muted",
+      isOnline: firstClass.isOnline,
+    };
+  }, [classItems, isToday, resolution, upcomingClassInfo, getEventStatus]);
+
+  // 2. Next Tuition resolution
+  const tuitionItems = useMemo(
+    () => displayItems.filter((i) => i.type === "tuition"),
+    [displayItems]
+  );
+  const tuitionItem = tuitionItems.length > 0 ? tuitionItems[0] : null;
+
+  // Fallback next weekly tuition slot if none on selectedDay
+  const fallbackWeeklyTuition = useMemo(() => {
+    if (tuitionItem) return null;
+    const allTuitions = (timeBlocks || []).filter(
+      (b) => b.type === "tuition" || b.default_category === "tuition"
+    );
+    if (allTuitions.length === 0) return null;
+    return allTuitions[0];
+  }, [tuitionItem, timeBlocks]);
 
   return (
     <div className="clean-card p-5 h-full flex flex-col justify-between">
@@ -205,105 +303,145 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
           </div>
         )}
 
-        {/* Live Countdown status skipping holidays */}
-        {isToday && (
-          <div className="mb-4 bg-spy-surface2 border border-spy-border p-2.5 rounded-[4px] flex items-center justify-between text-xs font-mono">
-            <span className="text-spy-muted flex items-center gap-1.5 truncate">
-              <Clock className="w-3.5 h-3.5 text-spy-green shrink-0" />
-              <span className="truncate">
-                {upcomingClassInfo
-                  ? `Next class: ${upcomingClassInfo.block.label.replace(/\s*\(\d+\)/, "")}`
-                  : "Next class"}
+        {/* Focused Briefing: Next Class + Next Tuition ONLY */}
+        <div className="space-y-3">
+          {/* 1. Next Class Briefing Card */}
+          <div className="p-3.5 rounded-[4px] border border-spy-border bg-spy-surface2 flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="p-2 rounded-[4px] border border-spy-border bg-spy-surface text-spy-green mt-0.5 shrink-0">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 space-y-0.5">
+                <div className="text-[11px] font-mono uppercase tracking-wider text-spy-muted">
+                  Next Class
+                </div>
+                <div className="text-sm font-semibold text-spy-text line-clamp-2 break-words flex items-center gap-2">
+                  <span>{nextClassDisplay.title}</span>
+                  {nextClassDisplay.isOnline && (
+                    <span className="px-1.5 py-0.2 rounded-[2px] bg-blue-600 text-white text-[9px] font-bold">
+                      ONLINE
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-spy-muted font-mono">
+                  <span>{nextClassDisplay.time}</span>
+                  {nextClassDisplay.room && (
+                    <span className="flex items-center gap-1 text-spy-dim">
+                      <MapPin className="w-3 h-3" />
+                      {nextClassDisplay.room}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <span className={`text-xs font-mono font-semibold ${nextClassDisplay.statusColor}`}>
+                {nextClassDisplay.statusText}
               </span>
-            </span>
-            <span className="text-spy-green font-semibold shrink-0 ml-2">
-              {upcomingClassInfo ? upcomingClassInfo.countdownText : "No upcoming classes"}
-            </span>
+            </div>
           </div>
-        )}
 
-        {/* Schedule List */}
-        {displayItems.length === 0 ? (
-          <div className="text-center py-8 text-xs text-spy-dim font-sans">
-            {resolution?.isHoliday
-              ? "University classes suspended for holiday. Enjoy your focused routine!"
-              : "No academic sessions or tuition scheduled for this day."}
-          </div>
-        ) : (
-          <div className="space-y-2.5">
-            {displayItems.map((item) => {
-              const status = getEventStatus(item);
-              const catTheme = getCategoryTheme(item.type === "tuition" ? "tuition" : item.course_name);
-
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => {
-                    if (item.type === "tuition" && onOpenTuitionModal) {
-                      onOpenTuitionModal({
-                        day: selectedDay,
-                        startTime: item.start_time,
-                        endTime: item.end_time,
-                      });
-                    }
-                  }}
-                  className={`p-3 rounded-[4px] border transition-colors flex items-center justify-between gap-3 ${
-                    item.type === "tuition" ? "cursor-pointer hover:border-spy-green" : ""
-                  } ${
-                    status === "in-progress"
-                      ? "bg-spy-greenMuted border-spy-green"
-                      : status === "concluded"
-                      ? "bg-spy-surface border-spy-border opacity-50"
-                      : "bg-spy-surface2 border-spy-border"
-                  }`}
-                  title={item.type === "tuition" ? "Click to edit tuition schedule" : undefined}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`p-2 rounded-[4px] border shrink-0 ${catTheme.iconTileClass}`}>
-                      {item.type === "tuition" ? (
-                        <GraduationCap className="w-3.5 h-3.5" />
-                      ) : (
-                        <BookOpen className="w-3.5 h-3.5" />
-                      )}
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-spy-text truncate flex items-center gap-2">
-                        <span>{item.course_name}</span>
-                        {item.isOnline && (
-                          <span className="px-1.5 py-0.2 rounded-[2px] bg-blue-600 text-white text-[9px] font-bold">
-                            ONLINE
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-spy-muted font-mono mt-0.5">
-                        <span>{formatTimeRange12(item.start_time, item.end_time)}</span>
-                        {item.room && (
-                          <span className="flex items-center gap-1 text-spy-dim">
-                            <MapPin className="w-3 h-3" />
-                            {item.room}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+          {/* 2. Next Tuition Briefing Card */}
+          {tuitionItem ? (
+            tuitionItem.isCancelled ? (
+              <div className="p-3.5 rounded-[4px] border border-dashed border-spy-border bg-spy-surface2/60 dark:bg-spy-surface2/40 opacity-80 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2 rounded-[4px] border border-spy-border shrink-0 text-spy-dim">
+                    <GraduationCap className="w-4 h-4" />
                   </div>
-
-                  <div className="shrink-0 text-xs font-mono">
-                    {status === "in-progress" ? (
-                      <span className="text-spy-green font-semibold">Active now</span>
-                    ) : status === "concluded" ? (
-                      <span className="text-spy-dim">Done</span>
-                    ) : (
-                      <span className="text-spy-muted">
-                        {item.type === "tuition" ? "Tuition (Edit)" : "Class"}
-                      </span>
-                    )}
+                  <div className="min-w-0">
+                    <div className="text-xs font-mono uppercase tracking-wider text-spy-dim">
+                      Next Tuition
+                    </div>
+                    <div className="text-sm font-medium text-spy-dim line-through truncate">
+                      Tuition Session
+                    </div>
+                    <div className="text-xs font-mono text-spy-dim italic mt-0.5">
+                      Tuition cancelled ({formatTimeRange12(tuitionItem.start_time, tuitionItem.end_time)})
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {tuitionItem.tuitionExceptionId && onUndoTuitionException && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUndoTuitionException(tuitionItem.tuitionExceptionId!);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[3px] bg-spy-surface border border-spy-border hover:border-spy-green text-xs font-mono font-bold text-spy-text hover:text-spy-green transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Undo2 className="w-3 h-3" />
+                    <span>Undo</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                onClick={() => {
+                  if (onOpenTuitionActionModal) {
+                    onOpenTuitionActionModal({
+                      day: selectedDay,
+                      startTime: tuitionItem.start_time,
+                      endTime: tuitionItem.end_time,
+                      dateStr: resolution?.dateStr,
+                    });
+                  } else if (onOpenTuitionModal) {
+                    onOpenTuitionModal({
+                      day: selectedDay,
+                      startTime: tuitionItem.start_time,
+                      endTime: tuitionItem.end_time,
+                    });
+                  }
+                }}
+                className="p-3.5 rounded-[4px] border border-spy-border bg-spy-surface2 hover:border-spy-green transition-colors flex items-start justify-between gap-3 cursor-pointer"
+                title="Click to move, cancel, or edit tuition schedule"
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="p-2 rounded-[4px] border border-spy-border bg-spy-surface text-spy-amber mt-0.5 shrink-0">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="text-[11px] font-mono uppercase tracking-wider text-spy-muted">
+                      Next Tuition
+                    </div>
+                    <div className="text-sm font-semibold text-spy-text truncate">
+                      Tuition Session
+                    </div>
+                    <div className="text-xs text-spy-muted font-mono">
+                      {formatTimeRange12(tuitionItem.start_time, tuitionItem.end_time)}
+                    </div>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-[3px] bg-spy-surface border border-spy-border text-spy-dim hover:text-spy-green hover:border-spy-green transition-colors">
+                    Move / Cancel
+                  </span>
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="p-3.5 rounded-[4px] border border-spy-border bg-spy-surface2/50 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="p-2 rounded-[4px] border border-spy-border bg-spy-surface text-spy-dim mt-0.5 shrink-0">
+                  <GraduationCap className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-[11px] font-mono uppercase tracking-wider text-spy-dim">
+                    Next Tuition
+                  </div>
+                  <div className="text-sm font-normal text-spy-muted">
+                    No tuition scheduled for this day
+                  </div>
+                  <div className="text-xs text-spy-dim font-mono">
+                    {fallbackWeeklyTuition
+                      ? `Routine slot: ${DAY_NAMES[fallbackWeeklyTuition.weekday] || fallbackWeeklyTuition.weekday} at ${formatTimeRange12(fallbackWeeklyTuition.start_time, fallbackWeeklyTuition.end_time)}`
+                      : "Free evening focus window"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

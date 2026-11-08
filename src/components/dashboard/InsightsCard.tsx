@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Sparkles,
   TrendingUp,
@@ -9,8 +9,10 @@ import {
   Flame,
   ArrowRight,
   Target,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
-import { Mission, LectureLog, SideProject, CfLog } from "@/types/database";
+import { Mission, LectureLog, SideProject, CfLog, FeatureFlags } from "@/types/database";
 
 interface InsightsCardProps {
   missions: Mission[];
@@ -18,6 +20,7 @@ interface InsightsCardProps {
   sideProjects?: SideProject[];
   streak?: number;
   cfLogs?: CfLog[];
+  features?: FeatureFlags;
   onNavigate?: (tab: string) => void;
 }
 
@@ -27,12 +30,34 @@ export const InsightsCard: React.FC<InsightsCardProps> = ({
   sideProjects = [],
   streak = 0,
   cfLogs = [],
+  features,
   onNavigate,
 }) => {
+  // Collapsed by default
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const completedMissions = useMemo(
     () => missions.filter((m) => m.status === "completed" && m.completed_at),
     [missions]
   );
+
+  // Calculate unique days of activity across all tracked data
+  const uniqueActivityDaysCount = useMemo(() => {
+    const days = new Set<string>();
+    missions.forEach((m) => {
+      if (m.completed_at) days.add(m.completed_at.slice(0, 10));
+      else if (m.created_at) days.add(m.created_at.slice(0, 10));
+    });
+    cfLogs.forEach((c) => {
+      if (c.solved_at) days.add(c.solved_at.slice(0, 10));
+      else if (c.created_at) days.add(c.created_at.slice(0, 10));
+    });
+    lectureLogs.forEach((l) => {
+      if (l.date) days.add(l.date.slice(0, 10));
+      else if (l.created_at) days.add(l.created_at.slice(0, 10));
+    });
+    return days.size;
+  }, [missions, cfLogs, lectureLogs]);
 
   // 1. Peak Productivity Time of Day
   const peakProductivityInsight = useMemo(() => {
@@ -123,9 +148,15 @@ export const InsightsCard: React.FC<InsightsCardProps> = ({
     ).length;
   }, [cfLogs]);
 
+  // Requirement: show only when there are at least 7 days of activity data (and at least 10 completed missions); otherwise hide the card.
+  const hasEnoughActivity = uniqueActivityDaysCount >= 7 && completedMissions.length >= 10;
+  if (!hasEnoughActivity) {
+    return null;
+  }
+
   return (
     <div className="clean-card p-4 sm:p-5 bg-spy-surface border-spy-border space-y-4">
-      {/* Header */}
+      {/* Header with Collapsible Toggle */}
       <div className="flex items-center justify-between border-b border-spy-border pb-3">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-[4px] bg-[#fbefd5] border border-[#f4dcaa] text-[#9a5b00] dark:bg-spy-surface2 dark:border-spy-border dark:text-spy-amber">
@@ -133,130 +164,153 @@ export const InsightsCard: React.FC<InsightsCardProps> = ({
           </div>
           <div>
             <h3 className="text-xs font-mono font-bold tracking-wider text-spy-text uppercase">
-              TACTICAL INTELLIGENCE & INSIGHTS
+              TACTICAL INTELLIGENCE &amp; INSIGHTS
             </h3>
             <p className="text-[11px] font-sans text-spy-muted">
               Real-time cognitive velocity, momentum warnings, and study defense
             </p>
           </div>
         </div>
-      </div>
 
-      {/* Grid of Dynamic Insights */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Peak Velocity Card */}
-        <div className="p-3 rounded-[4px] bg-spy-surface2 border border-spy-border flex items-start gap-3">
-          <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-spy-dim mt-0.5 shrink-0">
-            <TrendingUp className="w-4 h-4 text-spy-green" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono font-bold uppercase text-spy-text">
-                {peakProductivityInsight.label}
-              </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-spy-surface border border-spy-border text-spy-dim">
-                {peakProductivityInsight.window}
-              </span>
-            </div>
-            <p className="text-xs text-spy-muted font-sans leading-relaxed">
-              {peakProductivityInsight.detail}
-            </p>
-          </div>
-        </div>
-
-        {/* Streak Defense Alert */}
-        <div className={`p-3 rounded-[4px] border flex items-start gap-3 ${
-          todayCompletedCount === 0 && streak > 0
-            ? "bg-[#fbefd5] border-[#f4dcaa] text-[#9a5b00] dark:bg-spy-amber/10 dark:border-spy-amber/30 dark:text-spy-amber"
-            : "bg-spy-surface2 border-spy-border text-spy-text"
-        }`}>
-          <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-spy-amber mt-0.5 shrink-0">
-            <Flame className="w-4 h-4 text-spy-amber" />
-          </div>
-          <div className="space-y-1">
-            <div className="text-[11px] font-mono font-bold uppercase">
-              {todayCompletedCount > 0 ? "Streak Fortified" : "Streak Under Threat"}
-            </div>
-            <p className="text-xs text-spy-muted font-sans leading-relaxed">
-              {todayCompletedCount > 0
-                ? `${todayCompletedCount} mission${todayCompletedCount > 1 ? "s" : ""} accomplished today! Streak is secured at ${streak} days.`
-                : `0 missions completed today. Accomplish 1 directive before 11:59 PM to maintain your ${streak}-day streak.`}
-            </p>
-          </div>
-        </div>
-
-        {/* Course Lecture Review Alert */}
-        <div
-          onClick={() => onNavigate?.("courses")}
-          className={`p-3 rounded-[4px] border flex items-start gap-3 cursor-pointer hover:border-spy-green transition-colors ${
-            unreviewedLectures.length > 0
-              ? "bg-[#dcf3e4]/60 border-[#b2e5c3] dark:bg-spy-surface2 dark:border-spy-border"
-              : "bg-spy-surface2 border-spy-border"
-          }`}
+        {/* Show / Hide Toggle Button */}
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-semibold rounded-[3px] border border-spy-border bg-spy-surface2 hover:bg-spy-surface hover:border-spy-green text-spy-text hover:text-spy-green transition-colors cursor-pointer"
         >
-          <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-spy-dim mt-0.5 shrink-0">
-            <BookOpen className="w-4 h-4 text-[#14663a] dark:text-spy-green" />
-          </div>
-          <div className="space-y-1 flex-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono font-bold uppercase text-spy-text">
-                Academic Log Check
-              </span>
-              <ArrowRight className="w-3 h-3 text-spy-dim" />
-            </div>
-            <p className="text-xs text-spy-muted font-sans leading-relaxed">
-              {unreviewedLectures.length > 0
-                ? `${unreviewedLectures.length} lecture${unreviewedLectures.length > 1 ? "s" : ""} pending review in Course HQ. Retain core material before next lecture!`
-                : "All current university lectures marked as studied and retained."}
-            </p>
-          </div>
-        </div>
-
-        {/* Side Project Stalled / CP Status Alert */}
-        {stalledProjects.length > 0 ? (
-          <div
-            onClick={() => onNavigate?.("projects")}
-            className="p-3 rounded-[4px] border border-[#f4dcaa] bg-[#fbefd5]/60 dark:bg-spy-surface2 dark:border-spy-border flex items-start gap-3 cursor-pointer hover:border-spy-amber transition-colors"
-          >
-            <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-[#9a5b00] dark:text-spy-amber mt-0.5 shrink-0">
-              <FolderGit2 className="w-4 h-4" />
-            </div>
-            <div className="space-y-1 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono font-bold uppercase text-spy-text">
-                  Stalled Build Alert
-                </span>
-                <ArrowRight className="w-3 h-3 text-spy-dim" />
-              </div>
-              <p className="text-xs text-spy-muted font-sans leading-relaxed">
-                <span className="font-bold">{stalledProjects[0].name}</span> has had no commits in 7+ days. Log a 15-min session to keep context hot.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div
-            onClick={() => onNavigate?.("codeforces")}
-            className="p-3 rounded-[4px] bg-spy-surface2 border border-spy-border flex items-start gap-3 cursor-pointer hover:border-spy-green transition-colors"
-          >
-            <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-spy-dim mt-0.5 shrink-0">
-              <Target className="w-4 h-4 text-spy-dim" />
-            </div>
-            <div className="space-y-1 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono font-bold uppercase text-spy-text">
-                  Competitive Programming
-                </span>
-                <ArrowRight className="w-3 h-3 text-spy-dim" />
-              </div>
-              <p className="text-xs text-spy-muted font-sans leading-relaxed">
-                {todaySolvedCfCount > 0
-                  ? `Daily 1/1 target reached! Solved ${todaySolvedCfCount} problem${todaySolvedCfCount > 1 ? "s" : ""} today.`
-                  : "Daily solve target pending. Tackle 1 problem during your CP / SQL block."}
-              </p>
-            </div>
-          </div>
-        )}
+          <span>{isExpanded ? "Hide insights" : "Show insights"}</span>
+          {isExpanded ? (
+            <ChevronUp className="w-3.5 h-3.5 text-spy-dim" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5 text-spy-dim" />
+          )}
+        </button>
       </div>
+
+      {/* Grid of Dynamic Insights (shown only when expanded) */}
+      {isExpanded && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {/* Peak Velocity Card */}
+          <div className="p-3 rounded-[4px] bg-spy-surface2 border border-spy-border flex items-start gap-3">
+            <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-spy-dim mt-0.5 shrink-0">
+              <TrendingUp className="w-4 h-4 text-spy-green" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono font-bold uppercase text-spy-text">
+                  {peakProductivityInsight.label}
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-spy-surface border border-spy-border text-spy-dim">
+                  {peakProductivityInsight.window}
+                </span>
+              </div>
+              <p className="text-xs text-spy-muted font-sans leading-relaxed">
+                {peakProductivityInsight.detail}
+              </p>
+            </div>
+          </div>
+
+          {/* Streak Defense Alert */}
+          <div
+            className={`p-3 rounded-[4px] border flex items-start gap-3 ${
+              todayCompletedCount === 0 && streak > 0
+                ? "bg-[#fbefd5] border-[#f4dcaa] text-[#9a5b00] dark:bg-spy-amber/10 dark:border-spy-amber/30 dark:text-spy-amber"
+                : "bg-spy-surface2 border-spy-border text-spy-text"
+            }`}
+          >
+            <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-spy-amber mt-0.5 shrink-0">
+              <Flame className="w-4 h-4 text-spy-amber" />
+            </div>
+            <div className="space-y-1">
+              <div className="text-[11px] font-mono font-bold uppercase">
+                {todayCompletedCount > 0 ? "Streak Fortified" : "Streak Under Threat"}
+              </div>
+              <p className="text-xs text-spy-muted font-sans leading-relaxed">
+                {todayCompletedCount > 0
+                  ? `${todayCompletedCount} mission${todayCompletedCount > 1 ? "s" : ""} accomplished today! Streak is secured at ${streak} days.`
+                  : `0 missions completed today. Accomplish 1 directive before 11:59 PM to maintain your ${streak}-day streak.`}
+              </p>
+            </div>
+          </div>
+
+          {/* Course Lecture Review Alert - Removed unless lecture logs exist */}
+          {features?.courses !== false && lectureLogs.length > 0 && (
+            <div
+              onClick={() => onNavigate?.("courses")}
+              className={`p-3 rounded-[4px] border flex items-start gap-3 cursor-pointer hover:border-spy-green transition-colors ${
+                unreviewedLectures.length > 0
+                  ? "bg-[#dcf3e4]/60 border-[#b2e5c3] dark:bg-spy-surface2 dark:border-spy-border"
+                  : "bg-spy-surface2 border-spy-border"
+              }`}
+            >
+              <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-spy-dim mt-0.5 shrink-0">
+                <BookOpen className="w-4 h-4 text-[#14663a] dark:text-spy-green" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono font-bold uppercase text-spy-text">
+                    Academic Log Check
+                  </span>
+                  <ArrowRight className="w-3 h-3 text-spy-dim" />
+                </div>
+                <p className="text-xs text-spy-muted font-sans leading-relaxed">
+                  {unreviewedLectures.length > 0
+                    ? `${unreviewedLectures.length} lecture${unreviewedLectures.length > 1 ? "s" : ""} pending review in Course HQ. Retain core material before next lecture!`
+                    : "All current university lectures marked as studied and retained."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Side Project Stalled Alert */}
+          {features?.projects !== false && stalledProjects.length > 0 && (
+            <div
+              onClick={() => onNavigate?.("projects")}
+              className="p-3 rounded-[4px] border border-[#f4dcaa] bg-[#fbefd5]/60 dark:bg-spy-surface2 dark:border-spy-border flex items-start gap-3 cursor-pointer hover:border-spy-amber transition-colors"
+            >
+              <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-[#9a5b00] dark:text-spy-amber mt-0.5 shrink-0">
+                <FolderGit2 className="w-4 h-4" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono font-bold uppercase text-spy-text">
+                    Stalled Build Alert
+                  </span>
+                  <ArrowRight className="w-3 h-3 text-spy-dim" />
+                </div>
+                <p className="text-xs text-spy-muted font-sans leading-relaxed">
+                  <span className="font-bold">{stalledProjects[0].name}</span> has had no commits in 7+ days. Log a 15-min session to keep context hot.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Competitive Programming Target Alert */}
+          {features?.codeforces !== false && (
+            <div
+              onClick={() => onNavigate?.("codeforces")}
+              className="p-3 rounded-[4px] border border-spy-border bg-spy-surface2 flex items-start gap-3 cursor-pointer hover:border-spy-green transition-colors"
+            >
+              <div className="p-2 rounded-[3px] bg-spy-surface border border-spy-border text-spy-dim mt-0.5 shrink-0">
+                <Target className="w-4 h-4 text-spy-dim" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono font-bold uppercase text-spy-text">
+                    Competitive Programming
+                  </span>
+                  <ArrowRight className="w-3 h-3 text-spy-dim" />
+                </div>
+                <p className="text-xs text-spy-muted font-sans leading-relaxed">
+                  {todaySolvedCfCount > 0
+                    ? `Daily 1/1 target reached! Solved ${todaySolvedCfCount} problem${todaySolvedCfCount > 1 ? "s" : ""} today.`
+                    : "Daily solve target pending. Tackle 1 problem during your CP / SQL block."}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
