@@ -4,7 +4,8 @@ import {
   DayOfWeek, 
   ResolvedTimeBlock, 
   Mission,
-  Category 
+  Category,
+  TuitionException
 } from "@/types/database";
 import { formatTime12, formatCountdown } from "@/lib/formatters";
 
@@ -114,7 +115,8 @@ export function resolveDaySchedule(
   dateInput: Date | string,
   weeklyBlocks: TimeBlock[],
   academicEvents: AcademicEvent[],
-  missions: Mission[] = []
+  missions: Mission[] = [],
+  tuitionExceptions: TuitionException[] = []
 ): DayScheduleResolution {
   const dateStr = formatDateKey(dateInput);
   const weekday = getWeekdayFromDate(dateInput);
@@ -280,7 +282,77 @@ export function resolveDaySchedule(
       overrideReason: "Custom Date Override",
     }));
 
-  dayBlocks = [...dayBlocks, ...dateSpecificOverrides];
+  // Identify base block IDs that are overridden on this specific date
+  const overriddenBaseIds = new Set<string>();
+  for (const ov of dateSpecificOverrides) {
+    if (ov.id.startsWith(`tb-ov-${dateStr}-`)) {
+      overriddenBaseIds.add(ov.id.replace(`tb-ov-${dateStr}-`, ""));
+    } else {
+      overriddenBaseIds.add(ov.id);
+    }
+  }
+
+  // Filter out overridden base blocks and append only active date-specific overrides
+  dayBlocks = dayBlocks.filter((b) => !overriddenBaseIds.has(b.id));
+  const activeOverrides = dateSpecificOverrides.filter((b) => b.is_active !== false);
+  dayBlocks = [...dayBlocks, ...activeOverrides];
+
+  // Apply tuition exceptions (moved / cancelled) for this date
+  if (tuitionExceptions.length > 0) {
+    dayBlocks = dayBlocks.map((b) => {
+      if (b.type !== "tuition") return b;
+      const ex = tuitionExceptions.find(
+        (e) => e.date === dateStr && (!e.slot_id || e.slot_id === b.id)
+      );
+      if (!ex) return b;
+
+      if (ex.action === "cancelled") {
+        return {
+          ...b,
+          isCancelled: true,
+          label: "Tuition cancelled",
+          tuitionException: ex,
+        };
+      } else if (ex.action === "moved") {
+        const newStart = ex.new_start ? ex.new_start.slice(0, 5) : b.start_time;
+        const newEnd = ex.new_end ? ex.new_end.slice(0, 5) : b.end_time;
+        return {
+          ...b,
+          start_time: newStart,
+          end_time: newEnd,
+          isOverridden: true,
+          overrideReason: ex.note ? `Moved: ${ex.note}` : "Moved session",
+          tuitionException: ex,
+        };
+      }
+      return b;
+    });
+
+    // Check if any tuition session was moved TO this date without an existing base block
+    const movedToThisDate = tuitionExceptions.filter(
+      (ex) =>
+        ex.date === dateStr &&
+        ex.action === "moved" &&
+        !dayBlocks.some((b) => b.type === "tuition" && b.tuitionException?.id === ex.id)
+    );
+    for (const ex of movedToThisDate) {
+      dayBlocks.push({
+        id: `tb-tuition-ex-${ex.id}`,
+        weekday,
+        start_time: ex.new_start ? ex.new_start.slice(0, 5) : "18:00",
+        end_time: ex.new_end ? ex.new_end.slice(0, 5) : "19:30",
+        type: "tuition",
+        label: ex.note ? `TUITION (${ex.note})` : "TUITION",
+        default_category: "cat-11",
+        is_fixed: true,
+        is_active: true,
+        isOverridden: true,
+        overrideReason: ex.note ? `Moved: ${ex.note}` : "Moved session",
+        tuitionException: ex,
+        date: dateStr,
+      });
+    }
+  }
 
   // Sort chronologically by start_time
   dayBlocks.sort((a, b) => a.start_time.localeCompare(b.start_time));
@@ -626,12 +698,13 @@ export function checkScheduleOverlap(
   weeklyBlocks: TimeBlock[],
   academicEvents: AcademicEvent[],
   existingMissions: Mission[] = [],
-  ignoreMissionId?: string
+  ignoreMissionId?: string,
+  tuitionExceptions: TuitionException[] = []
 ): OverlapConflict {
   if (!startTime || !endTime) return { hasConflict: false };
 
   const dateStr = formatDateKey(dateInput);
-  const resolved = resolveDaySchedule(dateStr, weeklyBlocks, academicEvents);
+  const resolved = resolveDaySchedule(dateStr, weeklyBlocks, academicEvents, existingMissions, tuitionExceptions);
 
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
@@ -642,7 +715,7 @@ export function checkScheduleOverlap(
 
   // 1. Check classes and tuition
   for (const b of resolved.blocks) {
-    if (b.type === "class" || b.type === "tuition") {
+    if ((b.type === "class" || b.type === "tuition") && !b.isSkipped && !b.isCancelled) {
       const [bsh, bsm] = b.start_time.split(":").map(Number);
       const [beh, bem] = b.end_time.split(":").map(Number);
       const bStartMin = (bsh || 0) * 60 + (bsm || 0);

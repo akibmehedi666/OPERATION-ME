@@ -37,6 +37,44 @@ interface AcademicCalendarViewProps {
   onCompleteMission: (mission: Mission) => void;
 }
 
+const WEEKDAY_NAMES: Record<string, string> = {
+  SAT: "Saturday",
+  SUN: "Sunday",
+  MON: "Monday",
+  TUE: "Tuesday",
+  WED: "Wednesday",
+  THU: "Thursday",
+  FRI: "Friday",
+};
+
+function formatEventDetails(ev: { type: string; details?: string | null }): string {
+  if (!ev.details) {
+    if (ev.type === "holiday") return "University holiday — classes suspended";
+    if (ev.type === "exam") return "Examinations scheduled";
+    if (ev.type === "payment") return "Tuition fee deadline";
+    return "";
+  }
+  const raw = ev.details.trim();
+  if (raw.startsWith("{") && raw.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.overrideWeekday) {
+        const dayName = WEEKDAY_NAMES[parsed.overrideWeekday.toUpperCase()] || parsed.overrideWeekday;
+        return `Follows ${dayName} schedule${parsed.isOnline ? ", online" : ""}`;
+      }
+      if (parsed.isOnline !== undefined) {
+        return parsed.isOnline ? "Online class session" : "In-person class session";
+      }
+      return Object.entries(parsed)
+        .map(([k, v]) => `${k.replace(/([A-Z])/g, " $1").toLowerCase()}: ${v}`)
+        .join(", ");
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
 export const AcademicCalendarView: React.FC<AcademicCalendarViewProps> = ({
   timeBlocks,
   academicEvents,
@@ -365,9 +403,9 @@ export const AcademicCalendarView: React.FC<AcademicCalendarViewProps> = ({
                           {ev.title}
                         </span>
                       </div>
-                      {ev.details && (
+                      {formatEventDetails(ev) && (
                         <div className="text-[11px] text-spy-muted font-sans mt-1">
-                          {ev.details}
+                          {formatEventDetails(ev)}
                         </div>
                       )}
                     </div>

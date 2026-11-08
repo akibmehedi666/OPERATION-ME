@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Wand2, Clock, AlertTriangle, Target } from "lucide-react";
-import { Mission, Category, Priority, TimeBlock, AcademicEvent } from "@/types/database";
+import { Mission, Category, Priority, TimeBlock, AcademicEvent, FeatureFlags } from "@/types/database";
 import { Button } from "@/components/ui/Button";
 import { formatTime12 } from "@/lib/formatters";
 import { checkScheduleOverlap, formatDateKey } from "@/lib/scheduleResolver";
@@ -22,6 +22,7 @@ interface MissionModalProps {
   initialEndTime?: string;
   initialBlockId?: string;
   initialCategoryId?: string;
+  features?: FeatureFlags;
 }
 
 const CODENAME_PREFIXES = [
@@ -52,6 +53,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
   initialEndTime,
   initialBlockId,
   initialCategoryId,
+  features,
 }) => {
   const [title, setTitle] = useState("");
   const [codename, setCodename] = useState("");
@@ -60,6 +62,28 @@ export const MissionModal: React.FC<MissionModalProps> = ({
   const [notes, setNotes] = useState("");
   const [xp, setXp] = useState(50);
   const [status, setStatus] = useState<"active" | "locked">("active");
+
+  const filteredCategories = useMemo(() => {
+    return categories.filter((c) => {
+      const lower = (c.name || "").toLowerCase();
+      if (c.id === "cat-7" || lower.includes("codeforces") || lower.includes("cp")) {
+        return features?.codeforces !== false;
+      }
+      if (c.id === "cat-8" || lower.includes("cyber")) {
+        return features?.cyber !== false;
+      }
+      if (c.id === "cat-9" || lower.includes("paper") || lower.includes("research")) {
+        return features?.research !== false;
+      }
+      if (c.id === "cat-10" || lower.includes("side project") || lower.includes("project")) {
+        return features?.projects !== false;
+      }
+      if (["cat-1", "cat-2", "cat-3", "cat-4", "cat-5", "cat-6"].includes(c.id)) {
+        return features?.courses !== false;
+      }
+      return true;
+    });
+  }, [categories, features]);
 
   // Precise timing states
   const [hasSpecificTime, setHasSpecificTime] = useState(false);
@@ -97,7 +121,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
       } else {
         generateCodename();
       }
-      setCategoryId(editingMission.category_id || initialCategoryId || categories[0]?.id || "");
+      setCategoryId(editingMission.category_id || initialCategoryId || filteredCategories[0]?.id || "");
       setPriority(editingMission.priority || "medium");
       setNotes(editingMission.notes || "");
       setXp(editingMission.xp || 50);
@@ -193,7 +217,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
       // New mission default
       setTitle("");
       generateCodename();
-      setCategoryId(initialCategoryId || categories[0]?.id || "");
+      setCategoryId(initialCategoryId || filteredCategories[0]?.id || "");
       setPriority("medium");
       setNotes("");
       setXp(50);
@@ -219,6 +243,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
     isOpen,
     editingMission,
     categories,
+    filteredCategories,
     initialDate,
     initialStartTime,
     initialEndTime,
@@ -416,7 +441,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                   onChange={(e) => setCategoryId(e.target.value)}
                   className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green rounded-[3px] cursor-pointer"
                 >
-                  {categories.map((c) => (
+                  {filteredCategories.map((c) => (
                     <option key={c.id} value={c.id} className="bg-spy-surface text-spy-text">
                       {c.name}
                     </option>

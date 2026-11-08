@@ -6,7 +6,8 @@ import {
   AcademicEvent, 
   Mission, 
   Category, 
-  DayOfWeek 
+  DayOfWeek,
+  TuitionException 
 } from "@/types/database";
 import { 
   getWeekStartDate, 
@@ -20,6 +21,7 @@ import { TimeBlockModal } from "@/components/planner/TimeBlockModal";
 import { AcademicEventModal } from "@/components/planner/AcademicEventModal";
 import { AssignMissionModal } from "@/components/planner/AssignMissionModal";
 import { TuitionScheduleModal } from "@/components/planner/TuitionScheduleModal";
+import { PlanNextWeekModal } from "@/components/planner/PlanNextWeekModal";
 import { 
   Calendar, 
   Grid3X3, 
@@ -40,7 +42,7 @@ interface PlannerViewProps {
   categories: Category[];
   structureLoadingError?: string | null;
   onRetryLoad?: () => void;
-  onAddTimeBlock: (block: Omit<TimeBlock, "id" | "created_at">) => void;
+  onAddTimeBlock: (block: Omit<TimeBlock, "id" | "created_at"> & { id?: string }) => void;
   onUpdateTimeBlock: (id: string, updates: Partial<TimeBlock>) => void;
   onDeleteTimeBlock: (id: string) => void;
   onAddAcademicEvent: (event: Omit<AcademicEvent, "id" | "created_at">) => void;
@@ -67,6 +69,9 @@ interface PlannerViewProps {
     targetDate?: string;
     targetDay?: DayOfWeek;
   }) => Promise<void> | void;
+  tuitionExceptions?: TuitionException[];
+  onUndoTuitionException?: (exceptionId: string) => Promise<void> | void;
+  onEditTuitionSlot?: (slot: { day: DayOfWeek; startTime: string; endTime: string; targetDate?: string }) => void;
 }
 
 export const PlannerView: React.FC<PlannerViewProps> = ({
@@ -90,6 +95,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   onEditMission,
   onAssignNewMission,
   onUpdateTuitionSchedule,
+  tuitionExceptions = [],
+  onUndoTuitionException,
+  onEditTuitionSlot,
 }) => {
   const [viewMode, setViewMode] = useState<"grid" | "calendar">("grid");
   // Default to current week containing today (weeks run Sat-Fri)
@@ -138,6 +146,89 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   });
 
   const [autoScheduleNotice, setAutoScheduleNotice] = useState<string | null>(null);
+  const [isPlanNextWeekOpen, setIsPlanNextWeekOpen] = useState<boolean>(false);
+
+  // Save routine handler: applies changes either to today only or recurring weekly template
+  const handleSaveRoutine = async (
+    blockId: string,
+    updates: Partial<TimeBlock>,
+    scope: "today" | "every_week",
+    dateStr: string
+  ) => {
+    if (scope === "every_week") {
+      const baseId = blockId.startsWith(`tb-ov-${dateStr}-`)
+        ? blockId.replace(`tb-ov-${dateStr}-`, "")
+        : blockId;
+      onUpdateTimeBlock(baseId, {
+        ...updates,
+        override_date: null,
+      });
+    } else {
+      const existingOv = timeBlocks.find(
+        (b) => b.override_date === dateStr && (b.id === blockId || b.id === `tb-ov-${dateStr}-${blockId}`)
+      );
+      if (existingOv) {
+        onUpdateTimeBlock(existingOv.id, {
+          ...updates,
+          override_date: dateStr,
+        });
+      } else {
+        onAddTimeBlock({
+          id: `tb-ov-${dateStr}-${blockId}`,
+          weekday: updates.weekday || "SUN",
+          start_time: updates.start_time || "10:00",
+          end_time: updates.end_time || "11:30",
+          type: updates.type || "study",
+          label: updates.label || "Routine Focus",
+          default_category: updates.default_category || null,
+          is_fixed: false,
+          is_active: true,
+          override_date: dateStr,
+        });
+      }
+    }
+  };
+
+  // Delete routine handler: applies either to today or recurring weekly template
+  const handleDeleteRoutine = async (
+    blockId: string,
+    scope: "today" | "every_week",
+    dateStr: string
+  ) => {
+    if (scope === "every_week") {
+      const baseId = blockId.startsWith(`tb-ov-${dateStr}-`)
+        ? blockId.replace(`tb-ov-${dateStr}-`, "")
+        : blockId;
+      onDeleteTimeBlock(baseId);
+    } else {
+      onAddTimeBlock({
+        id: `tb-ov-${dateStr}-${blockId}`,
+        weekday: "SUN",
+        start_time: "00:00",
+        end_time: "00:00",
+        type: "break",
+        label: "Deleted for today",
+        is_fixed: false,
+        is_active: false,
+        override_date: dateStr,
+      });
+    }
+  };
+
+  // Quick move mission by deltaMinutes (+30m / -30m)
+  const handleQuickMoveMission = (mission: Mission, deltaMinutes: number) => {
+    if (!mission.scheduled_start) return;
+    const ds = new Date(mission.scheduled_start);
+    ds.setMinutes(ds.getMinutes() + deltaMinutes);
+    const newStart = ds.toISOString();
+    let newEnd: string | undefined = undefined;
+    if (mission.scheduled_end) {
+      const de = new Date(mission.scheduled_end);
+      de.setMinutes(de.getMinutes() + deltaMinutes);
+      newEnd = de.toISOString();
+    }
+    onScheduleMission(mission.id, mission.scheduled_block_id || "", newStart, newEnd);
+  };
 
   // Week navigation
   const handlePrevWeek = () => {
@@ -280,19 +371,30 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         {/* Right Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           {viewMode === "grid" && (
-            <button
-              onClick={handleAutoSchedule}
-              className="px-3 py-1.5 text-xs font-mono font-bold rounded-[3px] bg-spy-surface2 border border-spy-green text-[#14663a] dark:text-spy-green hover:bg-spy-green/10 flex items-center gap-1.5 transition-colors"
-              title="Auto-schedule unscheduled missions to flexible blocks"
-            >
-              <Wand2 className="w-3.5 h-3.5" />
-              <span>Auto-Schedule</span>
-              {unscheduledMissionsCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-spy-green text-black text-[10px]">
-                  {unscheduledMissionsCount}
-                </span>
-              )}
-            </button>
+            <>
+              <button
+                onClick={handleAutoSchedule}
+                className="px-3 py-1.5 text-xs font-mono font-bold rounded-[3px] bg-spy-surface2 border border-spy-green text-[#14663a] dark:text-spy-green hover:bg-spy-green/10 flex items-center gap-1.5 transition-colors"
+                title="Auto-schedule unscheduled missions to flexible blocks"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                <span>Auto-Schedule</span>
+                {unscheduledMissionsCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-spy-green text-black text-[10px]">
+                    {unscheduledMissionsCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setIsPlanNextWeekOpen(true)}
+                className="px-3 py-1.5 text-xs font-mono font-bold rounded-[3px] bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-300 hover:bg-purple-500/25 flex items-center gap-1.5 transition-colors"
+                title="Weekly planning helper: Review next week's free routine windows and plan missions"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                <span>Plan next week</span>
+              </button>
+            </>
           )}
 
           <button
@@ -403,15 +505,25 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           onCompleteMission={onCompleteMission}
           onOpenCourseHQ={onOpenCourseHQ}
           onEditMission={onEditMission}
-          onEditTuition={(slot) =>
-            setTuitionModal({
-              isOpen: true,
-              day: slot.day,
-              startTime: slot.startTime,
-              endTime: slot.endTime,
-              targetDate: slot.targetDate,
-            })
-          }
+          onEditTuition={(slot) => {
+            if (onEditTuitionSlot) {
+              onEditTuitionSlot(slot);
+            } else {
+              setTuitionModal({
+                isOpen: true,
+                day: slot.day,
+                startTime: slot.startTime,
+                endTime: slot.endTime,
+                targetDate: slot.targetDate,
+              });
+            }
+          }}
+          tuitionExceptions={tuitionExceptions}
+          onUndoTuitionException={onUndoTuitionException}
+          onSaveRoutine={handleSaveRoutine}
+          onDeleteRoutine={handleDeleteRoutine}
+          onQuickMoveMission={handleQuickMoveMission}
+          onOpenAcademicCalendar={() => setViewMode("calendar")}
         />
       ) : (
         <AcademicCalendarView
@@ -498,6 +610,22 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           onClose={() => setTuitionModal({ isOpen: false })}
         />
       )}
+
+      {/* Plan Next Week Modal */}
+      <PlanNextWeekModal
+        isOpen={isPlanNextWeekOpen}
+        currentWeekStartDate={currentWeekStart}
+        timeBlocks={timeBlocks}
+        academicEvents={academicEvents}
+        missions={missions}
+        categories={categories}
+        onClose={() => setIsPlanNextWeekOpen(false)}
+        onApplyPlan={async (assignments) => {
+          for (const a of assignments) {
+            onScheduleMission(a.missionId, a.blockId, a.startTime, a.endTime);
+          }
+        }}
+      />
     </div>
   );
 };
