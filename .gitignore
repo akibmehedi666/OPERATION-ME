@@ -45,6 +45,7 @@ yarn-error.log*
 .env.production.local
 
 # scratch and QA artifacts
+screenshots-review/
 qa-chrome-profile/
 qa-chrome-profile
 qa_report.json

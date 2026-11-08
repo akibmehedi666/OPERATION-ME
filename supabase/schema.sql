@@ -310,11 +310,14 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
     sound_enabled BOOLEAN DEFAULT true,
     cf_handle TEXT DEFAULT '',
     notification_settings JSONB DEFAULT '{}'::jsonb,
+    features JSONB DEFAULT '{"dashboard":true,"missions":true,"planner":true,"courses":true,"codeforces":false,"cyber":false,"research":false,"projects":false,"review":false,"history":false,"notifications":false,"auto_missions":false}'::jsonb,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS cf_handle TEXT DEFAULT '';
 ALTER TABLE public.user_settings ALTER COLUMN cf_handle SET DEFAULT '';
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '{"dashboard":true,"missions":true,"planner":true,"courses":true,"codeforces":false,"cyber":false,"research":false,"projects":false,"review":false,"history":false,"notifications":false,"auto_missions":false}'::jsonb;
+UPDATE public.user_settings SET features = '{"dashboard":true,"missions":true,"planner":true,"courses":true,"codeforces":false,"cyber":false,"research":false,"projects":false,"review":false,"history":false,"notifications":false,"auto_missions":false}'::jsonb WHERE features IS NULL;
 
 DO $$
 BEGIN
@@ -511,6 +514,33 @@ ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS course_id TEXT;
 ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS project_id TEXT;
 ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS paper_id TEXT;
 ALTER TABLE public.missions ADD COLUMN IF NOT EXISTS cf_log_id TEXT;
+
+-- ====================================================================
+-- 17. TUITION EXCEPTIONS TABLE (Per-session move / cancel)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.tuition_exceptions (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    slot_id TEXT,
+    action TEXT NOT NULL CHECK (action IN ('moved', 'cancelled')),
+    new_start TIME,
+    new_end TIME,
+    note TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.tuition_exceptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage tuition exceptions" ON public.tuition_exceptions;
+
+CREATE POLICY "Users can manage tuition exceptions" 
+ON public.tuition_exceptions FOR ALL 
+TO authenticated 
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_tuition_exceptions_user_date ON public.tuition_exceptions(user_id, date);
 
 -- Seed default categories for global reference
 INSERT INTO public.categories (id, user_id, name, codename, color, icon) VALUES

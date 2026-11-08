@@ -14,4 +14,5 @@ export * from "./cfLogs";
 export * from "./weeklyReviews";
 export * from "./userSettings";
 export * from "./gamification";
+export * from "./tuitionExceptions";
 

@@ -99,12 +99,26 @@ export interface AcademicEvent {
   created_at?: string;
 }
 
+export interface TuitionException {
+  id: string;
+  user_id?: string | null;
+  date: string; // "YYYY-MM-DD"
+  slot_id?: string | null;
+  action: "moved" | "cancelled";
+  new_start?: string | null; // "HH:MM" e.g. "18:00"
+  new_end?: string | null;   // "HH:MM" e.g. "19:30"
+  note?: string | null;
+  created_at?: string;
+}
+
 export interface ResolvedTimeBlock extends TimeBlock {
   isOnline?: boolean;
   isOverridden?: boolean;
   overrideReason?: string;
   isSkipped?: boolean;
   skipReason?: string;
+  isCancelled?: boolean;
+  tuitionException?: TuitionException;
   date: string; // "YYYY-MM-DD"
   scheduledMissions?: Mission[];
 }
@@ -295,6 +309,36 @@ export interface AgentProfile {
   longestStreak: number;
 }
 
+export interface FeatureFlags {
+  dashboard: boolean;
+  missions: boolean;
+  planner: boolean;
+  courses: boolean;
+  codeforces: boolean;
+  cyber: boolean;
+  research: boolean;
+  projects: boolean;
+  review: boolean;
+  history: boolean;
+  notifications: boolean;
+  auto_missions: boolean;
+}
+
+export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
+  dashboard: true,
+  missions: true,
+  planner: true,
+  courses: true,
+  codeforces: false,
+  cyber: false,
+  research: false,
+  projects: false,
+  review: false,
+  history: false,
+  notifications: false,
+  auto_missions: false,
+};
+
 export interface UserSetting {
   id?: string;
   user_id: string;
@@ -303,6 +347,7 @@ export interface UserSetting {
   sound_enabled?: boolean;
   cf_handle?: string;
   notification_settings?: NotificationSettings;
+  features?: FeatureFlags;
   updated_at?: string;
 }
 
