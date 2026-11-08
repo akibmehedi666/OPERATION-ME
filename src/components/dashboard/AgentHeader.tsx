@@ -18,7 +18,8 @@ import {
   Database,
   AlertTriangle,
   Trash2,
-  GraduationCap
+  GraduationCap,
+  Menu
 } from "lucide-react";
 import { getRankFromXp } from "@/lib/rank";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -28,10 +29,88 @@ import { ThemePreference, ActiveTheme } from "@/lib/theme";
 import { useAnimations } from "@/lib/animationContext";
 import { AnimatedCounter } from "@/components/ui/AnimatedCounter";
 import { LogoIcon } from "@/components/ui/LogoIcon";
-import { RecurringRule, Category, NotificationSettings } from "@/types/database";
+import { RecurringRule, Category, NotificationSettings, FeatureFlags, DEFAULT_FEATURE_FLAGS } from "@/types/database";
 import { AutoMissionsSettings } from "@/components/settings/AutoMissionsSettings";
 import { RemindersSettings } from "@/components/settings/RemindersSettings";
 import { triggerDataExportDownload } from "@/lib/dataBackup";
+
+interface FeatureItemConfig {
+  key: keyof FeatureFlags;
+  label: string;
+  tag?: "Beta" | "Experimental";
+  description: string;
+  locked?: boolean;
+}
+
+const FEATURE_CONFIGS: FeatureItemConfig[] = [
+  {
+    key: "dashboard",
+    label: "Dashboard",
+    description: "Central intelligence summary, today's schedule, insights, and quick launch.",
+    locked: true,
+  },
+  {
+    key: "missions",
+    label: "Missions",
+    description: "Active tactical directives, mission log, priorities, and status tracking.",
+    locked: true,
+  },
+  {
+    key: "planner",
+    label: "Planner",
+    description: "Weekly tactical calendar grid, time blocks, and scheduled routines.",
+  },
+  {
+    key: "courses",
+    label: "Courses",
+    description: "Academic semester courses, lecture logs, rooms, and syllabus tracking.",
+  },
+  {
+    key: "codeforces",
+    label: "Codeforces",
+    tag: "Beta",
+    description: "CP problem log, rating tracking, and automated submission sync.",
+  },
+  {
+    key: "cyber",
+    label: "Cybersecurity",
+    tag: "Beta",
+    description: "Cybersecurity skill tree roadmap, topics, and hands-on lab progress.",
+  },
+  {
+    key: "research",
+    label: "Research Papers",
+    tag: "Beta",
+    description: "Academic research paper reading list, summaries, and key takeaways.",
+  },
+  {
+    key: "projects",
+    label: "Side Projects",
+    tag: "Beta",
+    description: "Side project catalog, progress status, repository links, and next steps.",
+  },
+  {
+    key: "review",
+    label: "Review / Progress",
+    tag: "Experimental",
+    description: "Weekly operational retrospective, retrospection notes, and performance stats.",
+  },
+  {
+    key: "history",
+    label: "Mission History",
+    description: "Archive of completed directives, lifetime statistics, and accomplishment timeline.",
+  },
+  {
+    key: "notifications",
+    label: "Notifications & Reminders",
+    description: "Real-time tactical reminders for upcoming classes, labs, and deadlines.",
+  },
+  {
+    key: "auto_missions",
+    label: "Auto-Missions",
+    description: "Automated daily recurring directives generator and smart scheduling.",
+  },
+];
 
 interface AgentHeaderProps {
   agentName?: string;
@@ -46,6 +125,8 @@ interface AgentHeaderProps {
   recurringRules?: RecurringRule[];
   categories?: Category[];
   notificationSettings?: NotificationSettings;
+  features?: FeatureFlags;
+  onUpdateFeatures?: (updates: Partial<FeatureFlags>) => void;
   isSupabaseConnected?: boolean;
   onToggleRecurringRule?: (ruleId: string, isActive: boolean) => void;
   onUpdateRecurringRule?: (rule: RecurringRule) => void;
@@ -81,6 +162,8 @@ export function AgentHeader({
     quiet_hours_start: "23:00",
     quiet_hours_end: "07:00",
   },
+  features,
+  onUpdateFeatures,
   onToggleRecurringRule,
   onUpdateRecurringRule,
   onAddRecurringRule,
@@ -92,7 +175,9 @@ export function AgentHeader({
   onOpenTuitionModal,
 }: AgentHeaderProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"general" | "auto_missions" | "reminders" | "data">("general");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"general" | "features" | "auto_missions" | "reminders" | "data">("general");
+  const activeFeatures = features || DEFAULT_FEATURE_FLAGS;
   const [soundEnabled, setSoundEnabled] = useState(soundFX.isEnabled());
   const [exportStatus, setExportStatus] = useState<string>("");
   const [resetConfirmation, setResetConfirmation] = useState<string>("");
@@ -177,10 +262,126 @@ export function AgentHeader({
   };
 
   return (
-    <div className={`clean-card bg-gradient-to-r from-[#eef7f1] via-[#f7f5ed] to-[#faf8f2] border border-[#d8e8dc] shadow-[0_1px_3px_rgba(31,122,77,0.06)] dark:from-transparent dark:via-transparent dark:to-transparent dark:bg-spy-surface dark:border-spy-border dark:shadow-none p-4 sm:p-5 mb-6 relative ${
+    <div className={`clean-card bg-gradient-to-r from-[#eef7f1] via-[#f7f5ed] to-[#faf8f2] border border-[#d8e8dc] shadow-[0_1px_3px_rgba(31,122,77,0.06)] dark:from-transparent dark:via-transparent dark:to-transparent dark:bg-spy-surface dark:border-spy-border dark:shadow-none p-3 sm:p-5 mb-6 relative ${
       isSettingsOpen ? "z-50" : ""
     }`}>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* 1. MOBILE HEADER: Single Compact Row (< sm) */}
+      <div className="flex sm:hidden items-center justify-between gap-2.5 w-full">
+        {/* Logo Mark */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="w-8 h-8 rounded-[4px] bg-[#dcf3e4] text-[#14663a] border border-[#b9e7c8] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border flex items-center justify-center font-mono font-bold text-xs">
+            AK
+          </div>
+        </div>
+
+        {/* Thin XP Bar */}
+        <div className="flex-1 min-w-[75px] max-w-[160px] space-y-0.5">
+          <div className="flex items-center justify-between text-[9px] font-mono text-spy-muted leading-none">
+            <span className="font-bold text-spy-text">{totalXp} XP</span>
+            <span>{rankInfo.xpToNext > 0 ? `${rankInfo.xpToNext} left` : "MAX"}</span>
+          </div>
+          <div className="h-1.5 w-full bg-spy-surface2 rounded-full overflow-hidden border border-spy-border">
+            <div
+              className="h-full bg-spy-green transition-all duration-300"
+              style={{ width: `${Math.min(100, Math.max(0, rankInfo.progress))}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Daily Streak */}
+        <div className="flex items-center gap-1 text-[11px] font-mono text-spy-amber bg-spy-amberMuted border border-spy-border px-2 py-1 rounded-[3px] shrink-0">
+          <Flame className="w-3 h-3 text-spy-amber" />
+          <span>{streak}d</span>
+        </div>
+
+        {/* Mobile Menu Button with Dropdown */}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+            className="p-1.5 rounded-[3px] border border-spy-border bg-spy-surface2 text-spy-text hover:border-spy-green transition-colors"
+            title="Menu"
+            aria-label="Open mobile menu"
+          >
+            {isMobileMenuOpen ? (
+              <X className="w-4 h-4" />
+            ) : (
+              <Menu className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* Mobile Dropdown Drawer */}
+          {isMobileMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-56 bg-spy-surface border border-spy-border rounded-[6px] shadow-2xl p-2 z-50 space-y-1.5 text-xs font-sans">
+              <div className="px-2 py-1 border-b border-spy-border mb-1">
+                <div className="font-mono font-bold text-spy-text truncate">{agentName}</div>
+                <div className="text-[10px] font-mono text-spy-dim uppercase">{rankInfo.rank} · Cloud Active</div>
+              </div>
+
+              {/* + New Mission */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onQuickAdd();
+                }}
+                className="w-full text-left px-2.5 py-2 rounded-[3px] bg-spy-green/10 text-spy-green hover:bg-spy-green hover:text-black font-semibold flex items-center gap-2 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Mission</span>
+              </button>
+
+              {/* Theme Toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleTheme();
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-[3px] hover:bg-spy-surface2 text-spy-text flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  {currentTheme === "dark" ? (
+                    <Sun className="w-4 h-4 text-spy-amber" />
+                  ) : (
+                    <Moon className="w-4 h-4 text-spy-green" />
+                  )}
+                  <span>Theme: {currentTheme === "dark" ? "Dark" : "Light"}</span>
+                </div>
+                <span className="text-[10px] font-mono text-spy-dim">Toggle</span>
+              </button>
+
+              {/* Settings & Features */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsSettingsOpen(true);
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-[3px] hover:bg-spy-surface2 text-spy-text flex items-center gap-2 transition-colors"
+              >
+                <Settings className="w-4 h-4 text-spy-muted" />
+                <span>Settings & Features</span>
+              </button>
+
+              {/* Logout */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onLogout();
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-[3px] hover:bg-spy-red/10 text-spy-red flex items-center gap-2 transition-colors border-t border-spy-border pt-1.5"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log Out</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 2. DESKTOP HEADER (hidden sm:flex) */}
+      <div className="hidden sm:flex sm:items-center justify-between gap-4">
         {/* Left: Agent name & Rank */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-[4px] bg-[#dcf3e4] text-[#14663a] border border-[#b9e7c8] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border flex items-center justify-center font-mono font-bold">
@@ -190,8 +391,7 @@ export function AgentHeader({
             {/* Wordmark Branding */}
             <div className="flex items-center gap-1.5 font-mono font-bold text-xs tracking-wider uppercase text-[#14663a] dark:text-spy-green mb-1 select-none">
               <LogoIcon className="w-3.5 h-3.5 shrink-0 text-[#14663a] dark:text-spy-green" />
-              <span className="hidden sm:inline">OPERATION: ME</span>
-              <span className="sm:hidden">OP: ME</span>
+              <span>OPERATION: ME</span>
             </div>
 
             {showGreeting && (
@@ -226,7 +426,7 @@ export function AgentHeader({
         </div>
 
         {/* Right: XP Progress Bar + Streak + New Mission Button + Theme Toggle + Settings + Logout */}
-        <div className="flex items-center gap-3 sm:gap-4 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-3 sm:gap-4 flex-nowrap">
           {/* XP Bar */}
           <div className="w-36 sm:w-44">
             <ProgressBar
@@ -260,7 +460,7 @@ export function AgentHeader({
               title="New Mission"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span className="hidden sm:inline">New Mission</span>
+              <span>New Mission</span>
             </Button>
 
             {/* Sun/Moon quick toggle button with rotate/morph animation */}
@@ -334,11 +534,11 @@ export function AgentHeader({
             </div>
 
             {/* Navigation Tabs inside Settings */}
-            <div className="flex items-center gap-1 mb-4 border-b border-spy-border pb-1 font-mono text-[11px]">
+            <div className="flex items-center gap-1 mb-4 border-b border-spy-border pb-1 font-mono text-[11px] overflow-x-auto scrollbar-none">
               <button
                 type="button"
                 onClick={() => setSettingsTab("general")}
-                className={`px-3 py-1 rounded-[3px] transition-colors ${
+                className={`px-3 py-1 rounded-[3px] transition-colors shrink-0 ${
                   settingsTab === "general"
                     ? "bg-spy-green/15 text-spy-green font-bold border border-spy-green/40"
                     : "text-spy-muted hover:text-spy-text"
@@ -348,30 +548,45 @@ export function AgentHeader({
               </button>
               <button
                 type="button"
-                onClick={() => setSettingsTab("auto_missions")}
-                className={`px-3 py-1 rounded-[3px] transition-colors ${
-                  settingsTab === "auto_missions"
+                onClick={() => setSettingsTab("features")}
+                className={`px-3 py-1 rounded-[3px] transition-colors shrink-0 ${
+                  settingsTab === "features"
                     ? "bg-spy-green/15 text-spy-green font-bold border border-spy-green/40"
                     : "text-spy-muted hover:text-spy-text"
                 }`}
               >
-                Auto-Missions
+                Features
               </button>
-              <button
-                type="button"
-                onClick={() => setSettingsTab("reminders")}
-                className={`px-3 py-1 rounded-[3px] transition-colors ${
-                  settingsTab === "reminders"
-                    ? "bg-spy-green/15 text-spy-green font-bold border border-spy-green/40"
-                    : "text-spy-muted hover:text-spy-text"
-                }`}
-              >
-                Reminders
-              </button>
+              {activeFeatures.auto_missions && (
+                <button
+                  type="button"
+                  onClick={() => setSettingsTab("auto_missions")}
+                  className={`px-3 py-1 rounded-[3px] transition-colors shrink-0 ${
+                    settingsTab === "auto_missions"
+                      ? "bg-spy-green/15 text-spy-green font-bold border border-spy-green/40"
+                      : "text-spy-muted hover:text-spy-text"
+                  }`}
+                >
+                  Auto-Missions
+                </button>
+              )}
+              {activeFeatures.notifications && (
+                <button
+                  type="button"
+                  onClick={() => setSettingsTab("reminders")}
+                  className={`px-3 py-1 rounded-[3px] transition-colors shrink-0 ${
+                    settingsTab === "reminders"
+                      ? "bg-spy-green/15 text-spy-green font-bold border border-spy-green/40"
+                      : "text-spy-muted hover:text-spy-text"
+                  }`}
+                >
+                  Reminders
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSettingsTab("data")}
-                className={`px-3 py-1 rounded-[3px] transition-colors ${
+                className={`px-3 py-1 rounded-[3px] transition-colors shrink-0 ${
                   settingsTab === "data"
                     ? "bg-spy-green/15 text-spy-green font-bold border border-spy-green/40"
                     : "text-spy-muted hover:text-spy-text"
@@ -523,6 +738,70 @@ export function AgentHeader({
                   )}
                 </div>
               </>
+            )}
+
+            {settingsTab === "features" && (
+              <div className="space-y-3 py-1 font-mono text-xs">
+                <div className="text-[11px] text-spy-dim font-sans border-b border-spy-border pb-2 leading-relaxed">
+                  Toggle application features on or off. Turned-off modules are completely hidden across navigation, dashboard insights, and shortcuts without modifying any stored database records.
+                </div>
+                <div className="divide-y divide-spy-border/60">
+                  {FEATURE_CONFIGS.map((item) => {
+                    const isEnabled = activeFeatures[item.key];
+                    return (
+                      <div
+                        key={item.key}
+                        className="py-2.5 flex items-center justify-between gap-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-spy-text font-semibold text-xs font-mono">
+                              {item.label}
+                            </span>
+                            {item.tag && (
+                              <span
+                                className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border ${
+                                  item.tag === "Beta"
+                                    ? "bg-spy-amber/15 text-spy-amber border-spy-amber/30"
+                                    : "bg-purple-500/15 text-purple-400 border-purple-500/30"
+                                }`}
+                              >
+                                {item.tag}
+                              </span>
+                            )}
+                            {item.locked && (
+                              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border bg-spy-surface2 text-spy-dim border-spy-border">
+                                Locked
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-spy-dim font-sans mt-0.5 leading-snug">
+                            {item.description}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={item.locked}
+                          onClick={() => {
+                            if (item.locked) return;
+                            soundFX.playBlip();
+                            onUpdateFeatures?.({ [item.key]: !isEnabled });
+                          }}
+                          className={`px-3 py-1 border rounded-[3px] font-mono font-bold text-xs transition-colors shrink-0 ${
+                            item.locked
+                              ? "bg-spy-green/10 text-spy-green/70 border-spy-green/30 cursor-not-allowed"
+                              : isEnabled
+                              ? "bg-spy-greenMuted text-spy-green border-spy-green hover:bg-spy-green/25 cursor-pointer"
+                              : "bg-spy-surface2 text-spy-dim border-spy-border hover:border-spy-borderLight hover:text-spy-text cursor-pointer"
+                          }`}
+                        >
+                          {isEnabled ? "ON" : "OFF"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             {settingsTab === "auto_missions" && onToggleRecurringRule && onUpdateRecurringRule && onAddRecurringRule && onRunAutoMissionsGenerator && (

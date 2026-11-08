@@ -88,15 +88,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const configStatus = validateSupabaseConfig();
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-spy-bg text-spy-text">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#f8faf9] dark:bg-spy-bg text-spy-text">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="w-full max-w-md bg-spy-surface border border-spy-border rounded-[6px] p-6 sm:p-8"
+        className="w-full max-w-md bg-white dark:bg-spy-surface border border-gray-200 dark:border-spy-border shadow-2xl rounded-[8px] p-6 sm:p-8"
       >
         {/* Title */}
-        <div className="mb-6 pb-4 border-b border-spy-border">
+        <div className="mb-6 pb-4 border-b border-gray-200 dark:border-spy-border">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-[5px] bg-[#dcf3e4] text-[#14663a] border border-[#b9e7c8] dark:bg-spy-surface2 dark:text-spy-green dark:border-spy-border flex items-center justify-center shrink-0">
               <LogoIcon className="w-4 h-4 text-[#14663a] dark:text-spy-green" />
@@ -105,16 +105,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <div className="text-sm font-mono font-bold tracking-widest text-[#14663a] dark:text-spy-green uppercase">
                 OPERATION: ME
               </div>
-              <div className="text-[10px] font-mono text-spy-muted uppercase tracking-wider">
+              <div className="text-[10px] font-mono text-gray-500 dark:text-spy-muted uppercase tracking-wider">
                 Tactical Mission Control
               </div>
             </div>
           </div>
-          <h1 className="text-xl font-medium text-spy-text tracking-tight mt-2">
+          <h1 className="text-xl font-bold font-mono text-gray-900 dark:text-spy-text tracking-tight mt-2">
             Agent Authorization
           </h1>
-          <p className="text-xs text-spy-muted mt-1">
-            Cloud Authentication Required
+          <p className="text-xs text-gray-500 dark:text-spy-muted mt-1 font-sans">
+            Cloud Authentication Required · Supabase Single Source of Truth
           </p>
         </div>
 
@@ -122,9 +122,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         {errorMsg && (
           <div 
             role="alert"
-            className="mb-4 bg-spy-danger-surface border border-spy-red/30 p-3 rounded-[4px] text-xs text-spy-red flex items-start gap-2"
+            className="mb-4 bg-red-50 dark:bg-spy-danger-surface border border-red-200 dark:border-spy-red/30 p-3 rounded-[4px] text-xs text-red-600 dark:text-spy-red flex items-start gap-2 font-mono"
           >
-            <AlertCircle className="w-4 h-4 text-spy-red shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
         )}
@@ -133,9 +133,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         {resetNotice && (
           <div 
             role="status"
-            className="mb-4 bg-spy-green/10 border border-spy-green/30 p-3 rounded-[4px] text-xs text-spy-green flex items-start gap-2"
+            className="mb-4 bg-emerald-50 dark:bg-spy-green/10 border border-emerald-200 dark:border-spy-green/30 p-3 rounded-[4px] text-xs text-emerald-700 dark:text-spy-green flex items-start gap-2 font-mono"
           >
-            <CheckCircle2 className="w-4 h-4 text-spy-green shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-spy-green shrink-0 mt-0.5" />
             <span>{resetNotice}</span>
           </div>
         )}
@@ -143,7 +143,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
           {/* Email field */}
           <div>
-            <label htmlFor="agent-email" className="block text-spy-muted mb-1 font-medium">
+            <label htmlFor="agent-email" className="block text-gray-700 dark:text-spy-muted mb-1.5 font-mono text-[11px] uppercase tracking-wider font-bold">
               Email Address
             </label>
             <div className="relative">
@@ -157,22 +157,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   if (errorMsg) setErrorMsg("");
                 }}
                 placeholder="you@example.com"
-                className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-sm text-spy-text focus:outline-none focus:border-spy-borderLight rounded-[3px]"
+                className="w-full bg-white dark:bg-spy-surface2 border border-gray-300 dark:border-spy-border px-3.5 py-2.5 text-sm text-gray-900 dark:text-spy-text placeholder:text-gray-400 dark:placeholder:text-spy-dim focus:outline-none focus:border-spy-green focus:ring-1 focus:ring-spy-green rounded-[4px] shadow-2xs font-sans"
               />
             </div>
           </div>
 
           {/* Passcode field with Show/Hide toggle & Forgot password link */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label htmlFor="agent-password" className="block text-spy-muted font-medium">
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="agent-password" className="block text-gray-700 dark:text-spy-muted font-mono text-[11px] uppercase tracking-wider font-bold">
                 Passcode
               </label>
               <button
                 type="button"
                 onClick={handleForgotPassword}
                 disabled={resetLoading}
-                className="text-[11px] text-spy-muted hover:text-spy-green transition-colors underline focus:outline-none"
+                className="text-[11px] font-mono text-gray-500 dark:text-spy-muted hover:text-spy-green transition-colors underline focus:outline-none"
               >
                 {resetLoading ? "Sending link..." : "Forgot password?"}
               </button>
@@ -188,14 +188,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   if (errorMsg) setErrorMsg("");
                 }}
                 placeholder="••••••••••••"
-                className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-sm text-spy-text focus:outline-none focus:border-spy-borderLight rounded-[3px] pr-10"
+                className="w-full bg-white dark:bg-spy-surface2 border border-gray-300 dark:border-spy-border px-3.5 py-2.5 text-sm text-gray-900 dark:text-spy-text placeholder:text-gray-400 dark:placeholder:text-spy-dim focus:outline-none focus:border-spy-green focus:ring-1 focus:ring-spy-green rounded-[4px] shadow-2xs pr-10 font-sans"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 title={showPassword ? "Hide password" : "Show password"}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-spy-muted hover:text-spy-text"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-spy-muted dark:hover:text-spy-text p-1"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -209,7 +209,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             size="md"
             isLoading={loading}
             disabled={loading}
-            className="w-full mt-2"
+            className="w-full mt-3 font-mono font-bold bg-[#14663a] hover:bg-[#0f4d2c] text-white dark:bg-spy-green dark:text-black dark:hover:bg-spy-green/90 py-2.5 text-sm shadow-md"
           >
             <Lock className="w-4 h-4" />
             <span>{loading ? "Authenticating..." : "Authenticate"}</span>

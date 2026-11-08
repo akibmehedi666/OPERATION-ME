@@ -3,6 +3,7 @@ import {
   AcademicEvent,
   Mission,
   NotificationSettings,
+  TuitionException,
 } from "@/types/database";
 
 export interface NotificationAlert {
@@ -55,6 +56,7 @@ export function getDueNotifications(
     events: AcademicEvent[];
     missions: Mission[];
     settings: NotificationSettings;
+    tuitionExceptions?: TuitionException[];
   }
 ): NotificationAlert[] {
   const { schedule, events, missions, settings } = options;
@@ -124,7 +126,23 @@ export function getDueNotifications(
     );
 
     todayTuitions.forEach((item) => {
-      const [tH, tM] = item.start_time.split(":").map(Number);
+      // Check for tuition exception today
+      const exception = options.tuitionExceptions?.find(
+        (ex) => ex.date === todayStr && (!ex.slot_id || ex.slot_id === item.id)
+      );
+
+      // Respect exception: If cancelled, skip the reminder completely
+      if (exception?.action === "cancelled") {
+        return;
+      }
+
+      // If moved, use new_start instead of original start_time
+      const effectiveStartTime =
+        exception?.action === "moved" && exception.new_start
+          ? exception.new_start.slice(0, 5)
+          : item.start_time;
+
+      const [tH, tM] = effectiveStartTime.split(":").map(Number);
       const tuitionStart = new Date(now);
       tuitionStart.setHours(tH, tM, 0, 0);
 
@@ -137,7 +155,7 @@ export function getDueNotifications(
           id: `tuition-${item.id}-${todayStr}`,
           type: "tuition",
           title: `Tuition in ${diffMins} min`,
-          message: `Slot starts at ${item.start_time}. Finalize exercise sets and student lesson materials.`,
+          message: `Slot starts at ${effectiveStartTime}. Finalize exercise sets and student lesson materials.`,
           severity: "warning",
           dueAt: now,
         });

@@ -190,9 +190,11 @@ export function generateDailyAutoMissions({
         break;
       }
 
-      // 2. TUITION PREP: "Prepare tuition lesson" 2 hours before tuition slot
+      // 2. TUITION PREP: "Prepare tuition lesson" in nearest free window before tuition slot
       case "tuition_prep": {
-        const tuitionBlocks = resolvedBlocks.filter((b) => b.type === "tuition");
+        const tuitionBlocks = resolvedBlocks.filter(
+          (b) => b.type === "tuition" && !b.isCancelled && !b.isSkipped
+        );
         if (tuitionBlocks.length === 0) continue;
 
         if (isMissionAlreadyGenerated(existingMissions, rule.id, dateStr)) {
@@ -205,6 +207,19 @@ export function generateDailyAutoMissions({
         const shouldBeActive = currentActiveTodayCount < activeMissionCap;
         if (shouldBeActive) currentActiveTodayCount++;
 
+        // Schedule in the nearest free time BEFORE the tuition slot (ending at least 15 min before tuition)
+        const [tH, tM] = firstTuition.start_time.split(":").map(Number);
+        const tuitionStartMin = (tH || 18) * 60 + (tM || 0);
+        const prepEndMin = Math.max(9 * 60, tuitionStartMin - 15);
+        const prepStartMin = prepEndMin - 45;
+
+        const psH = Math.floor(prepStartMin / 60);
+        const psM = prepStartMin % 60;
+        const peH = Math.floor(prepEndMin / 60);
+        const peM = prepEndMin % 60;
+        const scheduledStart = `${dateStr}T${String(psH).padStart(2, "0")}:${String(psM).padStart(2, "0")}:00`;
+        const scheduledEnd = `${dateStr}T${String(peH).padStart(2, "0")}:${String(peM).padStart(2, "0")}:00`;
+
         const mission: Mission = {
           id: `auto-${rule.id}-${dateStr}`,
           title: "Prepare tuition lesson",
@@ -212,7 +227,9 @@ export function generateDailyAutoMissions({
           category_id: "cat-11", // Tuition category
           priority: "high",
           deadline,
-          notes: "Review teaching materials, problem sets, and homework solutions 2 hours before session.",
+          scheduled_start: scheduledStart,
+          scheduled_end: scheduledEnd,
+          notes: "Review teaching materials, problem sets, and homework solutions before session.",
           status: shouldBeActive ? "active" : "locked",
           xp: rule.xp || 35,
           recurring_rule_id: rule.id,

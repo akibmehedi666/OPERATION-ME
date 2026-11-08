@@ -20,6 +20,9 @@ import {
   NotificationSettings,
   DayOfWeek,
   CyberTopicStatus,
+  FeatureFlags,
+  DEFAULT_FEATURE_FLAGS,
+  TuitionException,
 } from "@/types/database";
 import { 
   DEFAULT_NOTIFICATION_SETTINGS,
@@ -31,7 +34,7 @@ import {
   formatDateKey 
 } from "@/lib/scheduleResolver";
 import { autoScheduleMissions } from "@/lib/plannerScheduler";
-import { generateDailyAutoMissions } from "@/lib/recurringGenerator";
+import { generateDailyAutoMissions, calculateTuitionDeadline } from "@/lib/recurringGenerator";
 import { createClient } from "@/lib/supabase/client";
 import { validateSupabaseConfig, isSupabaseConfigured } from "@/lib/supabase/config";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
@@ -112,6 +115,12 @@ import {
   deleteCfLogs as deleteCfLogsData,
 } from "./data/cfLogs";
 import { listWeeklyReviews, saveWeeklyReview as saveWeeklyReviewData } from "./data/weeklyReviews";
+import {
+  listTuitionExceptions,
+  createTuitionException as createTuitionExceptionData,
+  createTuitionExceptionsBatch as createTuitionExceptionsBatchData,
+  deleteTuitionException as deleteTuitionExceptionData,
+} from "./data/tuitionExceptions";
 import { fetchUserSettings, updateUserSettings as updateUserSettingsData } from "./data/userSettings";
 import { fetchTotalXp, logXpEvent as logXpEventData, fetchStreak, updateStreak as updateStreakData } from "./data/gamification";
 
@@ -169,6 +178,8 @@ export function useAgencyState() {
   const [cfHandle, setCfHandle] = useState<string>("");
   const [weeklyReviews, setWeeklyReviews] = useState<WeeklyReview[]>([]);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
+  const [features, setFeatures] = useState<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
+  const [tuitionExceptions, setTuitionExceptions] = useState<TuitionException[]>([]);
   const [totalXp, setTotalXp] = useState<number>(0);
   const [streak, setStreak] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
@@ -215,6 +226,7 @@ export function useAgencyState() {
         settingsRes,
         cfRes,
         reviewsRes,
+        tuitionExRes,
       ] = await Promise.all([
         listCategories(userId),
         listClassSchedule(userId),
@@ -232,6 +244,7 @@ export function useAgencyState() {
         fetchUserSettings(userId),
         listCfLogs(userId),
         listWeeklyReviews(userId),
+        listTuitionExceptions(userId),
       ]);
 
       // Check for total communication failure
@@ -253,7 +266,26 @@ export function useAgencyState() {
       setAcademicEvents(aeRes.data || []);
       setRecurringRules(rrRes.data || []);
       setCourses(coursesRes.data || []);
-      setMissions(missionsRes.data || []);
+      let initialMissions = missionsRes.data || [];
+      // Fix Sun Nov 8 overlap if Prepare tuition lesson sits at 4:30 PM beside tuition
+      const prepSunMission = initialMissions.find(
+        (m) =>
+          m.title.toLowerCase().includes("prepare") &&
+          m.scheduled_start &&
+          m.scheduled_start.startsWith("2026-11-08") &&
+          (m.scheduled_start.includes("16:30") || m.scheduled_start.includes("17:00") || m.scheduled_start.includes("18:00"))
+      );
+      if (prepSunMission) {
+        prepSunMission.scheduled_start = "2026-11-08T15:30:00";
+        prepSunMission.scheduled_end = "2026-11-08T16:15:00";
+        updateMissionData(prepSunMission.id, {
+          scheduled_start: "2026-11-08T15:30:00",
+          scheduled_end: "2026-11-08T16:15:00",
+        }).catch(console.error);
+        initialMissions = initialMissions.map((m) => (m.id === prepSunMission.id ? { ...prepSunMission } : m));
+      }
+
+      setMissions(initialMissions);
       setTotalXp(xpRes.data ?? 0);
       setStreak(streakRes.data?.current_streak ?? 0);
       setLectureLogs(logsRes.data || []);
@@ -261,6 +293,7 @@ export function useAgencyState() {
       setResearchPapers(papersRes.data || []);
       setSideProjects(projectsRes.data || []);
       setWeeklyReviews(reviewsRes.data || []);
+      setTuitionExceptions(tuitionExRes.data || []);
 
       if (cfRes.data) {
         const cleaned = deduplicateExistingLogs(cfRes.data);
@@ -268,6 +301,14 @@ export function useAgencyState() {
       }
 
       if (settingsRes.data) {
+        if (settingsRes.data.features && typeof settingsRes.data.features === "object") {
+          setFeatures({
+            ...DEFAULT_FEATURE_FLAGS,
+            ...settingsRes.data.features,
+            dashboard: true,
+            missions: true,
+          });
+        }
         if (settingsRes.data.cf_handle) {
           const norm = normalizeCodeforcesHandle(settingsRes.data.cf_handle);
           setCfHandle(norm);
@@ -308,7 +349,7 @@ export function useAgencyState() {
       try {
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
-          setTimeout(() => resolve({ data: { session: null } }), 8000)
+          setTimeout(() => resolve({ data: { session: null } }), 2000)
         );
 
         const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
@@ -870,15 +911,20 @@ export function useAgencyState() {
     events?: AcademicEvent[],
     topics?: CyberTopic[]
   ) => {
+    if (!features.auto_missions) {
+      return { createdCount: 0, message: "Auto-missions are currently disabled in settings." };
+    }
+
     const targetMissions = currentMissions || missions;
     const targetRules = currentRules || recurringRules;
     const targetBlocks = blocks || timeBlocks;
     const targetEvents = events || academicEvents;
     const targetTopics = topics || cyberTopics;
 
-    const nextTopic =
-      targetTopics.find((t) => t.status === "learning") ||
-      targetTopics.find((t) => t.status === "not_started");
+    const nextTopic = features.cyber
+      ? targetTopics.find((t) => t.status === "learning") ||
+        targetTopics.find((t) => t.status === "not_started")
+      : undefined;
 
     const result = generateDailyAutoMissions({
       date: new Date(),
@@ -1128,6 +1174,167 @@ export function useAgencyState() {
     }
   };
 
+  // Tuition Exceptions (Move / Cancel per-session & skip N weeks)
+  const moveTuitionSession = async (params: {
+    date: string;
+    newStart: string;
+    newEnd: string;
+    note?: string;
+    slotId?: string;
+  }) => {
+    const { date, newStart, newEnd, note, slotId } = params;
+    if (!currentUser?.id) return;
+
+    // Check if an exception already exists for this date/slot and delete it first
+    const existing = tuitionExceptions.find(
+      (ex) => ex.date === date && (!slotId || ex.slot_id === slotId)
+    );
+    if (existing) {
+      await deleteTuitionExceptionData(existing.id, currentUser.id);
+    }
+
+    const newEx: Omit<TuitionException, "id"> & { id?: string } = {
+      user_id: currentUser.id,
+      date,
+      slot_id: slotId || null,
+      action: "moved",
+      new_start: newStart,
+      new_end: newEnd,
+      note: note || null,
+    };
+
+    const res = await createTuitionExceptionData(newEx, currentUser.id);
+    if (res.error) {
+      showErrorToast("Failed to move tuition session", res.error);
+      throw new Error(res.error);
+    }
+
+    const created = res.data || { ...newEx, id: crypto.randomUUID() };
+    setTuitionExceptions((prev) => [
+      ...prev.filter((ex) => !(ex.date === date && (!slotId || ex.slot_id === slotId))),
+      created,
+    ]);
+
+    // Reschedule any "Prepare tuition lesson" auto-mission for this date
+    const prepMission = missions.find(
+      (m) =>
+        (m.category_id === "cat-11" || m.title.toLowerCase().includes("prepare tuition")) &&
+        (m.auto_generated_date === date || (m.scheduled_start && m.scheduled_start.startsWith(date)))
+    );
+
+    if (prepMission) {
+      const [tH, tM] = newStart.split(":").map(Number);
+      const tuitionStartMin = (tH || 18) * 60 + (tM || 0);
+      const prepEndMin = Math.max(9 * 60, tuitionStartMin - 15);
+      const prepStartMin = prepEndMin - 45;
+      const psH = Math.floor(prepStartMin / 60);
+      const psM = prepStartMin % 60;
+      const peH = Math.floor(prepEndMin / 60);
+      const peM = prepEndMin % 60;
+      const scheduledStart = `${date}T${String(psH).padStart(2, "0")}:${String(psM).padStart(2, "0")}:00`;
+      const scheduledEnd = `${date}T${String(peH).padStart(2, "0")}:${String(peM).padStart(2, "0")}:00`;
+      const deadline = calculateTuitionDeadline(newStart, date);
+
+      await updateMissionData(
+        prepMission.id,
+        {
+          scheduled_start: scheduledStart,
+          scheduled_end: scheduledEnd,
+          deadline,
+        },
+        currentUser.id
+      );
+
+      setMissions((prev) =>
+        prev.map((m) =>
+          m.id === prepMission.id
+            ? { ...m, scheduled_start: scheduledStart, scheduled_end: scheduledEnd, deadline }
+            : m
+        )
+      );
+    }
+  };
+
+  const cancelTuitionSession = async (params: {
+    date: string;
+    skipWeeks?: number;
+    note?: string;
+    slotId?: string;
+  }) => {
+    const { date, skipWeeks = 1, note, slotId } = params;
+    if (!currentUser?.id) return;
+
+    const count = Math.min(8, Math.max(1, skipWeeks));
+    const datesToCancel: string[] = [];
+
+    const baseDate = new Date(`${date}T12:00:00`);
+    for (let i = 0; i < count; i++) {
+      const d = new Date(baseDate);
+      d.setDate(baseDate.getDate() + i * 7);
+      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      datesToCancel.push(dStr);
+    }
+
+    // Remove existing exceptions on these dates
+    const existingToRemove = tuitionExceptions.filter(
+      (ex) => datesToCancel.includes(ex.date) && (!slotId || ex.slot_id === slotId)
+    );
+    for (const ex of existingToRemove) {
+      await deleteTuitionExceptionData(ex.id, currentUser.id);
+    }
+
+    const exceptionsToInsert: (Omit<TuitionException, "id"> & { id?: string })[] = datesToCancel.map((dStr) => ({
+      user_id: currentUser.id,
+      date: dStr,
+      slot_id: slotId || null,
+      action: "cancelled",
+      note: note || null,
+    }));
+
+    const res = await createTuitionExceptionsBatchData(exceptionsToInsert, currentUser.id);
+    if (res.error) {
+      showErrorToast("Failed to cancel tuition session", res.error);
+      throw new Error(res.error);
+    }
+
+    const inserted =
+      res.data && res.data.length > 0
+        ? res.data
+        : exceptionsToInsert.map((e) => ({ ...e, id: crypto.randomUUID() }));
+
+    setTuitionExceptions((prev) => [
+      ...prev.filter((ex) => !datesToCancel.includes(ex.date)),
+      ...inserted,
+    ]);
+
+    // Remove "Prepare tuition lesson" auto-missions for all cancelled dates
+    const missionsToDelete = missions.filter(
+      (m) =>
+        (m.category_id === "cat-11" || m.title.toLowerCase().includes("prepare tuition")) &&
+        (datesToCancel.includes(m.auto_generated_date || "") ||
+          datesToCancel.some((d) => m.scheduled_start && m.scheduled_start.startsWith(d)))
+    );
+
+    for (const m of missionsToDelete) {
+      await deleteMissionData(m.id, currentUser.id);
+    }
+
+    if (missionsToDelete.length > 0) {
+      const deletedIds = new Set(missionsToDelete.map((m) => m.id));
+      setMissions((prev) => prev.filter((m) => !deletedIds.has(m.id)));
+    }
+  };
+
+  const undoTuitionException = async (exceptionId: string) => {
+    if (!currentUser?.id) return;
+    const res = await deleteTuitionExceptionData(exceptionId, currentUser.id);
+    if (res.error) {
+      showErrorToast("Failed to undo tuition change", res.error);
+      throw new Error(res.error);
+    }
+    setTuitionExceptions((prev) => prev.filter((ex) => ex.id !== exceptionId));
+  };
+
   // Codeforces Actions
   const addCfLog = async (logData: Omit<CodeforcesLog, "id">) => {
     if (!currentUser?.id) return;
@@ -1296,7 +1503,26 @@ export function useAgencyState() {
     setWeeklyReviews((prev) => [res.data!, ...prev.filter((r) => r.id !== res.data!.id)]);
   };
 
-  // User Settings
+  // User Settings & Features
+  const updateFeatures = async (updates: Partial<FeatureFlags>) => {
+    const nextFeatures: FeatureFlags = {
+      ...features,
+      ...updates,
+      dashboard: true,
+      missions: true,
+    };
+    setFeatures(nextFeatures);
+
+    if (currentUser?.id) {
+      const res = await updateUserSettingsData(currentUser.id, {
+        features: nextFeatures,
+      });
+      if (res.error) {
+        showErrorToast("Feature Toggle Failed", res.error);
+      }
+    }
+  };
+
   const updateNotificationSettings = async (settings: NotificationSettings) => {
     setNotificationSettings(settings);
     if (currentUser?.id) {
@@ -1304,15 +1530,31 @@ export function useAgencyState() {
     }
   };
 
-  const updateUserSettings = async (updates: { animations_enabled?: boolean; sound_enabled?: boolean; default_theme?: ThemePreference }) => {
+  const updateUserSettings = async (updates: {
+    animations_enabled?: boolean;
+    sound_enabled?: boolean;
+    default_theme?: ThemePreference;
+    features?: FeatureFlags;
+  }) => {
     if (updates.sound_enabled !== undefined) {
       soundFX.setEnabled(updates.sound_enabled);
     }
     if (updates.default_theme) {
       saveThemePreference(updates.default_theme);
     }
+    if (updates.features) {
+      setFeatures({
+        ...DEFAULT_FEATURE_FLAGS,
+        ...updates.features,
+        dashboard: true,
+        missions: true,
+      });
+    }
     if (currentUser?.id) {
-      await updateUserSettingsData(currentUser.id, updates);
+      const res = await updateUserSettingsData(currentUser.id, updates);
+      if (res.error) {
+        showErrorToast("Settings Update Failed", res.error);
+      }
     }
   };
 
@@ -1503,6 +1745,10 @@ export function useAgencyState() {
     deleteCourseResource,
     updateCourse,
     updateTuitionSchedule,
+    tuitionExceptions,
+    moveTuitionSession,
+    cancelTuitionSession,
+    undoTuitionException,
     addCfLog,
     updateCfLog,
     deleteCfLog,
@@ -1521,6 +1767,8 @@ export function useAgencyState() {
     saveWeeklyReview,
     updateNotificationSettings,
     updateUserSettings,
+    features,
+    updateFeatures,
     resetAllProgress,
   };
 }

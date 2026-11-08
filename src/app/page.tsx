@@ -17,11 +17,12 @@ import { MissionCelebration } from "@/components/missions/MissionCelebration";
 import { PromotionOverlay } from "@/components/missions/PromotionOverlay";
 import { CompletionNoteModal } from "@/components/missions/CompletionNoteModal";
 import { Button } from "@/components/ui/Button";
-import { Mission, DayOfWeek, TimeBlock } from "@/types/database";
+import { Mission, DayOfWeek, TimeBlock, FeatureFlags } from "@/types/database";
 import { soundFX } from "@/lib/sound";
 import { useTheme } from "@/lib/themeContext";
 import { PlannerView } from "@/components/planner/PlannerView";
 import { TuitionScheduleModal } from "@/components/planner/TuitionScheduleModal";
+import { TuitionActionModal } from "@/components/planner/TuitionActionModal";
 import { UpcomingDatesCard } from "@/components/dashboard/UpcomingDatesCard";
 import { DashboardBanner } from "@/components/dashboard/DashboardBanner";
 import { CourseHQView } from "@/components/courses/CourseHQView";
@@ -117,6 +118,10 @@ export default function Home() {
     deleteCourseResource,
     updateCourse,
     updateTuitionSchedule,
+    tuitionExceptions,
+    moveTuitionSession,
+    cancelTuitionSession,
+    undoTuitionException,
     addCfLog,
     updateCfLog,
     deleteCfLog,
@@ -136,8 +141,9 @@ export default function Home() {
     updateNotificationSettings,
     updateDefaultTheme,
     updateUserSettings,
+    features,
+    updateFeatures,
     resetAllProgress,
-    deduplicateMissions,
     errorToasts,
     dismissErrorToast,
     structureLoadingError,
@@ -181,22 +187,56 @@ export default function Home() {
     isOpen: false,
   });
 
+  const [tuitionActionModal, setTuitionActionModal] = useState<{
+    isOpen: boolean;
+    dateStr: string;
+    startTime: string;
+    endTime: string;
+    slotId?: string;
+  }>({
+    isOpen: false,
+    dateStr: "",
+    startTime: "18:00",
+    endTime: "19:30",
+  });
+
   // Real-time notification alerts evaluated from schedule, deadlines, and quiet hours
   const dueNotifications = React.useMemo(() => {
-    if (typeof window === "undefined") return [];
+    if (typeof window === "undefined" || !features.notifications) return [];
     return getDueNotifications(new Date(), {
       schedule,
       events: academicEvents,
       missions,
       settings: notificationSettings,
+      tuitionExceptions,
     });
-  }, [schedule, academicEvents, missions, notificationSettings]);
+  }, [schedule, academicEvents, missions, notificationSettings, features.notifications, tuitionExceptions]);
 
   // Track initial mount so that page-load stagger does not replay on subsequent re-renders
   const isFirstMount = React.useRef(true);
   useEffect(() => {
     isFirstMount.current = false;
   }, []);
+
+  // Redirect to dashboard if the active tab is disabled via feature toggles
+  useEffect(() => {
+    const tabFeatureMap: Record<typeof activeTab, keyof FeatureFlags> = {
+      dashboard: "dashboard",
+      missions: "missions",
+      planner: "planner",
+      courses: "courses",
+      codeforces: "codeforces",
+      cyber: "cyber",
+      papers: "research",
+      projects: "projects",
+      review: "review",
+      history: "history",
+    };
+    const featureKey = tabFeatureMap[activeTab];
+    if (featureKey && !features[featureKey]) {
+      setActiveTab("dashboard");
+    }
+  }, [features, activeTab]);
 
   // Dynamic document title reflecting the active view / tab
   useEffect(() => {
@@ -219,7 +259,7 @@ export default function Home() {
   // Codeforces auto-sync on app open (throttled: at most once per hour)
   const lastCfSyncRef = useRef<number>(0);
   useEffect(() => {
-    if (!isAuthenticated || loading) return;
+    if (!isAuthenticated || loading || !features.codeforces) return;
     const handleToSync = cfHandle?.trim();
     if (!handleToSync) return;
 
@@ -239,7 +279,7 @@ export default function Home() {
         }
       })();
     }
-  }, [isAuthenticated, loading, cfHandle, cfLogs, importCfLogs]);
+  }, [isAuthenticated, loading, cfHandle, cfLogs, importCfLogs, features.codeforces]);
 
   // Mission accomplishment animation state
   const [accomplishingMissionId, setAccomplishingMissionId] = useState<string | null>(null);
@@ -324,23 +364,23 @@ export default function Home() {
       isRankUp: result.isRankUp,
     });
 
-    // 7. If CP mission, trigger quick Codeforces log modal
+    // 7. If CP mission and Codeforces feature is enabled, trigger quick Codeforces log modal
     const isCpMission =
       mission.category_id === "cat-10" ||
       mission.recurring_rule_id === "rule-cp-daily" ||
       mission.title.toLowerCase().includes("codeforces");
-    if (isCpMission) {
+    if (isCpMission && features.codeforces) {
       setTimeout(() => {
         setIsCpMissionLogOpen(true);
       }, 700);
     }
 
-    // 8. If Research Paper mission, trigger quick Paper summary modal
+    // 8. If Research Paper mission and Research feature is enabled, trigger quick Paper summary modal
     const isPaperMission =
       mission.category_id === "cat-9" ||
       mission.recurring_rule_id === "rule-paper-weekly" ||
       mission.title.toLowerCase().includes("paper");
-    if (isPaperMission) {
+    if (isPaperMission && features.research) {
       setTimeout(() => {
         setIsPaperMissionModalOpen(true);
       }, 700);
@@ -582,84 +622,79 @@ export default function Home() {
             onRunAutoMissionsGenerator={runAutoMissionsGenerator}
             onUpdateNotificationSettings={updateNotificationSettings}
             onUpdateUserSettings={updateUserSettings}
+            features={features}
+            onUpdateFeatures={updateFeatures}
             onResetAllProgress={resetAllProgress}
             onOpenTuitionModal={() => setTuitionModal({ isOpen: true })}
           />
 
-          {/* Navigation Tabs (Smooth layoutId sliding indicator) */}
-          <div className="flex items-center gap-1 sm:gap-2 mb-6 border-b border-spy-border pb-1 relative overflow-x-auto no-scrollbar">
-            {(["dashboard", "missions", "planner", "courses", "codeforces", "cyber", "papers", "projects", "review", "history"] as const).map((tab) => {
-              const isActive = activeTab === tab;
-              const label =
-                tab === "dashboard"
-                  ? "Dashboard"
-                  : tab === "missions"
-                  ? "Missions"
-                  : tab === "planner"
-                  ? "Planner"
-                  : tab === "courses"
-                  ? "Courses"
-                  : tab === "codeforces"
-                  ? "Codeforces"
-                  : tab === "cyber"
-                  ? "Cyber"
-                  : tab === "papers"
-                  ? "Research"
-                  : tab === "projects"
-                  ? "Projects"
-                  : tab === "review"
-                  ? "Review"
-                  : "History";
-              const count =
-                tab === "missions"
-                  ? missions.length
-                  : tab === "courses"
-                  ? courses.length
-                  : tab === "codeforces"
-                  ? computeUniqueSolvedCount(cfLogs)
-                  : tab === "cyber"
-                  ? `${cyberTopics.filter((t) => t.status === "done").length}/${cyberTopics.length}`
-                  : tab === "papers"
-                  ? `${researchPapers.filter((p) => p.status === "done").length}/${researchPapers.length}`
-                  : tab === "projects"
-                  ? `${sideProjects.filter((p) => p.status === "active").length}`
-                  : tab === "history"
-                  ? missions.filter((m) => m.status === "completed").length
-                  : null;
+          {/* Navigation Tabs (Smooth layoutId sliding indicator, scrollable on mobile) */}
+          <div className="flex items-center gap-1 sm:gap-2 mb-6 border-b border-spy-border pb-1 relative overflow-x-auto scrollbar-none whitespace-nowrap">
+            {([
+              { id: "dashboard", label: "Dashboard", feature: "dashboard" as const },
+              { id: "missions", label: "Missions", feature: "missions" as const },
+              { id: "planner", label: "Planner", feature: "planner" as const },
+              { id: "courses", label: "Courses", feature: "courses" as const },
+              { id: "codeforces", label: "Codeforces", feature: "codeforces" as const },
+              { id: "cyber", label: "Cyber", feature: "cyber" as const },
+              { id: "papers", label: "Research", feature: "research" as const },
+              { id: "projects", label: "Projects", feature: "projects" as const },
+              { id: "review", label: "Review", feature: "review" as const },
+              { id: "history", label: "History", feature: "history" as const },
+            ] as const)
+              .filter((tabItem) => features[tabItem.feature])
+              .map(({ id: tab, label }) => {
+                const isActive = activeTab === tab;
+                const count =
+                  tab === "missions"
+                    ? missions.length
+                    : tab === "courses"
+                    ? courses.length
+                    : tab === "codeforces"
+                    ? computeUniqueSolvedCount(cfLogs)
+                    : tab === "cyber"
+                    ? `${cyberTopics.filter((t) => t.status === "done").length}/${cyberTopics.length}`
+                    : tab === "papers"
+                    ? `${researchPapers.filter((p) => p.status === "done").length}/${researchPapers.length}`
+                    : tab === "projects"
+                    ? `${sideProjects.filter((p) => p.status === "active").length}`
+                    : tab === "history"
+                    ? missions.filter((m) => m.status === "completed").length
+                    : null;
 
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`relative px-3 sm:px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors rounded-t-[4px] flex items-center gap-1.5 shrink-0 ${
-                    isActive
-                      ? "text-[#14663a] dark:text-spy-green font-bold"
-                      : "text-spy-muted hover:text-spy-text hover:bg-spy-surface2"
-                  }`}
-                >
-                  {/* Sliding active pill indicator */}
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeTabIndicator"
-                      transition={{ type: "spring", stiffness: 450, damping: 32 }}
-                      className="absolute inset-0 bg-[#dcf3e4] dark:bg-spy-surface2 rounded-t-[4px] border-b-2 border-[#1f7a4d] dark:border-spy-green -mb-[1px]"
-                    />
-                  )}
-                  <span className="relative z-10">{label}</span>
-                  {count !== null && (
-                    <span
-                      className={`relative z-10 text-[11px] px-1.5 py-0.5 rounded-[2px] border ${
-                        isActive
-                          ? "bg-[#c5e9d0] text-[#14663a] border-[#a4dab3] dark:bg-spy-surface dark:text-spy-green dark:border-spy-border"
-                          : "bg-spy-surface2 border-spy-border text-spy-muted"
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`relative px-3 sm:px-4 py-2 text-xs font-mono font-medium uppercase tracking-wider transition-colors rounded-t-[4px] flex items-center gap-1.5 shrink-0 ${
+                      isActive
+                        ? "text-[#14663a] dark:text-spy-green font-bold"
+                        : "text-spy-muted hover:text-spy-text hover:bg-spy-surface2"
+                    }`}
+                  >
+                    {/* Sliding active pill indicator */}
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeTabIndicator"
+                        transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                        className="absolute inset-0 bg-[#dcf3e4] dark:bg-spy-surface2 rounded-t-[4px] border-b-2 border-[#1f7a4d] dark:border-spy-green -mb-[1px]"
+                      />
+                    )}
+                    <span className="relative z-10">{label}</span>
+                    {count !== null && (
+                      <span
+                        className={`relative z-10 text-[11px] px-1.5 py-0.5 rounded-[2px] border ${
+                          isActive
+                            ? "bg-[#c5e9d0] text-[#14663a] border-[#a4dab3] dark:bg-spy-surface dark:text-spy-green dark:border-spy-border"
+                            : "bg-spy-surface2 border-spy-border text-spy-muted"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
           </div>
 
           {/* Tab Content Cross-Fade + Slight Slide */}
@@ -680,23 +715,13 @@ export default function Home() {
                   className="space-y-6"
                 >
                   {/* Strategic Directive Alert Banner (7-day alert before exams/payments) */}
-                  <DashboardBanner events={academicEvents} onOpenPlanner={() => setActiveTab("planner")} />
+                  {features.planner && (
+                    <DashboardBanner events={academicEvents} onOpenPlanner={() => setActiveTab("planner")} />
+                  )}
 
                   {/* B. Row of 3 small stat cards */}
                   <motion.div variants={dashboardCardVariants}>
                     <StatCardsRow missions={missions} streak={streak} />
-                  </motion.div>
-
-                  {/* Tactical Intelligence Insights Card */}
-                  <motion.div variants={dashboardCardVariants}>
-                    <InsightsCard
-                      missions={missions}
-                      lectureLogs={lectureLogs}
-                      sideProjects={sideProjects}
-                      streak={streak}
-                      cfLogs={cfLogs}
-                      onNavigate={(tab) => setActiveTab(tab as typeof activeTab)}
-                    />
                   </motion.div>
 
                   {/* C. Two Columns: Left (Hero + Today's Plan) & Right (Today's Briefing + Upcoming Dates) */}
@@ -720,19 +745,31 @@ export default function Home() {
                         ) : (
                           <div className="clean-card p-8 text-center">
                             <h3 className="text-sm font-medium text-spy-text mb-1">
-                              {missions.length === 0
-                                ? "No missions yet. Your first missions will be generated automatically"
-                                : "No active mission"}
+                              No active mission
                             </h3>
                             <p className="text-xs text-spy-muted mb-4 font-sans">
-                              {missions.length === 0
-                                ? "Your class routine, time-blocks, and recurring directives are armed. Deploy your first target below or let auto-generator schedule them."
+                              {!features.auto_missions
+                                ? "Daily auto-missions are turned off. Turn them on to automatically schedule routine study, tuition prep, and review targets."
                                 : "All primary directives accomplished. Assign a queued target or create a new mission."}
                             </p>
-                            <Button variant="primary" size="sm" onClick={handleOpenAdd}>
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>{missions.length === 0 ? "Dispatch First Mission" : "New Mission"}</span>
-                            </Button>
+                            {!features.auto_missions ? (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={async () => {
+                                  await updateFeatures({ auto_missions: true });
+                                  runAutoMissionsGenerator();
+                                }}
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>Turn on daily auto-missions</span>
+                              </Button>
+                            ) : (
+                              <Button variant="primary" size="sm" onClick={handleOpenAdd}>
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Add a mission</span>
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -748,6 +785,16 @@ export default function Home() {
                         accomplishingMissionId={accomplishingMissionId}
                         onCompleteMission={handleInitiateAccomplish}
                         onOpenTuitionModal={() => setTuitionModal({ isOpen: true })}
+                        tuitionExceptions={tuitionExceptions}
+                        onUndoTuitionException={undoTuitionException}
+                        onOpenTuitionActionModal={(slot) =>
+                          setTuitionActionModal({
+                            isOpen: true,
+                            dateStr: slot?.dateStr || new Date().toISOString().split("T")[0],
+                            startTime: slot?.startTime || "18:00",
+                            endTime: slot?.endTime || "19:30",
+                          })
+                        }
                       />
                     </motion.div>
 
@@ -766,8 +813,20 @@ export default function Home() {
                             endTime: slot?.endTime,
                           })
                         }
+                        tuitionExceptions={tuitionExceptions}
+                        onUndoTuitionException={undoTuitionException}
+                        onOpenTuitionActionModal={(slot) =>
+                          setTuitionActionModal({
+                            isOpen: true,
+                            dateStr: slot?.dateStr || new Date().toISOString().split("T")[0],
+                            startTime: slot?.startTime || "18:00",
+                            endTime: slot?.endTime || "19:30",
+                          })
+                        }
                       />
-                      <UpcomingDatesCard events={academicEvents} onOpenCalendar={() => setActiveTab("planner")} />
+                      {features.planner && (
+                        <UpcomingDatesCard events={academicEvents} onOpenCalendar={() => setActiveTab("planner")} />
+                      )}
                     </motion.div>
                   </div>
 
@@ -813,6 +872,19 @@ export default function Home() {
                       </div>
                     )}
                   </motion.div>
+
+                  {/* Tactical Intelligence Insights Card (at bottom) */}
+                  <motion.div variants={dashboardCardVariants}>
+                    <InsightsCard
+                      missions={missions}
+                      lectureLogs={lectureLogs}
+                      sideProjects={sideProjects}
+                      streak={streak}
+                      cfLogs={cfLogs}
+                      features={features}
+                      onNavigate={(tab) => setActiveTab(tab as typeof activeTab)}
+                    />
+                  </motion.div>
                 </motion.div>
               </motion.div>
             )}
@@ -829,13 +901,13 @@ export default function Home() {
                 <MissionQueue
                   missions={missions}
                   categories={categories}
+                  features={features}
                   accomplishingMissionId={accomplishingMissionId}
                   onComplete={handleInitiateAccomplish}
                   onEdit={handleOpenEdit}
                   onDelete={handleDelete}
                   onSetActive={setActiveMission}
                   onEditNote={handleOpenEditNote}
-                  onDeduplicate={deduplicateMissions}
                 />
               </motion.div>
             )}
@@ -873,6 +945,16 @@ export default function Home() {
                   onEditMission={handleOpenEdit}
                   onAssignNewMission={handleAssignNewMission}
                   onUpdateTuitionSchedule={updateTuitionSchedule}
+                  tuitionExceptions={tuitionExceptions}
+                  onUndoTuitionException={undoTuitionException}
+                  onEditTuitionSlot={(slot) =>
+                    setTuitionActionModal({
+                      isOpen: true,
+                      dateStr: slot.targetDate || new Date().toISOString().split("T")[0],
+                      startTime: slot.startTime,
+                      endTime: slot.endTime,
+                    })
+                  }
                 />
               </motion.div>
             )}
@@ -1060,6 +1142,7 @@ export default function Home() {
           onClose={() => setIsModalOpen(false)}
           onSave={handleSaveMission}
           categories={categories}
+          features={features}
           editingMission={editingMission}
           timeBlocks={timeBlocks}
           academicEvents={academicEvents}
@@ -1115,6 +1198,26 @@ export default function Home() {
           onClose={() => setIsPaperMissionModalOpen(false)}
           onSave={addResearchPaper}
           isTriggeredByMission={true}
+        />
+
+        {/* Per-session Tuition Action Menu (Move session, Cancel session, Edit weekly schedule) */}
+        <TuitionActionModal
+          isOpen={tuitionActionModal.isOpen}
+          dateStr={tuitionActionModal.dateStr}
+          startTime={tuitionActionModal.startTime}
+          endTime={tuitionActionModal.endTime}
+          slotId={tuitionActionModal.slotId}
+          onMoveSession={moveTuitionSession}
+          onCancelSession={cancelTuitionSession}
+          onOpenWeeklySchedule={() => {
+            setTuitionActionModal((prev) => ({ ...prev, isOpen: false }));
+            setTuitionModal({
+              isOpen: true,
+              startTime: tuitionActionModal.startTime,
+              endTime: tuitionActionModal.endTime,
+            });
+          }}
+          onClose={() => setTuitionActionModal((prev) => ({ ...prev, isOpen: false }))}
         />
 
         {/* Global Tuition Teaching Routine Configuration Modal */}
