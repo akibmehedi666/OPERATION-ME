@@ -90,7 +90,8 @@ export function extractBaseBlockId(id: string, dateStr?: string): string {
  */
 export function getOverrideBlockId(baseBlockId: string, dateStr: string): string {
   const cleanBaseId = extractBaseBlockId(baseBlockId, dateStr);
-  return `${cleanBaseId}__${dateStr}`;
+  const cleanDate = formatDateKey(dateStr);
+  return `${cleanBaseId}__${cleanDate}`;
 }
 
 /**
@@ -306,7 +307,7 @@ export function resolveDaySchedule(
 
   // Add date-specific single-week overrides
   const dateSpecificOverrides = weeklyBlocks
-    .filter((b) => b.override_date === dateStr)
+    .filter((b) => Boolean(b.override_date) && formatDateKey(b.override_date!) === dateStr)
     .map((b) => ({
       ...b,
       date: dateStr,

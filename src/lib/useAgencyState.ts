@@ -31,7 +31,8 @@ import {
   getDaysOfWeek, 
   getWeekStartDate, 
   getWeekdayFromDate, 
-  formatDateKey 
+  formatDateKey,
+  extractBaseBlockId
 } from "@/lib/scheduleResolver";
 import { autoScheduleMissions } from "@/lib/plannerScheduler";
 import { generateDailyAutoMissions, calculateTuitionDeadline } from "@/lib/recurringGenerator";
@@ -719,11 +720,20 @@ export function useAgencyState() {
       showErrorToast("Time Block Sync Failed", err);
       throw new Error(err);
     }
+    const saved = res.data;
     setTimeBlocks((prev) => {
-      const exists = prev.some((b) => b.id === res.data!.id);
-      return exists
-        ? prev.map((b) => (b.id === res.data!.id ? res.data! : b))
-        : [...prev, res.data!];
+      const savedDate = saved.override_date ? formatDateKey(saved.override_date) : null;
+      const savedBaseId = savedDate ? extractBaseBlockId(saved.id, savedDate) : null;
+      const filtered = prev.filter((b) => {
+        if (b.id === saved.id) return false;
+        if (savedDate && savedBaseId && b.override_date) {
+          const bDate = formatDateKey(b.override_date);
+          const bBaseId = extractBaseBlockId(b.id, bDate);
+          if (bDate === savedDate && bBaseId === savedBaseId) return false;
+        }
+        return true;
+      });
+      return [...filtered, saved];
     });
     return res.data;
   };
@@ -744,7 +754,22 @@ export function useAgencyState() {
       showErrorToast("Time Block Delete Failed", res.error);
       throw new Error(res.error);
     }
-    setTimeBlocks((prev) => prev.filter((b) => b.id !== id));
+    setTimeBlocks((prev) => {
+      if (id.includes("__") || id.startsWith("tb-ov-")) {
+        const parts = id.split("__");
+        const overrideDate = parts.length > 1 ? parts[1] : null;
+        const baseId = extractBaseBlockId(id, overrideDate || undefined);
+        return prev.filter((b) => {
+          if (b.id === id) return false;
+          if (overrideDate && b.override_date && formatDateKey(b.override_date) === overrideDate) {
+            const bBase = extractBaseBlockId(b.id, overrideDate);
+            if (bBase === baseId) return false;
+          }
+          return true;
+        });
+      }
+      return prev.filter((b) => b.id !== id);
+    });
   };
 
   // Academic Events
@@ -1193,16 +1218,19 @@ export function useAgencyState() {
     if (!currentUser?.id) return;
 
     // Check if an exception already exists for this date/slot and delete it first
+    const cleanDate = formatDateKey(date);
     const existing = tuitionExceptions.find(
-      (ex) => ex.date === date && (!slotId || ex.slot_id === slotId)
+      (ex) => ex.date === cleanDate && (!slotId || ex.slot_id === slotId)
     );
     if (existing) {
       await deleteTuitionExceptionData(existing.id, currentUser.id);
     }
 
+    const exceptionId = `tex_${cleanDate}_${slotId || "default"}`;
     const newEx: Omit<TuitionException, "id"> & { id?: string } = {
+      id: exceptionId,
       user_id: currentUser.id,
-      date,
+      date: cleanDate,
       slot_id: slotId || null,
       action: "moved",
       new_start: newStart,
@@ -1216,9 +1244,9 @@ export function useAgencyState() {
       throw new Error(res.error);
     }
 
-    const created = res.data || { ...newEx, id: crypto.randomUUID() };
+    const created = res.data || { ...newEx, id: exceptionId };
     setTuitionExceptions((prev) => [
-      ...prev.filter((ex) => !(ex.date === date && (!slotId || ex.slot_id === slotId))),
+      ...prev.filter((ex) => !(ex.date === cleanDate && (!slotId || ex.slot_id === slotId))),
       created,
     ]);
 
@@ -1291,6 +1319,7 @@ export function useAgencyState() {
     }
 
     const exceptionsToInsert: (Omit<TuitionException, "id"> & { id?: string })[] = datesToCancel.map((dStr) => ({
+      id: `tex_${dStr}_${slotId || "default"}`,
       user_id: currentUser.id,
       date: dStr,
       slot_id: slotId || null,

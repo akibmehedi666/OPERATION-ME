@@ -14,7 +14,8 @@ import {
   formatDateKey, 
   isExamModeActive,
   extractBaseBlockId,
-  getOverrideBlockId
+  getOverrideBlockId,
+  getWeekdayFromDate
 } from "@/lib/scheduleResolver";
 import { formatDate } from "@/lib/formatters";
 import { soundFX } from "@/lib/sound";
@@ -188,18 +189,19 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     scope: "today" | "every_week",
     dateStr: string
   ) => {
-    const baseId = extractBaseBlockId(blockId, dateStr);
+    const cleanDate = formatDateKey(dateStr);
+    const baseId = extractBaseBlockId(blockId, cleanDate);
     if (scope === "every_week") {
       await onUpdateTimeBlock(baseId, {
         ...updates,
         override_date: null,
       });
     } else {
-      const overrideId = getOverrideBlockId(baseId, dateStr);
+      const overrideId = getOverrideBlockId(baseId, cleanDate);
       const baseBlock = timeBlocks.find((b) => b.id === baseId || b.id === blockId);
       await onAddTimeBlock({
         id: overrideId,
-        weekday: updates.weekday || baseBlock?.weekday || "SUN",
+        weekday: updates.weekday || baseBlock?.weekday || getWeekdayFromDate(cleanDate),
         start_time: updates.start_time || baseBlock?.start_time || "10:00",
         end_time: updates.end_time || baseBlock?.end_time || "11:30",
         type: updates.type || baseBlock?.type || "study",
@@ -210,7 +212,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
             : (baseBlock?.default_category || null),
         is_fixed: false,
         is_active: true,
-        override_date: dateStr,
+        override_date: cleanDate,
       });
     }
   };
@@ -221,7 +223,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     scope: "today" | "every_week",
     dateStr: string
   ) => {
-    const baseId = extractBaseBlockId(blockId, dateStr);
+    const cleanDate = formatDateKey(dateStr);
+    const baseId = extractBaseBlockId(blockId, cleanDate);
     if (scope === "every_week") {
       await onDeleteTimeBlock(baseId);
       // Clean up any single-day overrides associated with this base recurring block
@@ -236,12 +239,12 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         }
       }
     } else {
-      const overrideId = getOverrideBlockId(baseId, dateStr);
+      const overrideId = getOverrideBlockId(baseId, cleanDate);
       const baseBlock = timeBlocks.find((b) => b.id === baseId || b.id === blockId);
       const blockLabel = baseBlock?.label || "Routine block";
       await onAddTimeBlock({
         id: overrideId,
-        weekday: baseBlock?.weekday || "SUN",
+        weekday: baseBlock?.weekday || getWeekdayFromDate(cleanDate),
         start_time: baseBlock?.start_time || "00:00",
         end_time: baseBlock?.end_time || "00:00",
         type: baseBlock?.type || "break",
@@ -249,12 +252,12 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         default_category: baseBlock?.default_category || null,
         is_fixed: false,
         is_active: false,
-        override_date: dateStr,
+        override_date: cleanDate,
       });
 
       setUndoToast({
         overrideId,
-        message: `Deleted "${blockLabel}" for ${dateStr}`,
+        message: `Deleted "${blockLabel}" for ${cleanDate}`,
       });
     }
   };
@@ -593,11 +596,25 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         defaultWeekday={blockModal.defaultWeekday}
         defaultDate={blockModal.defaultDate}
         categories={categories}
-        onSave={(data) => {
-          if (blockModal.block) {
-            onUpdateTimeBlock(blockModal.block.id, data);
+        onSave={async (data, isOnlyThisWeek) => {
+          if (isOnlyThisWeek && blockModal.defaultDate) {
+            const cleanDate = formatDateKey(blockModal.defaultDate);
+            const baseId = extractBaseBlockId(blockModal.block?.id || "", cleanDate);
+            const overrideId = getOverrideBlockId(baseId || crypto.randomUUID(), cleanDate);
+            await onAddTimeBlock({
+              ...data,
+              id: overrideId,
+              override_date: cleanDate,
+            });
+          } else if (blockModal.block) {
+            const cleanDate = blockModal.defaultDate ? formatDateKey(blockModal.defaultDate) : undefined;
+            const baseId = extractBaseBlockId(blockModal.block.id, cleanDate);
+            await onUpdateTimeBlock(baseId, {
+              ...data,
+              override_date: null,
+            });
           } else {
-            onAddTimeBlock(data);
+            await onAddTimeBlock(data);
           }
         }}
         onDelete={onDeleteTimeBlock}
