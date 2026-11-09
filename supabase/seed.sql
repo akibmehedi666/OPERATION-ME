@@ -121,6 +121,8 @@ INSERT INTO public.academic_events (id, date, end_date, title, type, details) VA
 ('ae-14', '2027-01-13', NULL, '3rd installment due', 'payment', 'Tuition installment 3 due'),
 ('ae-15', '2027-01-21', '2027-01-24', 'Classes suspended', 'holiday', 'Pre-finals study recess'),
 ('ae-16', '2027-01-25', '2027-02-01', 'FINAL EXAM', 'exam', 'Final examinations period'),
-('ae-17', '2027-02-04', NULL, 'Last day of grade submission', 'deadline', 'Grade submission deadline')
+('ae-17', '2027-02-04', NULL, 'Last day of grade submission', 'deadline', 'Grade submission deadline'),
+('ae-quiz-os-20261111', '2026-11-11', NULL, 'OS CT', 'quiz', '{"course_id":"course-os","course_name":"Operating Systems","course_code":"CSE 4509","start_time":"11:10","end_time":"12:30","syllabus":"Process Synchronization & CPU Scheduling","marks":"20"}'),
+('ae-quiz-stat-20261115', '2026-11-15', NULL, 'Stats CT', 'quiz', '{"course_id":"course-stat","course_name":"Probability & Statistics","course_code":"MATH 2205","start_time":"12:30","end_time":"13:50","syllabus":"Discrete Probability Distributions","marks":"20"}')
 ON CONFLICT (id) DO NOTHING;
 

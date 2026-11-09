@@ -7,7 +7,8 @@ import {
   Mission, 
   Category, 
   DayOfWeek,
-  TuitionException 
+  TuitionException,
+  Course
 } from "@/types/database";
 import { 
   getWeekStartDate, 
@@ -46,6 +47,7 @@ interface PlannerViewProps {
   academicEvents: AcademicEvent[];
   missions: Mission[];
   categories: Category[];
+  courses?: Course[];
   structureLoadingError?: string | null;
   onRetryLoad?: () => void;
   onAddTimeBlock: (block: Omit<TimeBlock, "id" | "created_at"> & { id?: string }) => void;
@@ -85,6 +87,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   academicEvents,
   missions,
   categories,
+  courses = [],
   structureLoadingError,
   onRetryLoad,
   onAddTimeBlock,
@@ -571,6 +574,14 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           onDeleteRoutine={handleDeleteRoutine}
           onQuickMoveMission={handleQuickMoveMission}
           onOpenAcademicCalendar={() => setViewMode("calendar")}
+          onEditAcademicEvent={(ev) =>
+            setEventModal({
+              isOpen: true,
+              event: ev,
+              defaultDate: ev.date,
+            })
+          }
+          onDeleteAcademicEvent={onDeleteAcademicEvent}
         />
       ) : (
         <AcademicCalendarView
@@ -582,6 +593,13 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               isOpen: true,
               event: null,
               defaultDate: dateStr,
+            })
+          }
+          onEditEvent={(ev) =>
+            setEventModal({
+              isOpen: true,
+              event: ev,
+              defaultDate: ev.date,
             })
           }
           onDeleteEvent={onDeleteAcademicEvent}
@@ -625,6 +643,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         isOpen={eventModal.isOpen}
         event={eventModal.event}
         defaultDate={eventModal.defaultDate}
+        courses={courses}
+        timeBlocks={timeBlocks}
         onSave={(data) => {
           if (eventModal.event) {
             onUpdateAcademicEvent(eventModal.event.id, data);

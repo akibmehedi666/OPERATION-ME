@@ -65,6 +65,8 @@ interface WeeklyGridViewProps {
   onQuickMoveMission?: (mission: Mission, deltaMinutes: number) => void;
   tuitionExceptions?: TuitionException[];
   onUndoTuitionException?: (exceptionId: string) => Promise<void> | void;
+  onEditAcademicEvent?: (event: AcademicEvent) => void;
+  onDeleteAcademicEvent?: (eventId: string) => void;
 }
 
 function addMinutes(timeStr: string, minutes: number): string {
@@ -161,6 +163,8 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
   onQuickMoveMission,
   tuitionExceptions = [],
   onUndoTuitionException,
+  onEditAcademicEvent,
+  onDeleteAcademicEvent,
 }) => {
   // View mode: 'week' or 'day' (default 'day' on mobile < 768px)
   const [viewMode, setViewMode] = useState<"week" | "day">("week");
@@ -458,9 +462,13 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
             >
               <span>{dayDate.toLocaleDateString("en-US", { weekday: "short" })}</span>
               <span className="text-[10px] opacity-80">{dayDate.getDate()}</span>
-              {dayRes.badge && (
+              {dayRes.quizEvents && dayRes.quizEvents.length > 0 ? (
+                <span className="px-1 py-0.2 rounded-[2px] bg-purple-600 text-white dark:bg-purple-500 dark:text-black text-[8px] font-bold">
+                  CT
+                </span>
+              ) : dayRes.badge ? (
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-              )}
+              ) : null}
             </button>
           );
         })}
@@ -607,11 +615,22 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                 <h3 className="text-base font-bold text-spy-text font-sans">
                   {dayDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
                 </h3>
-                {curDay.badge && (
-                  <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-[3px] bg-blue-500/15 text-blue-500 border border-blue-500/30">
-                    {curDay.badge}
-                  </span>
-                )}
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {curDay.quizEvents && curDay.quizEvents.length > 0 && curDay.quizEvents.map((q) => (
+                    <span
+                      key={q.id}
+                      className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-[3px] bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40"
+                    >
+                      <span className="font-black">CT</span>
+                      <span className="font-normal opacity-85">({q.title})</span>
+                    </span>
+                  ))}
+                  {curDay.badge && (!curDay.quizEvents || !curDay.quizEvents.some((q) => q.title === curDay.badge)) && (
+                    <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-[3px] bg-blue-500/15 text-blue-500 border border-blue-500/30">
+                      {curDay.badge}
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 type="button"
@@ -770,10 +789,17 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
                             {it.kind === "fixed" && (
-                              <span className="flex items-center gap-1 text-[9px] uppercase font-bold text-blue-600 dark:text-blue-400">
-                                <Lock className="w-2.5 h-2.5" />
-                                <span>Fixed</span>
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="flex items-center gap-1 text-[9px] uppercase font-bold text-blue-600 dark:text-blue-400">
+                                  <Lock className="w-2.5 h-2.5" />
+                                  <span>Fixed</span>
+                                </span>
+                                {(it.block as ResolvedTimeBlock)?.matchingQuiz && (
+                                  <span className="text-[8px] font-mono font-bold px-1.5 py-0.2 rounded-[2px] bg-purple-600 text-white dark:bg-purple-500 dark:text-black shadow-xs">
+                                    CT
+                                  </span>
+                                )}
+                              </div>
                             )}
                             {it.kind === "routine" && (
                               <span className="text-[9px] uppercase text-purple-600 dark:text-purple-300 font-semibold">
@@ -911,14 +937,24 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                         </span>
                       </div>
 
-                      {badge && (
+                      {resolvedDays[idx].quizEvents && resolvedDays[idx].quizEvents!.length > 0 ? (
+                        <div
+                          className="text-[9px] font-mono px-2 py-0.5 rounded-[3px] border font-bold leading-tight max-w-full text-center bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40 truncate flex items-center justify-center gap-1 shadow-xs"
+                          title={`Class Test: ${resolvedDays[idx].quizEvents!.map((q) => q.title).join(", ")}`}
+                        >
+                          <span className="font-black">CT</span>
+                          <span className="truncate opacity-90">
+                            {resolvedDays[idx].quizEvents![0].title.replace(/\s*CT.*$/i, "").trim() || "Quiz"}
+                          </span>
+                        </div>
+                      ) : badge ? (
                         <div
                           className="text-[9px] font-mono px-2 py-0.5 rounded-[3px] border font-bold leading-tight max-w-full text-center bg-blue-500/15 text-blue-600 dark:text-blue-300 border-blue-500/30 truncate"
                           title={badge}
                         >
                           {badge.length > 18 ? `${badge.slice(0, 16)}…` : badge}
                         </div>
-                      )}
+                      ) : null}
 
                       {conflictCount > 0 && (
                         <div className="flex items-center gap-1 text-[8.5px] font-mono font-bold text-red-500 bg-red-500/20 border border-red-500/40 px-1.5 py-0.2 rounded-[2px]">
@@ -1224,17 +1260,27 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
                           title={`${block.label} (${formatShortTimeRange(block.start_time, block.end_time)}) - Protected Fixed Schedule`}
                         >
                           <div className="min-w-0 flex-1 overflow-hidden">
-                            <div className="flex items-center justify-between text-[9px] font-mono font-bold leading-tight truncate">
-                              <span className="flex items-center gap-1">
+                            <div className="flex items-center justify-between text-[9px] font-mono font-bold leading-tight">
+                              <span className="flex items-center gap-1 min-w-0 truncate">
                                 <Lock className="w-2.5 h-2.5 shrink-0" />
-                                <span>{formatShortTimeRange(block.start_time, block.end_time)}</span>
+                                <span className="truncate">{formatShortTimeRange(block.start_time, block.end_time)}</span>
                               </span>
                               {conflictMission && (
-                                <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
+                                <AlertTriangle className="w-3 h-3 text-red-500 shrink-0 ml-1" />
                               )}
                             </div>
-                            <div className="font-sans font-bold text-[11px] leading-tight truncate text-spy-text mt-0.5">
-                              {block.label}
+                            <div className="flex items-center justify-between gap-1 mt-0.5">
+                              <span className="font-sans font-bold text-[11px] leading-tight truncate text-spy-text flex-1 min-w-0">
+                                {block.label}
+                              </span>
+                              {block.matchingQuiz && (
+                                <span
+                                  className="text-[8px] font-mono font-bold px-1.5 py-0.2 rounded-[2px] bg-purple-600 text-white dark:bg-purple-500 dark:text-black shadow-xs shrink-0"
+                                  title={`Class Test: ${block.matchingQuiz.title}`}
+                                >
+                                  CT
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1464,6 +1510,8 @@ export const WeeklyGridView: React.FC<WeeklyGridViewProps> = ({
           onOpenTuitionModal={onEditTuition}
           onOpenCourseHQ={onOpenCourseHQ}
           onOpenAcademicCalendar={onOpenAcademicCalendar}
+          onEditAcademicEvent={onEditAcademicEvent}
+          onDeleteAcademicEvent={onDeleteAcademicEvent}
           onAddMissionInBlock={(block, dateStr) => {
             setSelectedItem(null);
             if (onAssignMissionToBlock) onAssignMissionToBlock(block, dateStr);

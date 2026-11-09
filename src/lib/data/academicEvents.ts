@@ -32,11 +32,19 @@ export async function createAcademicEvent(
 
     const { data, error } = await supabase
       .from("academic_events")
-      .insert(record)
+      .upsert(record, { onConflict: "id" })
       .select()
       .single();
 
-    if (error) return { data: null, error: error.message };
+    if (error) {
+      if (error.message.includes("academic_events_type_check") || error.message.includes("check constraint")) {
+        return {
+          data: null,
+          error: "Database constraint: Please update the 'academic_events_type_check' constraint in Supabase SQL editor to allow 'quiz'.",
+        };
+      }
+      return { data: null, error: error.message };
+    }
     return { data: (data as AcademicEvent) || (record as unknown as AcademicEvent), error: null };
   } catch (err: unknown) {
     return { data: null, error: err instanceof Error ? err.message : "Failed to create academic event" };

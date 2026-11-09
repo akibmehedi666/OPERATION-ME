@@ -16,6 +16,13 @@ export const UpcomingDatesCard: React.FC<UpcomingDatesCardProps> = ({ events, on
 
   const getEventBadge = (type: string) => {
     switch (type) {
+      case "quiz":
+      case "ct":
+        return {
+          icon: <BookOpen className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />,
+          pill: "bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40",
+          name: "CT / QUIZ",
+        };
       case "exam":
         return {
           icon: <AlertCircle className="w-3.5 h-3.5 text-spy-red" />,

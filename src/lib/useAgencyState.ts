@@ -35,7 +35,7 @@ import {
   extractBaseBlockId
 } from "@/lib/scheduleResolver";
 import { autoScheduleMissions } from "@/lib/plannerScheduler";
-import { generateDailyAutoMissions, calculateTuitionDeadline } from "@/lib/recurringGenerator";
+import { generateDailyAutoMissions, generateQuizPrepMissions, calculateTuitionDeadline } from "@/lib/recurringGenerator";
 import { createClient } from "@/lib/supabase/client";
 import { validateSupabaseConfig, isSupabaseConfigured } from "@/lib/supabase/config";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
@@ -264,10 +264,88 @@ export function useAgencyState() {
       setCategories(catsRes.data || []);
       setSchedule(schedRes.data || []);
       setTimeBlocks(tbRes.data || []);
-      setAcademicEvents(aeRes.data || []);
+
+      let currentAe = aeRes.data || [];
+      // Ensure the two required CT events are seeded if missing
+      const hasOsCt = currentAe.some(
+        (e) =>
+          e.date === "2026-11-11" &&
+          (e.title.toLowerCase().includes("os") || e.title.toLowerCase().includes("operating"))
+      );
+      const hasStatCt = currentAe.some(
+        (e) =>
+          e.date === "2026-11-15" &&
+          (e.title.toLowerCase().includes("stat") || e.title.toLowerCase().includes("prob"))
+      );
+
+      const newCtSeeds: AcademicEvent[] = [];
+      if (!hasOsCt) {
+        newCtSeeds.push({
+          id: "ae-quiz-os-20261111",
+          user_id: userId,
+          date: "2026-11-11",
+          title: "OS CT",
+          type: "quiz",
+          details: JSON.stringify({
+            course_id: "course-os",
+            course_name: "Operating Systems",
+            course_code: "CSE 4509",
+            start_time: "11:10",
+            end_time: "12:30",
+            syllabus: "Process Synchronization & CPU Scheduling",
+            marks: "20",
+          }),
+        });
+      }
+      if (!hasStatCt) {
+        newCtSeeds.push({
+          id: "ae-quiz-stat-20261115",
+          user_id: userId,
+          date: "2026-11-15",
+          title: "Stats CT",
+          type: "quiz",
+          details: JSON.stringify({
+            course_id: "course-stat",
+            course_name: "Probability & Statistics",
+            course_code: "MATH 2205",
+            start_time: "12:30",
+            end_time: "13:50",
+            syllabus: "Discrete Probability Distributions",
+            marks: "20",
+          }),
+        });
+      }
+
+      if (newCtSeeds.length > 0) {
+        currentAe = [...currentAe, ...newCtSeeds];
+        newCtSeeds.forEach((seed) => {
+          createAcademicEventData(seed, userId).catch(console.error);
+        });
+      }
+
+      setAcademicEvents(currentAe);
       setRecurringRules(rrRes.data || []);
       setCourses(coursesRes.data || []);
       let initialMissions = missionsRes.data || [];
+
+      // If auto-missions is enabled, ensure CT prep missions are generated
+      const isAutoMissionsEnabled = settingsRes.data?.features?.auto_missions ?? true;
+      if (isAutoMissionsEnabled) {
+        const prepMissions = generateQuizPrepMissions({
+          academicEvents: currentAe,
+          courses: coursesRes.data || [],
+          timeBlocks: tbRes.data || [],
+          existingMissions: initialMissions,
+          todayDate: new Date(),
+          tuitionExceptions: tuitionExRes.data || [],
+        });
+        if (prepMissions.length > 0) {
+          initialMissions = [...prepMissions, ...initialMissions];
+          prepMissions.forEach((pm) => {
+            createMissionData(pm, userId).catch(console.error);
+          });
+        }
+      }
       // Fix Sun Nov 8 overlap if Prepare tuition lesson sits at 4:30 PM beside tuition
       const prepSunMission = initialMissions.find(
         (m) =>
@@ -781,7 +859,27 @@ export function useAgencyState() {
       showErrorToast("Key Date Sync Failed", err);
       throw new Error(err);
     }
-    setAcademicEvents((prev) => [...prev, res.data!]);
+    const createdEvent = res.data!;
+    setAcademicEvents((prev) => [...prev, createdEvent]);
+
+    // If auto-missions is enabled and event is a CT/Quiz, generate prep missions
+    if (features.auto_missions && (createdEvent.type === "quiz" || createdEvent.type === "ct")) {
+      const prepMissions = generateQuizPrepMissions({
+        academicEvents: [createdEvent],
+        courses,
+        timeBlocks,
+        existingMissions: missions,
+        todayDate: new Date(),
+        tuitionExceptions,
+      });
+      if (prepMissions.length > 0) {
+        setMissions((prev) => [...prepMissions, ...prev]);
+        prepMissions.forEach((pm) => {
+          createMissionData(pm, currentUser.id).catch(console.error);
+        });
+      }
+    }
+
     return res.data;
   };
 
@@ -802,6 +900,31 @@ export function useAgencyState() {
       throw new Error(res.error);
     }
     setAcademicEvents((prev) => prev.filter((e) => e.id !== id));
+
+    // Deleting the CT removes its pending prep missions
+    const prepPrefix = `auto-ct-prep-${id}-`;
+    const pendingMissionsToDelete = missions.filter(
+      (m) =>
+        (m.id.startsWith(prepPrefix) || m.recurring_rule_id === id) &&
+        m.status !== "completed"
+    );
+
+    if (pendingMissionsToDelete.length > 0) {
+      setMissions((prev) =>
+        prev.filter(
+          (m) =>
+            !(
+              (m.id.startsWith(prepPrefix) || m.recurring_rule_id === id) &&
+              m.status !== "completed"
+            )
+        )
+      );
+      if (currentUser?.id) {
+        pendingMissionsToDelete.forEach((m) => {
+          deleteMissionData(m.id).catch(console.error);
+        });
+      }
+    }
   };
 
   // Planner Mission Scheduling
@@ -969,9 +1092,21 @@ export function useAgencyState() {
       activeMissionCap: 5,
     });
 
-    if (result.newMissions.length > 0 && currentUser?.id) {
-      setMissions((prev) => [...result.newMissions, ...prev]);
-      result.newMissions.forEach((nm) => {
+    // Also generate any missing CT / Quiz prep missions
+    const prepMissions = generateQuizPrepMissions({
+      academicEvents: targetEvents,
+      courses,
+      timeBlocks: targetBlocks,
+      existingMissions: [...targetMissions, ...result.newMissions],
+      todayDate: new Date(),
+      tuitionExceptions,
+    });
+
+    const allNewMissions = [...result.newMissions, ...prepMissions];
+
+    if (allNewMissions.length > 0 && currentUser?.id) {
+      setMissions((prev) => [...allNewMissions, ...prev]);
+      allNewMissions.forEach((nm) => {
         createMissionData(nm, currentUser.id).catch(console.error);
       });
     }
@@ -982,10 +1117,10 @@ export function useAgencyState() {
     });
 
     return {
-      createdCount: result.newMissions.length,
+      createdCount: allNewMissions.length,
       message:
-        result.newMissions.length > 0
-          ? `Generated ${result.newMissions.length} auto-mission${result.newMissions.length > 1 ? "s" : ""} for today.`
+        allNewMissions.length > 0
+          ? `Generated ${allNewMissions.length} auto-mission${allNewMissions.length > 1 ? "s" : ""} for today.`
           : "All auto-missions for today are up-to-date (0 duplicates created).",
     };
   };

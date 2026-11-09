@@ -5,7 +5,8 @@ import {
   ResolvedTimeBlock, 
   Mission,
   Category,
-  TuitionException
+  TuitionException,
+  Course
 } from "@/types/database";
 import { formatTime12, formatCountdown } from "@/lib/formatters";
 
@@ -134,6 +135,64 @@ export interface DayScheduleResolution {
   isHoliday: boolean;
   isExam: boolean;
   isOverridden: boolean;
+  quizEvents?: AcademicEvent[];
+}
+
+/**
+ * Checks if a CT / Quiz academic event matches a given class block
+ */
+export function isQuizMatchingClassBlock(
+  quiz: AcademicEvent,
+  block: TimeBlock | ResolvedTimeBlock,
+  courses?: Course[]
+): boolean {
+  if (block.type !== "class") return false;
+
+  let courseId: string | null = null;
+  let courseCode: string | null = null;
+  let courseName: string | null = null;
+
+  if (quiz.details) {
+    try {
+      const p = JSON.parse(quiz.details);
+      courseId = p.course_id || null;
+      courseCode = p.course_code || null;
+      courseName = p.course_name || null;
+    } catch {}
+  }
+
+  const blockLabelLower = block.label.toLowerCase();
+
+  if (courseId && courses) {
+    const matchedCourse = courses.find((c) => c.id === courseId);
+    if (matchedCourse) {
+      if (block.default_category === matchedCourse.category_id) return true;
+      if (blockLabelLower.includes(matchedCourse.name.toLowerCase())) return true;
+      if (blockLabelLower.includes(matchedCourse.code.toLowerCase())) return true;
+    }
+  }
+
+  if (courseName && blockLabelLower.includes(courseName.toLowerCase())) return true;
+  if (courseCode && blockLabelLower.includes(courseCode.toLowerCase())) return true;
+
+  const quizTitleLower = quiz.title.toLowerCase();
+  if (
+    (quizTitleLower.includes("os") || quizTitleLower.includes("operating")) &&
+    (blockLabelLower.includes("os") || blockLabelLower.includes("op. systems") || blockLabelLower.includes("operating"))
+  ) {
+    return true;
+  }
+  if (
+    (quizTitleLower.includes("stat") || quizTitleLower.includes("prob")) &&
+    (blockLabelLower.includes("stat") || blockLabelLower.includes("prob"))
+  ) {
+    return true;
+  }
+  if (quizTitleLower.includes("dip") && blockLabelLower.includes("dip")) return true;
+  if (quizTitleLower.includes("econ") && blockLabelLower.includes("econ")) return true;
+  if (quizTitleLower.includes("fydp") && blockLabelLower.includes("fydp")) return true;
+
+  return false;
 }
 
 /**
@@ -390,6 +449,8 @@ export function resolveDaySchedule(
   // Sort chronologically by start_time
   dayBlocks.sort((a, b) => a.start_time.localeCompare(b.start_time));
 
+  const quizEvents = events.filter((e) => e.type === "quiz" || e.type === "ct");
+
   // Attach scheduled missions to their respective blocks
   dayBlocks = dayBlocks.map((block) => {
     const scheduledMissions = missions.filter((m) => {
@@ -407,11 +468,20 @@ export function resolveDaySchedule(
       return false;
     });
 
+    const matchingQuiz = block.type === "class"
+      ? quizEvents.find((q) => isQuizMatchingClassBlock(q, block))
+      : undefined;
+
     return {
       ...block,
+      matchingQuiz,
       scheduledMissions,
     };
   });
+
+  if (!badge && quizEvents.length > 0) {
+    badge = quizEvents[0].title;
+  }
 
   return {
     dateStr,
@@ -422,6 +492,7 @@ export function resolveDaySchedule(
     isHoliday,
     isExam,
     isOverridden,
+    quizEvents,
   };
 }
 
@@ -515,7 +586,7 @@ export function getUpcomingAcademicEvents(
 }
 
 /**
- * Returns an urgent banner alert if an exam or payment deadline is within the next 7 days
+ * Returns an urgent banner alert if an exam, payment, deadline (within 7 days) or CT/quiz (within 3 days) is upcoming
  */
 export function getUrgentAcademicNotice(
   events: AcademicEvent[],
@@ -525,9 +596,13 @@ export function getUrgentAcademicNotice(
   const today = new Date(`${currentKey}T00:00:00`);
 
   const urgentEvent = events.find((e) => {
-    if (e.type !== "exam" && e.type !== "payment" && e.type !== "deadline") return false;
+    const isTargetType = e.type === "exam" || e.type === "payment" || e.type === "deadline" || e.type === "quiz" || e.type === "ct";
+    if (!isTargetType) return false;
     const evDate = new Date(`${e.date}T00:00:00`);
     const diffDays = Math.round((evDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (e.type === "quiz" || e.type === "ct") {
+      return diffDays >= 0 && diffDays <= 3;
+    }
     return diffDays >= 0 && diffDays <= 7;
   });
 
@@ -541,12 +616,21 @@ export function getUrgentAcademicNotice(
   else if (diffDays === 1) timePhrase = "TOMORROW";
   else timePhrase = `in ${diffDays} days`;
 
-  const urgency = diffDays <= 3 ? "critical" : "warning";
-  const label = urgentEvent.type === "payment" ? "Tuition Payment" : urgentEvent.type === "exam" ? "Examination" : "Critical Deadline";
+  const isQuiz = urgentEvent.type === "quiz" || urgentEvent.type === "ct";
+  const urgency = diffDays <= 3 || isQuiz ? "critical" : "warning";
+  const label = isQuiz
+    ? "Class Test / Quiz"
+    : urgentEvent.type === "payment"
+    ? "Tuition Payment"
+    : urgentEvent.type === "exam"
+    ? "Examination"
+    : "Critical Deadline";
+
+  const actionVerb = isQuiz ? "scheduled" : "due";
 
   return {
     event: urgentEvent,
-    message: `${label}: ${urgentEvent.title} is due ${timePhrase}.`,
+    message: `${label}: ${urgentEvent.title} is ${actionVerb} ${timePhrase}.`,
     urgency,
   };
 }

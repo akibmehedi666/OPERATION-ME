@@ -60,6 +60,8 @@ interface PlannerItemPanelProps {
   onOpenCourseHQ?: (courseId: string) => void;
   onOpenAcademicCalendar?: () => void;
   onAddMissionInBlock?: (block: TimeBlock, dateStr: string) => void;
+  onEditAcademicEvent?: (event: AcademicEvent) => void;
+  onDeleteAcademicEvent?: (eventId: string) => void;
 }
 
 const ROUTINE_BLOCK_TYPES: { type: TimeBlockType; label: string; color: string }[] = [
@@ -82,6 +84,8 @@ export const PlannerItemPanel: React.FC<PlannerItemPanelProps> = ({
   onOpenCourseHQ,
   onOpenAcademicCalendar,
   onAddMissionInBlock,
+  onEditAcademicEvent,
+  onDeleteAcademicEvent,
 }) => {
   const [mounted, setMounted] = useState(false);
 
@@ -257,6 +261,48 @@ export const PlannerItemPanel: React.FC<PlannerItemPanelProps> = ({
                     <span className="text-spy-dim">({item.block.weekday})</span>
                   </div>
                 )}
+                {(item.block as ResolvedTimeBlock)?.matchingQuiz && (
+                  <div className="p-3 rounded-[4px] bg-purple-500/10 border border-purple-400/30 text-purple-700 dark:text-purple-300 text-xs space-y-2">
+                    <div>
+                      <div className="font-bold font-mono text-[10px] uppercase">
+                        CT Scheduled on this slot
+                      </div>
+                      <div className="text-xs font-semibold mt-0.5">
+                        {(item.block as ResolvedTimeBlock).matchingQuiz!.title}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-2 border-t border-purple-400/20">
+                      {onEditAcademicEvent && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const quiz = (item.block as ResolvedTimeBlock).matchingQuiz!;
+                            onClose();
+                            onEditAcademicEvent(quiz);
+                          }}
+                          className="flex-1 py-1.5 px-2 text-[11px] font-mono font-bold rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-800 dark:text-purple-200 border border-purple-400/30 transition-colors text-center"
+                        >
+                          Edit / Change Time
+                        </button>
+                      )}
+                      {onDeleteAcademicEvent && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const quiz = (item.block as ResolvedTimeBlock).matchingQuiz!;
+                            if (window.confirm(`Cancel and delete CT "${quiz.title}"?`)) {
+                              onDeleteAcademicEvent(quiz.id);
+                              onClose();
+                            }
+                          }}
+                          className="py-1.5 px-2.5 text-[11px] font-mono font-bold rounded bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400 border border-red-500/30 transition-colors"
+                        >
+                          Cancel CT
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {item.academicEvent && (
                   <div className="flex items-center gap-2 text-xs font-mono text-spy-muted">
                     <Calendar className="w-3.5 h-3.5" />
@@ -303,6 +349,32 @@ export const PlannerItemPanel: React.FC<PlannerItemPanelProps> = ({
                     >
                       <span>View Course in Course HQ</span>
                       <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {item.academicEvent && onEditAcademicEvent && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onEditAcademicEvent(item.academicEvent!);
+                      }}
+                      className="w-full py-2 px-3 rounded-[3px] bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 hover:bg-purple-500/25 flex items-center justify-center gap-1.5 font-bold transition-colors"
+                    >
+                      <span>Edit Event Details</span>
+                    </button>
+                  )}
+                  {item.academicEvent && onDeleteAcademicEvent && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Delete academic event "${item.academicEvent!.title}"?`)) {
+                          onDeleteAcademicEvent(item.academicEvent!.id);
+                          onClose();
+                        }
+                      }}
+                      className="w-full py-2 px-3 rounded-[3px] bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 hover:bg-red-500/25 flex items-center justify-center gap-1.5 font-bold transition-colors"
+                    >
+                      <span>Delete Event</span>
                     </button>
                   )}
                   {item.academicEvent && onOpenAcademicCalendar && (

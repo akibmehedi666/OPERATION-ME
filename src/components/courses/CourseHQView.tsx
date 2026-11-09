@@ -143,12 +143,27 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
   const courseDeadlines = useMemo(() => {
     if (!activeCourse) return [];
 
-    // Filter relevant academic events (exams, project cutoffs, overrides)
+    // Filter relevant academic events (exams, project cutoffs, overrides, quizzes)
     const matchedEvents = academicEvents.filter((e) => {
       const titleLower = e.title.toLowerCase();
       const courseCodeLower = activeCourse.code.toLowerCase();
       const courseNameLower = activeCourse.name.toLowerCase();
       if (titleLower.includes(courseCodeLower) || titleLower.includes(courseNameLower)) return true;
+      if (e.type === "quiz" || e.type === "ct") {
+        if (e.details) {
+          try {
+            const p = JSON.parse(e.details);
+            if (p.course_id === activeCourse.id || p.course_code === activeCourse.code) return true;
+          } catch {}
+        }
+        // Common abbreviation matching
+        if (
+          (activeCourse.name.toLowerCase().includes("operating") && titleLower.includes("os")) ||
+          (activeCourse.name.toLowerCase().includes("probability") && (titleLower.includes("stat") || titleLower.includes("prob")))
+        ) {
+          return true;
+        }
+      }
       if (e.type === "exam") return true; // mid-term and final apply to all courses
       return false;
     });
@@ -656,6 +671,8 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
                     className={`clean-card p-4 flex items-center justify-between gap-3 border-l-[3px] ${
                       event.type === "exam"
                         ? "border-l-spy-red bg-[#fbeae8] dark:bg-spy-danger-surface"
+                        : event.type === "quiz" || event.type === "ct"
+                        ? "border-l-purple-500 bg-purple-500/5 dark:bg-purple-950/20"
                         : "border-l-spy-amber bg-[#fdf6ea] dark:bg-spy-surface"
                     }`}
                   >
@@ -665,10 +682,12 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
                           className={`text-[10px] font-mono font-bold uppercase px-2 py-0.2 rounded-[2px] border ${
                             event.type === "exam"
                               ? "bg-spy-red/20 text-spy-red border-spy-red/30"
+                              : event.type === "quiz" || event.type === "ct"
+                              ? "bg-purple-500/20 text-purple-600 dark:text-purple-300 border-purple-500/30"
                               : "bg-spy-amber/20 text-spy-amber border-spy-amber/30"
                           }`}
                         >
-                          {event.type.toUpperCase()}
+                          {event.type === "quiz" || event.type === "ct" ? "CT / QUIZ" : event.type.toUpperCase()}
                         </span>
                         <span className="text-xs font-mono text-spy-dim">
                           {event.date} {event.end_date ? `to ${event.end_date}` : ""}
@@ -688,6 +707,12 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
                               text = `Follows ${p.overrideWeekday} schedule${p.isOnline ? ", online" : ""}`;
                             } else if (p.isOnline !== undefined) {
                               text = p.isOnline ? "Online class session" : "In-person class session";
+                            } else if (p.start_time || p.syllabus || p.marks) {
+                              const parts: string[] = [];
+                              if (p.start_time && p.end_time) parts.push(`${p.start_time} – ${p.end_time}`);
+                              if (p.marks) parts.push(`Marks: ${p.marks}`);
+                              if (p.syllabus) parts.push(`Syllabus: ${p.syllabus}`);
+                              text = parts.join(" • ");
                             }
                           } catch {
                             text = d;

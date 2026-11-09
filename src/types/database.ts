@@ -86,7 +86,7 @@ export interface TimeBlock {
   created_at?: string;
 }
 
-export type AcademicEventType = 'class_override' | 'holiday' | 'exam' | 'deadline' | 'payment';
+export type AcademicEventType = 'class_override' | 'holiday' | 'exam' | 'deadline' | 'payment' | 'quiz' | 'ct';
 
 export interface AcademicEvent {
   id: string;
@@ -119,6 +119,7 @@ export interface ResolvedTimeBlock extends TimeBlock {
   skipReason?: string;
   isCancelled?: boolean;
   tuitionException?: TuitionException;
+  matchingQuiz?: AcademicEvent;
   date: string; // "YYYY-MM-DD"
   scheduledMissions?: Mission[];
 }

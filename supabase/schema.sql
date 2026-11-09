@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS public.academic_events (
     date DATE NOT NULL,
     end_date DATE,
     title TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('class_override', 'holiday', 'exam', 'deadline', 'payment')),
+    type TEXT NOT NULL CHECK (type IN ('class_override', 'holiday', 'exam', 'deadline', 'payment', 'quiz', 'ct')),
     details TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );

@@ -219,6 +219,27 @@ export async function ensureStructureData(
       }
     } else {
       details.push(`Academic events already present (${eventList.length} rows).`);
+      
+      // Ensure the two required CT events are present if missing
+      const hasOsCt = eventList.some((e) => e.date === "2026-11-11" && (e.title.toLowerCase().includes("os") || e.title.toLowerCase().includes("operating")));
+      const hasStatCt = eventList.some((e) => e.date === "2026-11-15" && (e.title.toLowerCase().includes("stat") || e.title.toLowerCase().includes("prob")));
+      const ctSeedsToInsert = [];
+      if (!hasOsCt) {
+        const osSeed = DEFAULT_ACADEMIC_EVENTS.find((e) => e.id === "ae-quiz-os-20261111");
+        if (osSeed) ctSeedsToInsert.push({ ...osSeed, user_id: userId, end_date: null, details: osSeed.details || null });
+      }
+      if (!hasStatCt) {
+        const statSeed = DEFAULT_ACADEMIC_EVENTS.find((e) => e.id === "ae-quiz-stat-20261115");
+        if (statSeed) ctSeedsToInsert.push({ ...statSeed, user_id: userId, end_date: null, details: statSeed.details || null });
+      }
+      if (ctSeedsToInsert.length > 0) {
+        const { error: seedErr } = await supabase
+          .from("academic_events")
+          .upsert(ctSeedsToInsert, { onConflict: "id", ignoreDuplicates: true });
+        if (!seedErr) {
+          details.push(`Seeded ${ctSeedsToInsert.length} CT events.`);
+        }
+      }
     }
 
     // -------------------------------------------------------------

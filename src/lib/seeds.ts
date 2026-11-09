@@ -240,6 +240,36 @@ export const DEFAULT_ACADEMIC_EVENTS: AcademicEvent[] = [
   { id: "ae-15", date: "2027-01-21", end_date: "2027-01-24", title: "Classes suspended", type: "holiday", details: "Pre-finals study recess" },
   { id: "ae-16", date: "2027-01-25", end_date: "2027-02-01", title: "FINAL EXAM", type: "exam", details: "Final examinations period" },
   { id: "ae-17", date: "2027-02-04", title: "Last day of grade submission", type: "deadline", details: "Grade submission deadline" },
+  {
+    id: "ae-quiz-os-20261111",
+    date: "2026-11-11",
+    title: "OS CT",
+    type: "quiz",
+    details: JSON.stringify({
+      course_id: "course-os",
+      course_name: "Operating Systems",
+      course_code: "CSE 4509",
+      start_time: "11:10",
+      end_time: "12:30",
+      syllabus: "Process Synchronization & CPU Scheduling",
+      marks: "20",
+    }),
+  },
+  {
+    id: "ae-quiz-stat-20261115",
+    date: "2026-11-15",
+    title: "Stats CT",
+    type: "quiz",
+    details: JSON.stringify({
+      course_id: "course-stat",
+      course_name: "Probability & Statistics",
+      course_code: "MATH 2205",
+      start_time: "12:30",
+      end_time: "13:50",
+      syllabus: "Discrete Probability Distributions",
+      marks: "20",
+    }),
+  },
 ];
 
 export const DEFAULT_RECURRING_RULES: RecurringRule[] = [

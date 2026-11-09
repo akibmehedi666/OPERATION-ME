@@ -4,6 +4,8 @@ import {
   TimeBlock,
   AcademicEvent,
   CyberTopic,
+  Course,
+  TuitionException,
 } from "@/types/database";
 import { resolveDaySchedule } from "./scheduleResolver";
 
@@ -449,4 +451,237 @@ export function generateDailyAutoMissions({
   }
 
   return { newMissions: generatedMissions, updatedRules };
+}
+
+export interface GenerateQuizPrepMissionsParams {
+  academicEvents: AcademicEvent[];
+  courses?: Course[];
+  timeBlocks: TimeBlock[];
+  existingMissions: Mission[];
+  todayDate?: Date;
+  tuitionExceptions?: TuitionException[];
+}
+
+/**
+ * Creates CT / Quiz prep missions 5, 3, and 1 day before each quiz event.
+ * Scheduled into that course's study window if free, otherwise the next free slot.
+ * Deterministic IDs prevent duplicates on reload. Does not generate missions in the past.
+ */
+export function generateQuizPrepMissions({
+  academicEvents,
+  courses = [],
+  timeBlocks,
+  existingMissions,
+  todayDate = new Date(),
+  tuitionExceptions = [],
+}: GenerateQuizPrepMissionsParams): Mission[] {
+  const todayStr = toDateString(todayDate);
+  const quizEvents = academicEvents.filter((e) => e.type === "quiz" || e.type === "ct");
+  const newPrepMissions: Mission[] = [];
+
+  const OFFSETS: { days: number; suffix: string; priority: "urgent" | "high" | "medium" }[] = [
+    { days: 5, suffix: "revise syllabus", priority: "medium" },
+    { days: 3, suffix: "practice questions", priority: "high" },
+    { days: 1, suffix: "final revision", priority: "urgent" },
+  ];
+
+  for (const q of quizEvents) {
+    let courseId: string | null = null;
+    let courseName = "";
+    if (q.details) {
+      try {
+        const p = JSON.parse(q.details);
+        courseId = p.course_id || null;
+        courseName = p.course_name || "";
+      } catch {}
+    }
+
+    const matchedCourse = courses.find(
+      (c) =>
+        c.id === courseId ||
+        q.title.toLowerCase().includes(c.name.toLowerCase()) ||
+        q.title.toLowerCase().includes(c.code.toLowerCase())
+    );
+
+    const rawPrefix = q.title.replace(/\s*CT.*$/i, "").replace(/\s*Quiz.*$/i, "").trim();
+    const courseLabel = matchedCourse?.name || courseName || rawPrefix || "Course";
+
+    for (const offset of OFFSETS) {
+      const qDate = new Date(`${q.date}T00:00:00`);
+      const prepDate = new Date(qDate.getTime() - offset.days * 86400 * 1000);
+      const prepDateStr = toDateString(prepDate);
+
+      // Don't create prep missions in the past
+      if (prepDateStr < todayStr) {
+        continue;
+      }
+
+      // Deterministic ID (no duplicates on reload)
+      const missionId = `auto-ct-prep-${q.id}-${offset.days}`;
+      if (
+        existingMissions.some((m) => m.id === missionId) ||
+        newPrepMissions.some((m) => m.id === missionId)
+      ) {
+        continue;
+      }
+
+      const missionTitle = `${courseLabel} CT: ${offset.suffix}`;
+
+      // Resolve schedule on prepDate to find that course's Study window if free
+      const daySchedule = resolveDaySchedule(
+        prepDate,
+        timeBlocks,
+        academicEvents,
+        [...existingMissions, ...newPrepMissions],
+        tuitionExceptions
+      );
+
+      // 1. Look for that course's study block
+      const courseCatId = matchedCourse?.category_id;
+      const studyBlock = daySchedule.blocks.find((b) => {
+        if (b.type !== "study" || b.isSkipped || b.isCancelled) return false;
+        if (courseCatId && b.default_category === courseCatId) return true;
+        const l = b.label.toLowerCase();
+        if (matchedCourse && l.includes(matchedCourse.name.toLowerCase())) return true;
+        if (courseLabel && l.includes(courseLabel.toLowerCase())) return true;
+        if (
+          (courseLabel.toLowerCase().includes("os") || courseLabel.toLowerCase().includes("operating")) &&
+          (l.includes("os") || l.includes("operating"))
+        ) {
+          return true;
+        }
+        if (
+          (courseLabel.toLowerCase().includes("stat") || courseLabel.toLowerCase().includes("math")) &&
+          (l.includes("math") || l.includes("stat"))
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      let chosenStart = "15:00";
+      let chosenEnd = "15:45";
+
+      const dayMissions = [...existingMissions, ...newPrepMissions].filter(
+        (m) => m.scheduled_start && m.scheduled_start.startsWith(prepDateStr)
+      );
+
+      if (studyBlock) {
+        const [sh, sm] = studyBlock.start_time.split(":").map(Number);
+        const [eh, em] = studyBlock.end_time.split(":").map(Number);
+        const bStartMin = (sh || 0) * 60 + (sm || 0);
+        const bEndMin = (eh || 0) * 60 + (em || 0);
+
+        // Check if existing mission overlaps this study window
+        const isOccupied = dayMissions.some((m) => {
+          const ms = new Date(m.scheduled_start!);
+          const mStart = ms.getHours() * 60 + ms.getMinutes();
+          const mEnd = m.scheduled_end
+            ? new Date(m.scheduled_end).getHours() * 60 + new Date(m.scheduled_end).getMinutes()
+            : mStart + 45;
+          return Math.max(bStartMin, mStart) < Math.min(bEndMin, mEnd);
+        });
+
+        if (!isOccupied) {
+          const durMin = Math.min(60, Math.max(45, bEndMin - bStartMin));
+          const endH = Math.floor((bStartMin + durMin) / 60);
+          const endM = (bStartMin + durMin) % 60;
+          chosenStart = studyBlock.start_time;
+          chosenEnd = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
+        } else {
+          // Window occupied, find next free slot
+          const slot = findNextFreeSlotForDate(daySchedule.blocks, dayMissions);
+          chosenStart = slot.start;
+          chosenEnd = slot.end;
+        }
+      } else {
+        // No study block for this course, find next free slot
+        const slot = findNextFreeSlotForDate(daySchedule.blocks, dayMissions);
+        chosenStart = slot.start;
+        chosenEnd = slot.end;
+      }
+
+      const mission: Mission = {
+        id: missionId,
+        title: missionTitle,
+        codename: `CT-PREP-${offset.days}D`,
+        category_id: matchedCourse?.category_id || "cat-1",
+        priority: offset.priority,
+        deadline: `${q.date}T23:59:00`,
+        scheduled_start: `${prepDateStr}T${chosenStart}:00`,
+        scheduled_end: `${prepDateStr}T${chosenEnd}:00`,
+        notes: `Automated preparation directive for ${q.title} (${offset.suffix}). Scheduled ${offset.days} days before event. Associated event ID: ${q.id}`,
+        status: "active",
+        xp: 40,
+        recurring_rule_id: q.id,
+        auto_generated_date: prepDateStr,
+        is_auto_scheduled: true,
+        created_at: new Date().toISOString(),
+      };
+
+      newPrepMissions.push(mission);
+    }
+  }
+
+  return newPrepMissions;
+}
+
+function findNextFreeSlotForDate(
+  blocks: { start_time: string; end_time: string; type: string; isSkipped?: boolean; isCancelled?: boolean }[],
+  dayMissions: Mission[]
+): { start: string; end: string } {
+  // Candidate start minutes from 10:00 to 20:30 every 30 minutes
+  const candidates: number[] = [
+    10 * 60,
+    10 * 60 + 30,
+    11 * 60,
+    14 * 60,
+    14 * 60 + 30,
+    15 * 60,
+    15 * 60 + 30,
+    16 * 60,
+    16 * 60 + 30,
+    19 * 60 + 30,
+    20 * 60,
+    20 * 60 + 30,
+  ];
+
+  for (const candStart of candidates) {
+    const candEnd = candStart + 45;
+
+    // Check conflict with fixed class/tuition blocks
+    const blockConflict = blocks.some((b) => {
+      if (b.isSkipped || b.isCancelled) return false;
+      if (b.type !== "class" && b.type !== "tuition") return false;
+      const [sh, sm] = b.start_time.split(":").map(Number);
+      const [eh, em] = b.end_time.split(":").map(Number);
+      const bs = (sh || 0) * 60 + (sm || 0);
+      const be = (eh || 0) * 60 + (em || 0);
+      return Math.max(candStart, bs) < Math.min(candEnd, be);
+    });
+    if (blockConflict) continue;
+
+    // Check conflict with existing missions
+    const missionConflict = dayMissions.some((m) => {
+      if (!m.scheduled_start) return false;
+      const ms = new Date(m.scheduled_start);
+      const s = ms.getHours() * 60 + ms.getMinutes();
+      const e = m.scheduled_end
+        ? new Date(m.scheduled_end).getHours() * 60 + new Date(m.scheduled_end).getMinutes()
+        : s + 45;
+      return Math.max(candStart, s) < Math.min(candEnd, e);
+    });
+    if (missionConflict) continue;
+
+    const shh = Math.floor(candStart / 60);
+    const smm = candStart % 60;
+    const ehh = Math.floor(candEnd / 60);
+    const emm = candEnd % 60;
+    return {
+      start: `${String(shh).padStart(2, "0")}:${String(smm).padStart(2, "0")}`,
+      end: `${String(ehh).padStart(2, "0")}:${String(emm).padStart(2, "0")}`,
+    };
+  }
+
+  return { start: "15:00", end: "15:45" };
 }

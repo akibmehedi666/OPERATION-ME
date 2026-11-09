@@ -14,7 +14,7 @@ import {
   WEEKDAY_ORDER,
   WEEKDAY_TO_NAME 
 } from "@/lib/scheduleResolver";
-import { formatDate, formatTimeRange12 } from "@/lib/formatters";
+import { formatDate, formatTimeRange12, formatTime12 } from "@/lib/formatters";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -25,7 +25,8 @@ import {
   Clock, 
   Laptop, 
   CheckCircle2,
-  Trash2
+  Trash2,
+  BookOpen
 } from "lucide-react";
 
 interface AcademicCalendarViewProps {
@@ -33,6 +34,7 @@ interface AcademicCalendarViewProps {
   academicEvents: AcademicEvent[];
   missions: Mission[];
   onAddEvent: (dateStr: string) => void;
+  onEditEvent?: (event: AcademicEvent) => void;
   onDeleteEvent: (id: string) => void;
   onCompleteMission: (mission: Mission) => void;
 }
@@ -52,6 +54,7 @@ function formatEventDetails(ev: { type: string; details?: string | null }): stri
     if (ev.type === "holiday") return "University holiday — classes suspended";
     if (ev.type === "exam") return "Examinations scheduled";
     if (ev.type === "payment") return "Tuition fee deadline";
+    if (ev.type === "quiz" || ev.type === "ct") return "Class Test / Quiz scheduled";
     return "";
   }
   const raw = ev.details.trim();
@@ -64,6 +67,19 @@ function formatEventDetails(ev: { type: string; details?: string | null }): stri
       }
       if (parsed.isOnline !== undefined) {
         return parsed.isOnline ? "Online class session" : "In-person class session";
+      }
+      if (parsed.start_time || parsed.syllabus || parsed.marks) {
+        const parts: string[] = [];
+        if (parsed.start_time && parsed.end_time) {
+          parts.push(`${formatTime12(parsed.start_time)} – ${formatTime12(parsed.end_time)}`);
+        }
+        if (parsed.marks) {
+          parts.push(`Marks: ${parsed.marks}`);
+        }
+        if (parsed.syllabus) {
+          parts.push(`Syllabus: ${parsed.syllabus}`);
+        }
+        return parts.join(" • ");
       }
       return Object.entries(parsed)
         .map(([k, v]) => `${k.replace(/([A-Z])/g, " $1").toLowerCase()}: ${v}`)
@@ -80,6 +96,7 @@ export const AcademicCalendarView: React.FC<AcademicCalendarViewProps> = ({
   academicEvents,
   missions,
   onAddEvent,
+  onEditEvent,
   onDeleteEvent,
   onCompleteMission,
 }) => {
@@ -159,6 +176,13 @@ export const AcademicCalendarView: React.FC<AcademicCalendarViewProps> = ({
 
   const getEventBadge = (type: AcademicEventType) => {
     switch (type) {
+      case "quiz":
+      case "ct":
+        return {
+          bg: "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50",
+          dot: "bg-purple-500",
+          icon: <BookOpen className="w-3 h-3 text-purple-600 dark:text-purple-400" />,
+        };
       case "exam":
         return {
           bg: "bg-[#fce8e0] text-[#b23a12] border-[#facfb7] dark:bg-spy-red/20 dark:text-spy-red dark:border-spy-red/30",
@@ -392,7 +416,9 @@ export const AcademicCalendarView: React.FC<AcademicCalendarViewProps> = ({
                 return (
                   <div
                     key={ev.id}
-                    className="p-2.5 rounded-[4px] bg-spy-surface2 border border-spy-border flex items-start justify-between gap-2"
+                    onClick={() => onEditEvent?.(ev)}
+                    className="p-2.5 rounded-[4px] bg-spy-surface2 border border-spy-border flex items-start justify-between gap-2 hover:border-spy-borderLight cursor-pointer transition-colors"
+                    title="Click to edit event"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -412,7 +438,10 @@ export const AcademicCalendarView: React.FC<AcademicCalendarViewProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => onDeleteEvent(ev.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteEvent(ev.id);
+                      }}
                       className="p-1 text-spy-muted hover:text-spy-red rounded transition-colors shrink-0"
                       title="Delete event"
                     >
