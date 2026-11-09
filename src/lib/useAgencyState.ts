@@ -724,11 +724,13 @@ export function useAgencyState() {
         const weightA = PRIORITY_WEIGHTS[a.priority] || 1;
         const weightB = PRIORITY_WEIGHTS[b.priority] || 1;
         if (weightB !== weightA) return weightB - weightA;
-        if (a.deadline && b.deadline) {
-          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+        const aDue = a.deadline || a.scheduled_end;
+        const bDue = b.deadline || b.scheduled_end;
+        if (aDue && bDue) {
+          return new Date(aDue).getTime() - new Date(bDue).getTime();
         }
-        if (a.deadline && !b.deadline) return -1;
-        if (!a.deadline && b.deadline) return 1;
+        if (aDue && !bDue) return -1;
+        if (!aDue && bDue) return 1;
         return 0;
       });
 

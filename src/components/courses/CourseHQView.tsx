@@ -491,10 +491,10 @@ export const CourseHQView: React.FC<CourseHQViewProps> = ({
                     <div className="text-sm font-medium text-spy-text truncate">
                       {mission.title}
                     </div>
-                    {mission.deadline && (
+                    {(mission.deadline || mission.scheduled_end) && (
                       <div className="text-[11px] font-mono text-spy-muted flex items-center gap-1">
                         <Clock className="w-3 h-3 text-spy-dim" />
-                        <span>Due {new Date(mission.deadline).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                        <span>Due {new Date(mission.deadline || mission.scheduled_end!).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                       </div>
                     )}
                   </div>

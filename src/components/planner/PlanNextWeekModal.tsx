@@ -151,9 +151,13 @@ export const PlanNextWeekModal: React.FC<PlanNextWeekModalProps> = ({
     const sortedMissions = [...unscheduledMissions].sort((a, b) => {
       const pDiff = (priorityWeight[b.priority] || 1) - (priorityWeight[a.priority] || 1);
       if (pDiff !== 0) return pDiff;
-      if (a.deadline && b.deadline) {
-        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      const aDue = a.deadline || a.scheduled_end;
+      const bDue = b.deadline || b.scheduled_end;
+      if (aDue && bDue) {
+        return new Date(aDue).getTime() - new Date(bDue).getTime();
       }
+      if (aDue && !bDue) return -1;
+      if (!aDue && bDue) return 1;
       return 0;
     });
 

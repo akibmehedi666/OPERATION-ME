@@ -27,8 +27,9 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
     if (m.scheduled_start && m.scheduled_start.slice(0, 10) === todayStr) {
       return true;
     }
-    if (m.deadline) {
-      const d = new Date(m.deadline);
+    const dueTime = m.deadline || m.scheduled_end;
+    if (dueTime) {
+      const d = new Date(dueTime);
       const isToday =
         d.getDate() === now.getDate() &&
         d.getMonth() === now.getMonth() &&
@@ -41,11 +42,12 @@ export const StatCardsRow: React.FC<StatCardsRowProps> = ({ missions, streak }) 
   const completedTodayCount = todayMissions.filter((m) => m.status === "completed").length;
   const totalTodayCount = todayMissions.length;
 
-  // Overdue count (non-completed missions with past deadline)
+  // Overdue count (non-completed missions with past deadline or end time)
   const overdueCount = missions.filter((m) => {
     if (m.status === "completed") return false;
-    if (!m.deadline) return false;
-    return new Date(m.deadline) < now;
+    const dueTime = m.deadline || m.scheduled_end;
+    if (!dueTime) return false;
+    return new Date(dueTime) < now;
   }).length;
 
   return (

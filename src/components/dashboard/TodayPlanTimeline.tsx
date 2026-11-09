@@ -111,9 +111,10 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
         if (startKey === todayDateKey) return true;
       }
 
-      // Has deadline today or overdue
-      if (m.deadline) {
-        const d = new Date(m.deadline);
+      // Has deadline or scheduled end today or overdue
+      const dueTime = m.deadline || m.scheduled_end;
+      if (dueTime) {
+        const d = new Date(dueTime);
         const isToday =
           d.getDate() === now.getDate() &&
           d.getMonth() === now.getMonth() &&
@@ -148,7 +149,8 @@ export const TodayPlanTimeline: React.FC<TodayPlanTimelineProps> = ({
         timeDisplay = `Due ${formatTime12(d)}`;
       }
 
-      const isOverdue = Boolean(m.deadline && new Date(m.deadline) < now && m.status !== "completed");
+      const dueTime = m.deadline || m.scheduled_end;
+      const isOverdue = Boolean(dueTime && new Date(dueTime) < now && m.status !== "completed");
 
       return {
         id: m.id,

@@ -638,10 +638,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               {group.items.map((mission) => {
                 const category = categories.find((c) => c.id === mission.category_id);
                 const catTheme = getCategoryTheme(category?.name || category?.codename);
+                const dueTime = mission.deadline || mission.scheduled_end;
                 const isLate =
-                  mission.deadline &&
+                  dueTime &&
                   mission.completed_at &&
-                  new Date(mission.completed_at) > new Date(mission.deadline);
+                  new Date(mission.completed_at) > new Date(dueTime);
 
                 return (
                   <div

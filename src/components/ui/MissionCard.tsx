@@ -88,8 +88,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({
     }
   }, [mission.id, mission.title, isHero, isMotionActive]);
 
-  // Use 12-hour unified due text
-  const dueInfo = formatDueText(mission.deadline);
+  // Use 12-hour unified due text (uses deadline or scheduled end time if no deadline)
+  const dueInfo = formatDueText(mission.deadline || mission.scheduled_end);
 
   // Priority left border styling (small colored left border)
   const getBorderLeftClass = () => {

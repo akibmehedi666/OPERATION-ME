@@ -290,7 +290,29 @@ export async function seedTestState(
         }
       }
 
-      if (method === 'PATCH' || method === 'DELETE') {
+      if (method === 'PATCH') {
+        try {
+          const patchData = route.request().postDataJSON();
+          let rowId = 'm-' + Date.now();
+          try {
+            const urlObj = new URL(url);
+            const idParam = urlObj.searchParams.get('id');
+            if (idParam) rowId = idParam.replace(/^eq\./, '');
+          } catch {}
+          const returnItem = { id: rowId, ...(Array.isArray(patchData) ? patchData[0] : patchData || {}) };
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(returnItem),
+          });
+          return;
+        } catch {
+          await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+          return;
+        }
+      }
+
+      if (method === 'DELETE') {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',

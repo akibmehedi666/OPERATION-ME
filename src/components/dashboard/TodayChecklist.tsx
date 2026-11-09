@@ -20,8 +20,9 @@ export const TodayChecklist: React.FC<TodayChecklistProps> = ({
   // Find missions that are active or due today or overdue
   const todayMissions = missions.filter((m) => {
     if (m.status === "active") return true;
-    if (m.deadline) {
-      const d = new Date(m.deadline);
+    const dueTime = m.deadline || m.scheduled_end;
+    if (dueTime) {
+      const d = new Date(dueTime);
       const isToday =
         d.getDate() === now.getDate() &&
         d.getMonth() === now.getMonth() &&
@@ -59,7 +60,8 @@ export const TodayChecklist: React.FC<TodayChecklistProps> = ({
         <div className="space-y-2">
           {todayMissions.map((mission) => {
             const isCompleted = mission.status === "completed";
-            const deadlineDate = mission.deadline ? new Date(mission.deadline) : null;
+            const dueTime = mission.deadline || mission.scheduled_end;
+            const deadlineDate = dueTime ? new Date(dueTime) : null;
             const isOverdue = deadlineDate ? deadlineDate < now && !isCompleted : false;
             const category = categories.find((c) => c.id === mission.category_id);
 

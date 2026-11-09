@@ -124,10 +124,10 @@ export const AssignMissionModal: React.FC<AssignMissionModalProps> = ({
                       <span className="text-[10px] font-mono text-spy-muted">
                         [{mission.codename}]
                       </span>
-                      {mission.deadline && (
+                      {(mission.deadline || mission.scheduled_end) && (
                         <span className="text-[10px] font-mono text-spy-muted flex items-center gap-0.5">
                           <Clock className="w-2.5 h-2.5" />
-                          <span>Due {formatDate(mission.deadline)}</span>
+                          <span>Due {formatDate(mission.deadline || mission.scheduled_end!)}</span>
                         </span>
                       )}
                     </div>

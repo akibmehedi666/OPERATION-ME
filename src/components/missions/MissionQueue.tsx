@@ -149,12 +149,14 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
         if (weightB !== weightA) return weightB - weightA;
       }
 
-      // Deadline sort
-      if (a.deadline && b.deadline) {
-        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      // Deadline / end time sort
+      const aDue = a.deadline || a.scheduled_end;
+      const bDue = b.deadline || b.scheduled_end;
+      if (aDue && bDue) {
+        return new Date(aDue).getTime() - new Date(bDue).getTime();
       }
-      if (a.deadline && !b.deadline) return -1;
-      if (!a.deadline && b.deadline) return 1;
+      if (aDue && !bDue) return -1;
+      if (!aDue && bDue) return 1;
       return 0;
     });
   };
@@ -183,12 +185,13 @@ export const MissionQueue: React.FC<MissionQueueProps> = ({
       return;
     }
 
-    if (!m.deadline) {
+    const dueTime = m.deadline || m.scheduled_end;
+    if (!dueTime) {
       laterList.push(m);
       return;
     }
 
-    const d = new Date(m.deadline);
+    const d = new Date(dueTime);
 
     if (d < now) {
       overdueList.push(m);

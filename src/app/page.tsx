@@ -594,8 +594,9 @@ export default function Home() {
 
   missions.forEach((m) => {
     if (m.status === "completed") return;
-    if (!m.deadline) return;
-    const d = new Date(m.deadline);
+    const dueTime = m.deadline || m.scheduled_end;
+    if (!dueTime) return;
+    const d = new Date(dueTime);
     const isToday =
       d.getDate() === now.getDate() &&
       d.getMonth() === now.getMonth() &&

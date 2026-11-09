@@ -259,5 +259,129 @@ describe("Missions Queue & Modal Verification", () => {
         })
       );
     });
+
+    it("hides separate due date by default and auto-syncs deadline with scheduled end time", () => {
+      const mockSave = vi.fn();
+      render(
+        <MissionModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={mockSave}
+          categories={DEFAULT_CATEGORIES}
+          initialDate="2026-11-10"
+          initialStartTime="14:00"
+          initialEndTime="15:30"
+        />
+      );
+
+      // Separate deadline input should not be visible by default
+      expect(screen.queryByText(/Mission Deadline \(Separate Due Date\)/i)).not.toBeInTheDocument();
+      expect(screen.getByText("+ Add a separate due date")).toBeInTheDocument();
+
+      // Enter title and save
+      fireEvent.change(screen.getByPlaceholderText(/e\.g\. Implement OS Page Replacement/i), {
+        target: { value: "Auto Due Mission" },
+      });
+      fireEvent.click(screen.getByText("Create Mission"));
+
+      // Deadline must match scheduled end time (2026-11-10T15:30)
+      expect(mockSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Auto Due Mission",
+          scheduled_end: new Date("2026-11-10T15:30:00").toISOString(),
+          deadline: new Date("2026-11-10T15:30:00").toISOString(),
+        })
+      );
+    });
+
+    it("reveals separate due date fields and blocks saving if due date is earlier than scheduled end", () => {
+      const mockSave = vi.fn();
+      render(
+        <MissionModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={mockSave}
+          categories={DEFAULT_CATEGORIES}
+          initialDate="2026-11-10"
+          initialStartTime="14:00"
+          initialEndTime="16:00"
+        />
+      );
+
+      // Click to add separate due date
+      fireEvent.click(screen.getByText("+ Add a separate due date"));
+      expect(screen.getByText(/Mission Deadline \(Separate Due Date\)/i)).toBeInTheDocument();
+
+      // Set due date to be earlier than scheduled end (e.g. 2026-11-09)
+      const dateInputs = screen.getAllByDisplayValue("2026-11-10");
+      // The second date input is the separate deadline date
+      fireEvent.change(dateInputs[1], { target: { value: "2026-11-09" } });
+
+      // Inline warning should be visible
+      expect(screen.getByText(/Due date cannot be earlier than scheduled end/i)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveBtn = screen.getByText("Create Mission");
+      expect(saveBtn).toBeDisabled();
+
+      // Try clicking - should NOT call onSave
+      fireEvent.click(saveBtn);
+      expect(mockSave).not.toHaveBeenCalled();
+
+      // Fix due date to 2026-11-11
+      fireEvent.change(dateInputs[1], { target: { value: "2026-11-11" } });
+      expect(screen.queryByText(/Due date cannot be earlier than scheduled end/i)).not.toBeInTheDocument();
+      expect(saveBtn).not.toBeDisabled();
+    });
+
+    it("shows and requires deadline when 'No specific time (deadline only)' is checked", () => {
+      const mockSave = vi.fn();
+      render(
+        <MissionModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={mockSave}
+          categories={DEFAULT_CATEGORIES}
+        />
+      );
+
+      // Check "No specific time (deadline only)"
+      const checkbox = screen.getByLabelText(/No specific time \(deadline only\)/i);
+      fireEvent.click(checkbox);
+
+      // Deadline fields should now be directly shown
+      expect(screen.getByText(/Mission Deadline/i)).toBeInTheDocument();
+      expect(screen.queryByText("+ Add a separate due date")).not.toBeInTheDocument();
+    });
+
+    it("keeps separate due date visible when editing a mission whose deadline differs from end time", () => {
+      const editing: Mission = {
+        id: "diff-1",
+        title: "Extended Project",
+        codename: "OP-DIFF-1",
+        category_id: "cat-1",
+        priority: "high",
+        status: "active",
+        xp: 100,
+        scheduled_start: "2026-11-10T10:00:00Z",
+        scheduled_end: "2026-11-10T12:00:00Z",
+        deadline: "2026-11-15T23:59:00Z", // differs from scheduled_end!
+        created_at: new Date().toISOString(),
+      };
+
+      render(
+        <MissionModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+          categories={DEFAULT_CATEGORIES}
+          editingMission={editing}
+        />
+      );
+
+      // Separate deadline section must be visible immediately
+      expect(screen.getByText(/Mission Deadline \(Separate Due Date\)/i)).toBeInTheDocument();
+      expect(screen.queryByText("+ Add a separate due date")).not.toBeInTheDocument();
+    });
   });
 });

@@ -39,6 +39,19 @@ function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
 
+// Helper to check if deadline differs meaningfully from scheduled end time
+function isDeadlineDifferentFromEnd(
+  deadlineIso?: string | null,
+  scheduledEndIso?: string | null
+): boolean {
+  if (!deadlineIso) return false;
+  if (!scheduledEndIso) return true;
+  const dTime = new Date(deadlineIso).getTime();
+  const eTime = new Date(scheduledEndIso).getTime();
+  if (isNaN(dTime) || isNaN(eTime)) return false;
+  return Math.abs(dTime - eTime) > 60000; // >1 minute difference
+}
+
 export const MissionModal: React.FC<MissionModalProps> = ({
   isOpen,
   onClose,
@@ -93,6 +106,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
   const [scheduledBlockId, setScheduledBlockId] = useState<string | null>(null);
 
   // Deadline states
+  const [hasSeparateDeadline, setHasSeparateDeadline] = useState(false);
   const [deadlineDate, setDeadlineDate] = useState("");
   const [deadlineTime, setDeadlineTime] = useState("23:59");
 
@@ -179,7 +193,13 @@ export const MissionModal: React.FC<MissionModalProps> = ({
         }
         setEndTime(targetEndTime);
 
-        // When scheduled time exists, default deadline directly to end time
+        // Keep separate due date visible if deadline differs from scheduled end
+        const differs = isDeadlineDifferentFromEnd(
+          editingMission.deadline,
+          editingMission.scheduled_end
+        );
+        setHasSeparateDeadline(differs);
+
         if (editingMission.deadline) {
           const d = new Date(editingMission.deadline);
           const yyyy = d.getFullYear();
@@ -195,6 +215,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
         }
       } else {
         setHasSpecificTime(false);
+        setHasSeparateDeadline(true);
         setScheduledDate(initialDate || todayStr);
         setStartTime(initialStartTime || "14:00");
         setEndTime(initialEndTime || "15:00");
@@ -209,7 +230,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
           setDeadlineDate(`${yyyy}-${mm}-${dd}`);
           setDeadlineTime(`${hh}:${min}`);
         } else {
-          setDeadlineDate("");
+          setDeadlineDate(initialDate || todayStr);
           setDeadlineTime("23:59");
         }
       }
@@ -232,8 +253,9 @@ export const MissionModal: React.FC<MissionModalProps> = ({
       setStartTime(targetStart);
       setEndTime(targetEnd);
 
-      // Default to specific time enabled so Date, Start Time, End Time and Quick Duration chips are readily accessible
+      // Default to specific time enabled; separate deadline hidden by default
       setHasSpecificTime(true);
+      setHasSeparateDeadline(false);
 
       // Default deadline to scheduled end time
       setDeadlineDate(targetDateStr);
@@ -254,8 +276,27 @@ export const MissionModal: React.FC<MissionModalProps> = ({
 
   // Quick duration chips handler
   const handleApplyDuration = (minutes: number) => {
-    setEndTime(addMinutesToTime(startTime, minutes));
+    const newEnd = addMinutesToTime(startTime, minutes);
+    setEndTime(newEnd);
+    if (!hasSeparateDeadline) {
+      setDeadlineTime(newEnd);
+    }
   };
+
+  // Check if separate due date is earlier than scheduled end time
+  const isDeadlineBeforeEnd = useMemo(() => {
+    if (!hasSpecificTime || !hasSeparateDeadline) return false;
+    if (!scheduledDate || !endTime || !deadlineDate) return false;
+
+    try {
+      const endTimestamp = new Date(`${scheduledDate}T${endTime}:00`).getTime();
+      const deadlineTimestamp = new Date(`${deadlineDate}T${deadlineTime || "23:59"}:00`).getTime();
+      if (isNaN(endTimestamp) || isNaN(deadlineTimestamp)) return false;
+      return deadlineTimestamp < endTimestamp;
+    } catch {
+      return false;
+    }
+  }, [hasSpecificTime, hasSeparateDeadline, scheduledDate, endTime, deadlineDate, deadlineTime]);
 
   // Check overlap with university classes, tuition, and existing missions
   const overlapConflict = useMemo(() => {
@@ -306,12 +347,30 @@ export const MissionModal: React.FC<MissionModalProps> = ({
     }
 
     let deadlineIso: string | null = null;
-    if (deadlineDate) {
+    if (hasSpecificTime) {
+      if (hasSeparateDeadline) {
+        if (!deadlineDate) {
+          setErrorMessage("Please select a separate due date, or remove it.");
+          return;
+        }
+        if (isDeadlineBeforeEnd) {
+          setErrorMessage("Due date cannot be earlier than the scheduled end time.");
+          return;
+        }
+        const timeStr = deadlineTime || "23:59";
+        deadlineIso = new Date(`${deadlineDate}T${timeStr}:00`).toISOString();
+      } else {
+        // Automatically follows scheduled end time!
+        deadlineIso = scheduledEndIso;
+      }
+    } else {
+      // Deadline-only mission: deadline is required!
+      if (!deadlineDate) {
+        setErrorMessage("Please select a deadline date for this mission.");
+        return;
+      }
       const timeStr = deadlineTime || "23:59";
       deadlineIso = new Date(`${deadlineDate}T${timeStr}:00`).toISOString();
-    } else if (hasSpecificTime && scheduledEndIso) {
-      // Default deadline to scheduled end time if not otherwise set
-      deadlineIso = scheduledEndIso;
     }
 
     setIsSaving(true);
@@ -337,12 +396,14 @@ export const MissionModal: React.FC<MissionModalProps> = ({
         cf_log_id: editingMission?.cf_log_id || null,
       };
 
-      const result = await onSave(payload);
-
-      if (result && typeof result === "object" && result.success === false) {
-        setErrorMessage(result.error || "Failed to persist mission in cloud database.");
-        setIsSaving(false);
-        return;
+      const result = onSave(payload);
+      if (result && typeof (result as Promise<unknown>).then === "function") {
+        const asyncRes = await result;
+        if (asyncRes && typeof asyncRes === "object" && asyncRes.success === false) {
+          setErrorMessage(asyncRes.error || "Failed to persist mission in cloud database.");
+          setIsSaving(false);
+          return;
+        }
       }
 
       onClose();
@@ -370,7 +431,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
             <div className="flex items-center gap-2">
               <Target className="w-4 h-4 text-spy-green" />
               <span className="font-mono text-sm font-semibold text-spy-text">
-                {(editingMission && editingMission.id) ? "EDIT MISSION DIRECTIVE" : "NEW MISSION DIRECTIVE"}
+                {(editingMission && editingMission.id) ? "EDIT MISSION" : "NEW MISSION"}
               </span>
             </div>
             <button
@@ -485,7 +546,15 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                   <input
                     type="checkbox"
                     checked={!hasSpecificTime}
-                    onChange={(e) => setHasSpecificTime(!e.target.checked)}
+                    onChange={(e) => {
+                      const noSpecific = e.target.checked;
+                      setHasSpecificTime(!noSpecific);
+                      if (noSpecific) {
+                        setHasSeparateDeadline(true);
+                        if (!deadlineDate) setDeadlineDate(scheduledDate || todayStr);
+                        if (!deadlineTime) setDeadlineTime(endTime || "23:59");
+                      }
+                    }}
                     className="rounded-[2px] text-spy-green focus:ring-0"
                   />
                   <span>No specific time (deadline only)</span>
@@ -504,7 +573,13 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                         type="date"
                         required={hasSpecificTime}
                         value={scheduledDate}
-                        onChange={(e) => setScheduledDate(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setScheduledDate(val);
+                          if (!hasSeparateDeadline) {
+                            setDeadlineDate(val);
+                          }
+                        }}
                         className="w-full bg-spy-surface border border-spy-border px-2 py-1.5 text-xs text-spy-text font-mono focus:outline-none focus:border-spy-green rounded-[3px]"
                       />
                     </div>
@@ -517,7 +592,17 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                         type="time"
                         required={hasSpecificTime}
                         value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setStartTime(val);
+                          if (val >= endTime) {
+                            const newEnd = addMinutesToTime(val, 60);
+                            setEndTime(newEnd);
+                            if (!hasSeparateDeadline) {
+                              setDeadlineTime(newEnd);
+                            }
+                          }
+                        }}
                         className="w-full bg-spy-surface border border-spy-border px-2 py-1.5 text-xs text-spy-text font-mono focus:outline-none focus:border-spy-green rounded-[3px]"
                       />
                     </div>
@@ -530,7 +615,13 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                         type="time"
                         required={hasSpecificTime}
                         value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEndTime(val);
+                          if (!hasSeparateDeadline) {
+                            setDeadlineTime(val);
+                          }
+                        }}
                         className="w-full bg-spy-surface border border-spy-border px-2 py-1.5 text-xs text-spy-text font-mono focus:outline-none focus:border-spy-green rounded-[3px]"
                       />
                     </div>
@@ -584,31 +675,112 @@ export const MissionModal: React.FC<MissionModalProps> = ({
               )}
             </div>
 
-            {/* Deadline Date & Time (Shown when no specific time or for deadline target) */}
-            <div>
-              <label className="block text-spy-muted mb-1 font-medium flex items-center justify-between">
-                <span>Mission Deadline</span>
-                {hasSpecificTime && (
-                  <span className="text-[10px] text-spy-dim font-mono">
-                    (Auto-synced with scheduled end time if empty)
-                  </span>
+            {/* MISSION DEADLINE SECTION */}
+            {hasSpecificTime ? (
+              <div>
+                {!hasSeparateDeadline ? (
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHasSeparateDeadline(true);
+                        setDeadlineDate(scheduledDate || todayStr);
+                        setDeadlineTime(endTime || "23:59");
+                      }}
+                      className="text-[11px] text-spy-green hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <span>+ Add a separate due date</span>
+                    </button>
+                    <span className="text-[10px] text-spy-dim">
+                      (Deadline auto-synced with end: {formatTime12(endTime)})
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-[5px] bg-spy-surface2 border border-spy-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-spy-muted text-xs font-medium">
+                        Mission Deadline (Separate Due Date)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHasSeparateDeadline(false);
+                          setDeadlineDate(scheduledDate);
+                          setDeadlineTime(endTime);
+                        }}
+                        className="text-[11px] font-mono text-spy-muted hover:text-spy-red transition-colors"
+                      >
+                        Remove separate due date
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-spy-dim text-[11px] mb-1 font-mono">
+                          Due Date
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={deadlineDate}
+                          onChange={(e) => setDeadlineDate(e.target.value)}
+                          className="w-full bg-spy-surface border border-spy-border px-3 py-2 text-xs text-spy-text font-mono focus:outline-none focus:border-spy-green rounded-[3px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-spy-dim text-[11px] mb-1 font-mono">
+                          Due Time ({formatTime12(deadlineTime || "23:59")})
+                        </label>
+                        <input
+                          type="time"
+                          value={deadlineTime}
+                          onChange={(e) => setDeadlineTime(e.target.value)}
+                          className="w-full bg-spy-surface border border-spy-border px-3 py-2 text-xs text-spy-text font-mono focus:outline-none focus:border-spy-green rounded-[3px]"
+                        />
+                      </div>
+                    </div>
+                    {isDeadlineBeforeEnd && (
+                      <div className="p-2.5 rounded-[4px] bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-mono flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                        <span>
+                          Due date cannot be earlier than scheduled end ({scheduledDate} at {formatTime12(endTime)}).
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="date"
-                  value={deadlineDate}
-                  onChange={(e) => setDeadlineDate(e.target.value)}
-                  className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green rounded-[3px]"
-                />
-                <input
-                  type="time"
-                  value={deadlineTime}
-                  onChange={(e) => setDeadlineTime(e.target.value)}
-                  className="w-full bg-spy-surface2 border border-spy-border px-3 py-2 text-xs text-spy-text focus:outline-none focus:border-spy-green rounded-[3px]"
-                />
               </div>
-            </div>
+            ) : (
+              <div className="p-3 rounded-[5px] bg-spy-surface2 border border-spy-border space-y-2">
+                <label className="block text-spy-muted text-xs font-medium">
+                  Mission Deadline <span className="text-spy-green">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-spy-dim text-[11px] mb-1 font-mono">
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={deadlineDate}
+                      onChange={(e) => setDeadlineDate(e.target.value)}
+                      className="w-full bg-spy-surface border border-spy-border px-3 py-2 text-xs text-spy-text font-mono focus:outline-none focus:border-spy-green rounded-[3px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-spy-dim text-[11px] mb-1 font-mono">
+                      Due Time ({formatTime12(deadlineTime || "23:59")})
+                    </label>
+                    <input
+                      type="time"
+                      value={deadlineTime}
+                      onChange={(e) => setDeadlineTime(e.target.value)}
+                      className="w-full bg-spy-surface border border-spy-border px-3 py-2 text-xs text-spy-text font-mono focus:outline-none focus:border-spy-green rounded-[3px]"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* XP and Initial Status */}
             <div className="grid grid-cols-2 gap-3">
@@ -675,7 +847,7 @@ export const MissionModal: React.FC<MissionModalProps> = ({
                 type="submit"
                 variant="primary"
                 size="sm"
-                disabled={isSaving}
+                disabled={isSaving || isDeadlineBeforeEnd}
               >
                 {isSaving ? "SAVING..." : (editingMission && editingMission.id) ? "Save Changes" : "Create Mission"}
               </Button>

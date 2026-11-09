@@ -185,15 +185,17 @@ export function autoScheduleMissions(
     }
   }
 
-  // 2. Identify active missions with deadline that are not yet scheduled
+  // 2. Identify active missions with deadline or end time that are not yet scheduled
   const unscheduledMissions = missions
-    .filter((m) => m.status === "active" && m.deadline && !m.scheduled_block_id)
+    .filter((m) => m.status === "active" && (m.deadline || m.scheduled_end) && !m.scheduled_block_id)
     .sort((a, b) => {
       // Sort by priority first
       const pDiff = (PRIORITY_ORDER[b.priority] || 1) - (PRIORITY_ORDER[a.priority] || 1);
       if (pDiff !== 0) return pDiff;
-      // Soonest deadline first
-      return new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime();
+      // Soonest deadline/end first
+      const aDue = (a.deadline || a.scheduled_end)!;
+      const bDue = (b.deadline || b.scheduled_end)!;
+      return new Date(aDue).getTime() - new Date(bDue).getTime();
     });
 
   let scheduledCount = 0;
@@ -201,7 +203,8 @@ export function autoScheduleMissions(
 
   for (const mission of unscheduledMissions) {
     const targetType = mapMissionToBlockType(mission, categories);
-    const missionDeadlineTime = new Date(mission.deadline!).getTime();
+    const missionDue = (mission.deadline || mission.scheduled_end)!;
+    const missionDeadlineTime = new Date(missionDue).getTime();
     const missionEstimatedMin = mission.time_spent_minutes || 45;
 
     // Filter candidate blocks that match type and occur BEFORE or ON deadline

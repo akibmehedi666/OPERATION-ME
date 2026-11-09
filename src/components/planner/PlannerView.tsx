@@ -316,7 +316,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   weekEndDate.setDate(weekEndDate.getDate() + 6);
 
   const unscheduledMissionsCount = missions.filter(
-    (m) => m.status === "active" && m.deadline && !m.scheduled_block_id
+    (m) => m.status === "active" && (m.deadline || m.scheduled_end) && !m.scheduled_block_id
   ).length;
 
   return (

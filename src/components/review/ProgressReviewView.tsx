@@ -75,8 +75,9 @@ export const ProgressReviewView: React.FC<ProgressReviewViewProps> = ({
 
   const thisWeekOverdueCount = useMemo(() => {
     return missions.filter((m) => {
-      if (m.status === "completed" || !m.deadline) return false;
-      return new Date(m.deadline) < now;
+      const dueTime = m.deadline || m.scheduled_end;
+      if (m.status === "completed" || !dueTime) return false;
+      return new Date(dueTime) < now;
     }).length;
   }, [missions, now]);
 
