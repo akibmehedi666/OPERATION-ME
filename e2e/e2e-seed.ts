@@ -137,8 +137,10 @@ export async function seedTestState(
   const animations = options?.animationsEnabled ?? false; // keep false for instant E2E speed & stability
   const missions = options?.missions ?? E2E_SEEDED_MISSIONS;
 
+  const mockJwt = `${Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify({ sub: 'e2e-test-user-id', aud: 'authenticated', role: 'authenticated', email: 'agent.akib@agency.internal', exp: Math.floor(Date.now() / 1000) + 86400 * 30 })).toString('base64url')}.mockSignature`;
+
   const mockSessionObj = {
-    access_token: 'mock-access-token',
+    access_token: mockJwt,
     refresh_token: 'mock-refresh-token',
     expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -174,8 +176,8 @@ export async function seedTestState(
     await page.context().clearCookies();
   }
 
-  // Intercept outgoing Supabase requests so E2E test runs have zero network latency or external dependencies
-  await page.route('**/*.supabase.co/**', async (route) => {
+  // Intercept outgoing Supabase requests across pages and service workers
+  await page.context().route('**/*.supabase.co/**', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
 

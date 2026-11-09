@@ -256,6 +256,22 @@ export default function Home() {
     document.title = tabTitles[activeTab] || "Operation ME";
   }, [activeTab]);
 
+  // PWA Shortcuts & URL Action Deep Linking
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    const tab = params.get("tab");
+
+    if (action === "new-mission") {
+      handleOpenAdd();
+      window.history.replaceState({}, "", "/");
+    } else if (tab === "planner") {
+      setActiveTab("planner");
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
+
   // Codeforces auto-sync on app open (throttled: at most once per hour)
   const lastCfSyncRef = useRef<number>(0);
   useEffect(() => {
@@ -926,6 +942,7 @@ export default function Home() {
                   academicEvents={academicEvents}
                   missions={missions}
                   categories={categories}
+                  courses={courses}
                   structureLoadingError={structureLoadingError}
                   onRetryLoad={retryLoadStructure}
                   onAddTimeBlock={addTimeBlock}

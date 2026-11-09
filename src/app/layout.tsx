@@ -3,6 +3,8 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/themeContext";
 import { AnimationProvider } from "@/lib/animationContext";
+import { PwaProvider } from "@/lib/pwaContext";
+import { PwaUpdateToast } from "@/components/pwa/PwaUpdateToast";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -49,6 +51,7 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -83,11 +86,14 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} font-sans bg-spy-bg text-spy-text antialiased min-h-screen selection:bg-spy-green selection:text-spy-contrast`}
       >
-        <ThemeProvider>
-          <AnimationProvider>
-            {children}
-          </AnimationProvider>
-        </ThemeProvider>
+        <PwaProvider>
+          <ThemeProvider>
+            <AnimationProvider>
+              {children}
+              <PwaUpdateToast />
+            </AnimationProvider>
+          </ThemeProvider>
+        </PwaProvider>
       </body>
     </html>
   );

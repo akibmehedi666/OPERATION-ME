@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Offline | Operation ME</title>
+  <style>
+    :root {
+      --bg: #0b0f0d;
+      --surface: #111714;
+      --border: #1d2822;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --dim: #64748b;
+      --primary: #00ff66;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f4f1ea;
+        --surface: #fffdf8;
+        --border: #ddd6c8;
+        --text: #1f2421;
+        --muted: #6b6a63;
+        --dim: #8c8a81;
+        --primary: #1f7a4d;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "JetBrains Mono", monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      padding-top: max(1.5rem, env(safe-area-inset-top));
+      padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    }
+    .card {
+      max-width: 440px;
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2rem;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    .badge {
+      display: inline-block;
+      font-family: monospace;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.2rem 0.6rem;
+      border-radius: 2px;
+      border: 1px solid var(--border);
+      color: var(--dim);
+      margin-bottom: 1rem;
+    }
+    .radar {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 1.25rem;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .radar-inner {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--dim);
+    }
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+    }
+    p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 1.5rem;
+    }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--primary);
+      color: #000;
+      border: none;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .footer-note {
+      margin-top: 1rem;
+      font-size: 0.7rem;
+      font-family: monospace;
+      color: var(--dim);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">TACTICAL LINK SEVERED</div>
+    <div class="radar">
+      <div class="radar-inner"></div>
+    </div>
+    <h1>You're Offline</h1>
+    <p>Agent Akib, your tactical feed requires network connectivity to synchronize missions and schedule directives with headquarters.</p>
+    <button class="btn" onclick="window.location.reload()">RETRY CONNECTION</button>
+    <div class="footer-note">Operation ME • Offline Shell Active</div>
+  </div>
+</body>
+</html>
+

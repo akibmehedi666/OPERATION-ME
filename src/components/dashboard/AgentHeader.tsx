@@ -19,7 +19,9 @@ import {
   AlertTriangle,
   Trash2,
   GraduationCap,
-  Menu
+  Menu,
+  Check,
+  Smartphone
 } from "lucide-react";
 import { getRankFromXp } from "@/lib/rank";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -33,6 +35,7 @@ import { RecurringRule, Category, NotificationSettings, FeatureFlags, DEFAULT_FE
 import { AutoMissionsSettings } from "@/components/settings/AutoMissionsSettings";
 import { RemindersSettings } from "@/components/settings/RemindersSettings";
 import { triggerDataExportDownload } from "@/lib/dataBackup";
+import { usePwa } from "@/lib/pwaContext";
 
 interface FeatureItemConfig {
   key: keyof FeatureFlags;
@@ -183,6 +186,7 @@ export function AgentHeader({
   const [resetConfirmation, setResetConfirmation] = useState<string>("");
   const [resetStatus, setResetStatus] = useState<string>("");
   const [resetError, setResetError] = useState<string>("");
+  const { isInstalled, canInstall, isIOS, promptInstall } = usePwa();
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const { animationsEnabled, setAnimationsEnabled, systemReducedMotion } = useAnimations();
 
@@ -735,6 +739,56 @@ export function AgentHeader({
                     <div className="text-[10px] text-spy-green font-mono text-center">
                       {exportStatus}
                     </div>
+                  )}
+                </div>
+
+                {/* PWA / App Installation */}
+                <div className="py-3 border-b border-spy-border space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-spy-text font-semibold flex items-center gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5 text-spy-green" />
+                      <span>App Installation</span>
+                    </div>
+                    {isInstalled ? (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-[2px] border bg-spy-green/15 text-spy-green border-spy-green/40 font-bold flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>INSTALLED</span>
+                      </span>
+                    ) : canInstall ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await promptInstall();
+                        }}
+                        className="px-2.5 py-1 bg-spy-green text-black hover:bg-spy-green/90 font-mono font-bold text-xs rounded-[3px] flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Install app</span>
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {!isInstalled && isIOS && (
+                    <div className="p-2.5 rounded-[3px] bg-spy-surface2 border border-spy-border text-xs text-spy-muted font-sans space-y-1">
+                      <div className="font-semibold text-spy-text font-mono text-[11px] flex items-center gap-1.5">
+                        <span>iPhone / iPad Installation</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        To install on iPhone: tap <strong>Share</strong> in Safari and select <strong>Add to Home Screen</strong>.
+                      </p>
+                    </div>
+                  )}
+
+                  {!isInstalled && !isIOS && !canInstall && (
+                    <p className="text-[10px] text-spy-dim font-sans leading-relaxed">
+                      Operation ME is an installable PWA. Use your browser&apos;s install icon or menu to add it to your desktop or home screen.
+                    </p>
+                  )}
+
+                  {isInstalled && (
+                    <p className="text-[10px] text-spy-dim font-sans leading-relaxed">
+                      App is running in standalone mode with full offline caching and instant startup.
+                    </p>
                   )}
                 </div>
               </>

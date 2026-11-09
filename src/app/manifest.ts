@@ -6,9 +6,12 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: 'Op: ME',
     description: 'Personal mission control for Agent Akib',
     start_url: '/',
+    scope: '/',
     display: 'standalone',
+    orientation: 'portrait-primary',
     background_color: '#0b0d11',
     theme_color: '#0b0d11',
+    categories: ['productivity', 'utilities'],
     icons: [
       {
         src: '/icon-192.png',
@@ -35,6 +38,21 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: 'maskable',
       },
     ],
+    shortcuts: [
+      {
+        name: 'New Mission',
+        short_name: 'Mission',
+        description: 'Quickly deploy a new mission directive',
+        url: '/?action=new-mission',
+        icons: [{ src: '/icon-192.png', sizes: '192x192' }],
+      },
+      {
+        name: 'Planner',
+        short_name: 'Planner',
+        description: 'View weekly tactical schedule',
+        url: '/?tab=planner',
+        icons: [{ src: '/icon-192.png', sizes: '192x192' }],
+      },
+    ],
   };
 }
-
