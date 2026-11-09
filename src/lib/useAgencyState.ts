@@ -709,7 +709,9 @@ export function useAgencyState() {
   };
 
   // Time Blocks
-  const addTimeBlock = async (block: Omit<TimeBlock, "id" | "created_at">) => {
+  const addTimeBlock = async (
+    block: Omit<TimeBlock, "id" | "created_at"> & { id?: string; created_at?: string }
+  ) => {
     if (!currentUser?.id) throw new Error("Authentication required");
     const res = await createTimeBlockData(block, currentUser.id);
     if (res.error || !res.data) {
@@ -717,7 +719,12 @@ export function useAgencyState() {
       showErrorToast("Time Block Sync Failed", err);
       throw new Error(err);
     }
-    setTimeBlocks((prev) => [...prev, res.data!]);
+    setTimeBlocks((prev) => {
+      const exists = prev.some((b) => b.id === res.data!.id);
+      return exists
+        ? prev.map((b) => (b.id === res.data!.id ? res.data! : b))
+        : [...prev, res.data!];
+    });
     return res.data;
   };
 

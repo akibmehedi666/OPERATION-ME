@@ -53,7 +53,7 @@ export async function createTuitionException(
 
     const { data, error } = await supabase
       .from("tuition_exceptions")
-      .insert(record)
+      .upsert(record, { onConflict: "id" })
       .select()
       .single();
 
@@ -91,7 +91,7 @@ export async function createTuitionExceptionsBatch(
 
     const { data, error } = await supabase
       .from("tuition_exceptions")
-      .insert(records)
+      .upsert(records, { onConflict: "id" })
       .select();
 
     if (error) {

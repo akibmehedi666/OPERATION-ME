@@ -62,6 +62,38 @@ export function getWeekdayFromDate(date: Date | string): DayOfWeek {
 }
 
 /**
+ * Extracts the base block id from a potentially overridden or legacy-prefixed id.
+ * Supports deterministic "${baseBlockId}__${YYYY-MM-DD}" and legacy "tb-ov-${dateStr}-${baseBlockId}".
+ */
+export function extractBaseBlockId(id: string, dateStr?: string): string {
+  if (!id) return "";
+  let baseId = id;
+  if (baseId.includes("__")) {
+    baseId = baseId.split("__")[0];
+  }
+  while (baseId.startsWith("tb-ov-")) {
+    const afterPrefix = baseId.slice(6);
+    if (/^\d{4}-\d{2}-\d{2}-/.test(afterPrefix)) {
+      baseId = afterPrefix.slice(11);
+    } else if (dateStr && afterPrefix.startsWith(`${dateStr}-`)) {
+      baseId = afterPrefix.slice(dateStr.length + 1);
+    } else {
+      break;
+    }
+  }
+  return baseId;
+}
+
+/**
+ * Generates a deterministic override block id for a base block on a specific date.
+ * Format: "${baseBlockId}__${YYYY-MM-DD}"
+ */
+export function getOverrideBlockId(baseBlockId: string, dateStr: string): string {
+  const cleanBaseId = extractBaseBlockId(baseBlockId, dateStr);
+  return `${cleanBaseId}__${dateStr}`;
+}
+
+/**
  * Deduplicates academic events on the same date with the same title or type
  */
 export function deduplicateAcademicEvents(events: AcademicEvent[]): AcademicEvent[] {
@@ -285,11 +317,11 @@ export function resolveDaySchedule(
   // Identify base block IDs that are overridden on this specific date
   const overriddenBaseIds = new Set<string>();
   for (const ov of dateSpecificOverrides) {
-    if (ov.id.startsWith(`tb-ov-${dateStr}-`)) {
-      overriddenBaseIds.add(ov.id.replace(`tb-ov-${dateStr}-`, ""));
-    } else {
-      overriddenBaseIds.add(ov.id);
+    const baseId = extractBaseBlockId(ov.id, dateStr);
+    if (baseId) {
+      overriddenBaseIds.add(baseId);
     }
+    overriddenBaseIds.add(ov.id);
   }
 
   // Filter out overridden base blocks and append only active date-specific overrides

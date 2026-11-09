@@ -32,7 +32,7 @@ export async function createTimeBlock(
 
     const { data, error } = await supabase
       .from("time_blocks")
-      .insert(record)
+      .upsert(record, { onConflict: "id" })
       .select()
       .single();
 
@@ -42,6 +42,8 @@ export async function createTimeBlock(
     return { data: null, error: err instanceof Error ? err.message : "Failed to create time block" };
   }
 }
+
+export const upsertTimeBlock = createTimeBlock;
 
 export async function updateTimeBlock(
   id: string,

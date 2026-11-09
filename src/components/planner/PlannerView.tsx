@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   TimeBlock, 
   AcademicEvent, 
@@ -12,9 +12,12 @@ import {
 import { 
   getWeekStartDate, 
   formatDateKey, 
-  isExamModeActive 
+  isExamModeActive,
+  extractBaseBlockId,
+  getOverrideBlockId
 } from "@/lib/scheduleResolver";
 import { formatDate } from "@/lib/formatters";
+import { soundFX } from "@/lib/sound";
 import { WeeklyGridView } from "@/components/planner/WeeklyGridView";
 import { AcademicCalendarView } from "@/components/planner/AcademicCalendarView";
 import { TimeBlockModal } from "@/components/planner/TimeBlockModal";
@@ -32,7 +35,9 @@ import {
   ShieldAlert,
   Sparkles,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  X,
+  RotateCcw
 } from "lucide-react";
 
 interface PlannerViewProps {
@@ -147,6 +152,34 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
   const [autoScheduleNotice, setAutoScheduleNotice] = useState<string | null>(null);
   const [isPlanNextWeekOpen, setIsPlanNextWeekOpen] = useState<boolean>(false);
+  const [undoToast, setUndoToast] = useState<{
+    overrideId: string;
+    message: string;
+  } | null>(null);
+  const [isUndoing, setIsUndoing] = useState(false);
+
+  // Auto-dismiss undo toast after 8 seconds
+  useEffect(() => {
+    if (!undoToast) return;
+    const timer = setTimeout(() => {
+      setUndoToast(null);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [undoToast]);
+
+  const handleUndoRoutineDelete = async () => {
+    if (!undoToast) return;
+    setIsUndoing(true);
+    try {
+      await onDeleteTimeBlock(undoToast.overrideId);
+      soundFX.playTargetAcquired();
+      setUndoToast(null);
+    } catch (err) {
+      console.error("[PlannerView] Undo failed:", err);
+    } finally {
+      setIsUndoing(false);
+    }
+  };
 
   // Save routine handler: applies changes either to today only or recurring weekly template
   const handleSaveRoutine = async (
@@ -155,37 +188,30 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     scope: "today" | "every_week",
     dateStr: string
   ) => {
+    const baseId = extractBaseBlockId(blockId, dateStr);
     if (scope === "every_week") {
-      const baseId = blockId.startsWith(`tb-ov-${dateStr}-`)
-        ? blockId.replace(`tb-ov-${dateStr}-`, "")
-        : blockId;
-      onUpdateTimeBlock(baseId, {
+      await onUpdateTimeBlock(baseId, {
         ...updates,
         override_date: null,
       });
     } else {
-      const existingOv = timeBlocks.find(
-        (b) => b.override_date === dateStr && (b.id === blockId || b.id === `tb-ov-${dateStr}-${blockId}`)
-      );
-      if (existingOv) {
-        onUpdateTimeBlock(existingOv.id, {
-          ...updates,
-          override_date: dateStr,
-        });
-      } else {
-        onAddTimeBlock({
-          id: `tb-ov-${dateStr}-${blockId}`,
-          weekday: updates.weekday || "SUN",
-          start_time: updates.start_time || "10:00",
-          end_time: updates.end_time || "11:30",
-          type: updates.type || "study",
-          label: updates.label || "Routine Focus",
-          default_category: updates.default_category || null,
-          is_fixed: false,
-          is_active: true,
-          override_date: dateStr,
-        });
-      }
+      const overrideId = getOverrideBlockId(baseId, dateStr);
+      const baseBlock = timeBlocks.find((b) => b.id === baseId || b.id === blockId);
+      await onAddTimeBlock({
+        id: overrideId,
+        weekday: updates.weekday || baseBlock?.weekday || "SUN",
+        start_time: updates.start_time || baseBlock?.start_time || "10:00",
+        end_time: updates.end_time || baseBlock?.end_time || "11:30",
+        type: updates.type || baseBlock?.type || "study",
+        label: updates.label || baseBlock?.label || "Routine Focus",
+        default_category:
+          updates.default_category !== undefined
+            ? updates.default_category
+            : (baseBlock?.default_category || null),
+        is_fixed: false,
+        is_active: true,
+        override_date: dateStr,
+      });
     }
   };
 
@@ -195,22 +221,40 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     scope: "today" | "every_week",
     dateStr: string
   ) => {
+    const baseId = extractBaseBlockId(blockId, dateStr);
     if (scope === "every_week") {
-      const baseId = blockId.startsWith(`tb-ov-${dateStr}-`)
-        ? blockId.replace(`tb-ov-${dateStr}-`, "")
-        : blockId;
-      onDeleteTimeBlock(baseId);
+      await onDeleteTimeBlock(baseId);
+      // Clean up any single-day overrides associated with this base recurring block
+      const overrides = timeBlocks.filter(
+        (b) => b.override_date && extractBaseBlockId(b.id, b.override_date) === baseId
+      );
+      for (const ov of overrides) {
+        try {
+          await onDeleteTimeBlock(ov.id);
+        } catch {
+          // Ignore individual override cleanup failure
+        }
+      }
     } else {
-      onAddTimeBlock({
-        id: `tb-ov-${dateStr}-${blockId}`,
-        weekday: "SUN",
-        start_time: "00:00",
-        end_time: "00:00",
-        type: "break",
-        label: "Deleted for today",
+      const overrideId = getOverrideBlockId(baseId, dateStr);
+      const baseBlock = timeBlocks.find((b) => b.id === baseId || b.id === blockId);
+      const blockLabel = baseBlock?.label || "Routine block";
+      await onAddTimeBlock({
+        id: overrideId,
+        weekday: baseBlock?.weekday || "SUN",
+        start_time: baseBlock?.start_time || "00:00",
+        end_time: baseBlock?.end_time || "00:00",
+        type: baseBlock?.type || "break",
+        label: baseBlock?.label ? `${baseBlock.label} (Deleted)` : "Deleted for today",
+        default_category: baseBlock?.default_category || null,
         is_fixed: false,
         is_active: false,
         override_date: dateStr,
+      });
+
+      setUndoToast({
+        overrideId,
+        message: `Deleted "${blockLabel}" for ${dateStr}`,
       });
     }
   };
@@ -626,6 +670,34 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           }
         }}
       />
+
+      {/* Routine Delete Undo Toast */}
+      {undoToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-spy-surface border border-spy-green/60 text-spy-text rounded-[4px] shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200"
+        >
+          <span className="text-xs font-mono">{undoToast.message}</span>
+          <button
+            type="button"
+            onClick={handleUndoRoutineDelete}
+            disabled={isUndoing}
+            className="px-2.5 py-1 text-xs font-mono font-bold bg-spy-green text-black hover:bg-spy-green/90 rounded-[2px] transition-colors flex items-center gap-1 disabled:opacity-50 shadow-xs cursor-pointer"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>{isUndoing ? "Restoring..." : "Undo"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setUndoToast(null)}
+            className="p-1 text-spy-muted hover:text-spy-text transition-colors rounded-[2px] cursor-pointer"
+            title="Dismiss toast"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -135,6 +135,8 @@ export const PlannerItemPanel: React.FC<PlannerItemPanelProps> = ({
       );
       soundFX.playTargetAcquired();
       onClose();
+    } catch (err) {
+      console.error("[PlannerItemPanel] Failed to save routine block:", err);
     } finally {
       setIsSaving(false);
     }
@@ -147,6 +149,8 @@ export const PlannerItemPanel: React.FC<PlannerItemPanelProps> = ({
       await onDeleteRoutine(item.block.id, scope, item.dateStr);
       soundFX.playBlip();
       onClose();
+    } catch (err) {
+      console.error("[PlannerItemPanel] Failed to delete routine block:", err);
     } finally {
       setIsDeleting(false);
     }
@@ -483,25 +487,26 @@ export const PlannerItemPanel: React.FC<PlannerItemPanelProps> = ({
                 <button
                   type="button"
                   onClick={handleDeleteRoutineClick}
-                  disabled={isDeleting}
-                  className="px-3 py-2 rounded-[3px] border border-red-500/40 text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-1.5 text-xs font-bold"
+                  disabled={isDeleting || isSaving}
+                  className="px-3 py-2 rounded-[3px] border border-red-500/40 text-red-500 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 text-xs font-bold"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>{scope === "today" ? "Delete for Today" : "Delete Weekly"}</span>
+                  <span>{isDeleting ? "Deleting..." : (scope === "today" ? "Delete for Today" : "Delete Weekly")}</span>
                 </button>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-3 py-2 rounded-[3px] border border-spy-border text-spy-muted hover:text-spy-text transition-colors text-xs"
+                    disabled={isDeleting || isSaving}
+                    className="px-3 py-2 rounded-[3px] border border-spy-border text-spy-muted hover:text-spy-text disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isSaving}
-                    className="px-4 py-2 rounded-[3px] bg-spy-green text-black font-bold hover:bg-spy-green/90 transition-colors text-xs flex items-center gap-1.5 shadow-xs"
+                    disabled={isSaving || isDeleting}
+                    className="px-4 py-2 rounded-[3px] bg-spy-green text-black font-bold hover:bg-spy-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs flex items-center gap-1.5 shadow-xs"
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>{isSaving ? "Saving..." : "Save Changes"}</span>
